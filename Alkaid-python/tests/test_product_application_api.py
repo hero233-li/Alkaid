@@ -7,9 +7,16 @@ from pydantic import ValidationError
 
 from apps.jobs.models import Job, JobStatus
 from apps.jobs.services import JobRepository
-from apps.product_data.schemas import ProductApplicationConfig
-from apps.product_data.services import CONFIG_PATH, load_product_application_config
-from apps.product_data.tasks import execute_product_application
+from apps.product_data.product_applications.config import (
+    CONFIG_PATH,
+    load_product_application_config,
+)
+from apps.product_data.product_applications.schemas import ProductApplicationConfig
+from apps.product_data.product_applications.tasks import execute_product_application
+
+PRODUCT_TASK_DELAY = (
+    "apps.product_data.product_applications.views.execute_product_application.delay"
+)
 
 
 def valid_submission() -> dict[str, object]:
@@ -98,7 +105,7 @@ def test_product_application_config_is_reloaded_for_each_process_operation():
     config_path = Mock()
     config_path.read_text.return_value = CONFIG_PATH.read_text(encoding="utf-8")
 
-    with patch("apps.product_data.services.CONFIG_PATH", config_path):
+    with patch("apps.product_data.product_applications.config.CONFIG_PATH", config_path):
         first = load_product_application_config()
         second = load_product_application_config()
 
@@ -117,7 +124,7 @@ def test_required_field_must_be_enabled_by_product_field_sets():
 
 @pytest.mark.django_db(transaction=True)
 def test_create_product_application_returns_numeric_job_and_enqueues_task():
-    with patch("apps.product_data.views.execute_product_application.delay") as delay:
+    with patch(PRODUCT_TASK_DELAY) as delay:
         response = Client().post(
             "/api/product-data/applications",
             data=json.dumps(valid_submission()),
@@ -141,7 +148,7 @@ def test_create_product_application_returns_numeric_job_and_enqueues_task():
 @pytest.mark.django_db(transaction=True)
 def test_product_application_is_idempotent():
     client = Client()
-    with patch("apps.product_data.views.execute_product_application.delay") as delay:
+    with patch(PRODUCT_TASK_DELAY) as delay:
         first = client.post(
             "/api/product-data/applications",
             data=json.dumps(valid_submission()),
@@ -165,7 +172,7 @@ def test_product_application_is_idempotent():
 
 @pytest.mark.django_db(transaction=True)
 def test_product_application_task_updates_job_and_logs():
-    with patch("apps.product_data.views.execute_product_application.delay"):
+    with patch("apps.product_data.product_applications.views.execute_product_application.delay"):
         response = Client().post(
             "/api/product-data/applications",
             data=json.dumps(valid_submission()),
@@ -246,7 +253,7 @@ def test_dynamic_application_uses_frozen_execution_snapshot():
             "dynamicAmount": "100000",
         }
     )
-    with patch("apps.product_data.views.execute_product_application.delay"):
+    with patch("apps.product_data.product_applications.views.execute_product_application.delay"):
         response = Client().post(
             "/api/product-data/applications",
             data=json.dumps(submission),
@@ -261,7 +268,7 @@ def test_dynamic_application_uses_frozen_execution_snapshot():
     assert "dynamic_term" in job.execution_config_snapshot["fields"]
 
     with patch(
-        "apps.product_data.services.load_execution_catalog",
+        "apps.product_data.product_applications.services.load_execution_catalog",
         side_effect=AssertionError("Worker must use the frozen Job snapshot"),
     ):
         execute_product_application.apply(args=[job.id], throw=True)
@@ -299,7 +306,7 @@ def test_dynamic_application_requires_its_configured_fields():
 )
 def test_each_mock_product_uses_only_its_associated_switch(product, switch_name, enabled):
     submission = submission_for_product(product, switch_name, enabled=enabled)
-    with patch("apps.product_data.views.execute_product_application.delay"):
+    with patch("apps.product_data.product_applications.views.execute_product_application.delay"):
         response = Client().post(
             "/api/product-data/applications",
             data=json.dumps(submission),
@@ -360,7 +367,7 @@ def test_company_customer_types_require_and_accept_company_name(customer_type, c
     submission["payload"]["customerType"] = customer_type
     submission["payload"]["companyName"] = company_name
 
-    with patch("apps.product_data.views.execute_product_application.delay"):
+    with patch("apps.product_data.product_applications.views.execute_product_application.delay"):
         response = Client().post(
             "/api/product-data/applications",
             data=json.dumps(submission),

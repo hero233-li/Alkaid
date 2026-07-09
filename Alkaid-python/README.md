@@ -98,6 +98,7 @@ GET /api/workflows/{workflow_id}/
 ```text
 GET  /api/product-data/applications/config
 POST /api/product-data/applications
+POST /api/product-data/tools/application-links/generate
 GET  /api/jobs/{id}
 POST /api/jobs/{id}/retry
 POST /api/jobs/{id}/cancel
@@ -152,6 +153,14 @@ Mock 产品执行流程同时演示两类认证：`product_flow` 在当前 Celer
 - `apps/workflows/schemas.py`：Pydantic 请求、响应和 Context。
 - `apps/workflows/services.py`：Workflow 编排和状态的唯一写入口。
 - `apps/workflows/tasks.py`：本地、测试和服务器共用的 Celery Task。
+
+页面业务按域拆分到 `apps/product_data/<feature>/`。每个业务包只包含自己的
+`schemas.py`、`views.py`、`tasks.py`、`services.py`、`config.py` 和 `handlers/`：
+`product_applications/` 负责产品申请，`application_links/` 负责申请链接生成。两者通过
+共享的 `jobs` 基础设施创建、查询、重试和取消任务。对应的外部系统实现位于
+`apps/integrations/mock_product/adapter.py` 和
+`apps/integrations/application_link/{api.py,models.py,adapter.py}`；业务 Handler 不拼接外部
+报文，也不直接调用 HTTP。
 
 业务模块禁止直接导入 `requests` 或 `httpx`。运行 `python scripts/check_architecture.py`
 检查这一约束。

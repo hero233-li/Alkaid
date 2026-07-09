@@ -1,3 +1,5 @@
-from apps.product_data.handlers.registry import get_product_handler
+"""Compatibility package; product handlers moved to ``product_applications``."""
 
-__all__ = ["get_product_handler"]
+from apps.product_data.product_applications.handlers import get_product_handler
+
+__all__ = ("get_product_handler",)

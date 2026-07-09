@@ -37,6 +37,9 @@ def sanitize(value: Any, *, key: str = "") -> Any:
     if (
         normalized_key in SENSITIVE_KEYS
         or compact_key in SENSITIVE_KEYS
+        or "phone" in compact_key
+        or "certificate" in compact_key
+        or "card" in compact_key
         or "token" in compact_key
         or "authorization" in compact_key
         or "password" in compact_key

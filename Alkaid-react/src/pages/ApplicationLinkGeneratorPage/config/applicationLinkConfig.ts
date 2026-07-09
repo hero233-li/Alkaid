@@ -1,10 +1,8 @@
-import type { ApplicationLinkConfig } from '../types';
+import type { ApplicationLinkConfig } from '../model/types';
 
 export const applicationLinkConfig: ApplicationLinkConfig = {
   environments: ['环境1', '环境2', '环境3'],
   cooperationProjects: ['合作项目一', '合作项目二', '合作项目三'],
-  recommenders: ['张经理', '李经理', '王经理'],
-  recommenderPhones: ['13800000001', '13800000002', '13800000003'],
   loanTypes: ['首贷', '续贷'],
   products: [
     {

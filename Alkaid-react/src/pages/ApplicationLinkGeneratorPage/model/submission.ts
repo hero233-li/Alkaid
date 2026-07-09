@@ -1,0 +1,84 @@
+import {
+  categoriesForProduct,
+  findProduct,
+  isDynamicApplicationLink,
+} from './formModel';
+import type {
+  ApplicationLinkConfig,
+  ApplicationLinkFormValues,
+  ApplicationLinkSubmission,
+  LinkCategory,
+} from './types';
+
+function trimOptional(value: unknown) {
+  const trimmed = String(value ?? '').trim();
+  return trimmed || undefined;
+}
+
+function requiredText(value: unknown, message: string) {
+  const trimmed = trimOptional(value);
+  if (!trimmed) {
+    throw new Error(message);
+  }
+  return trimmed;
+}
+
+function requiredCategory(value: unknown): LinkCategory {
+  if (value === '太阳码' || value === '动态链接') {
+    return value;
+  }
+  throw new Error('请选择类别');
+}
+
+function parseDynamicLinkRequestJson(value: unknown): Record<string, unknown> {
+  const text = requiredText(value, '请输入动态链接 JSON 参数');
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(text);
+  } catch {
+    throw new Error('动态链接 JSON 参数格式不正确');
+  }
+
+  if (!parsed || Array.isArray(parsed) || typeof parsed !== 'object') {
+    throw new Error('动态链接 JSON 参数必须是一个对象');
+  }
+  return parsed as Record<string, unknown>;
+}
+
+export function buildApplicationLinkSubmission(
+  config: ApplicationLinkConfig,
+  values: ApplicationLinkFormValues,
+): ApplicationLinkSubmission {
+  const environment = requiredText(values.environment, '请选择环境');
+  const productName = requiredText(values.product, '请选择产品');
+  const product = findProduct(config, productName);
+  const category = requiredCategory(values.category);
+
+  if (!product || !product.environments.includes(environment)) {
+    throw new Error('当前环境下没有该产品');
+  }
+  if (!categoriesForProduct(product, environment).includes(category)) {
+    throw new Error('当前产品在该环境下没有该类别');
+  }
+
+  const submission: ApplicationLinkSubmission = {
+    environment,
+    product: productName,
+    category,
+    cooperationProject: requiredText(values.cooperationProject, '请选择合作项目'),
+    loanType: requiredText(values.loanType, '请选择首贷续贷'),
+  };
+
+  if (isDynamicApplicationLink(category)) {
+    submission.requestJson = parseDynamicLinkRequestJson(values.requestJson);
+  }
+
+  if (product?.extraFields?.includes('restoreStatus')) {
+    submission.restoreStatus = requiredText(values.restoreStatus, '请选择还原状况');
+  }
+  if (product?.extraFields?.includes('spcode')) {
+    submission.spcode = requiredText(values.spcode, '请输入企业代码 spcode');
+  }
+
+  return submission;
+}

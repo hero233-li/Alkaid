@@ -25,9 +25,14 @@ def _get_job(job_id: int) -> Job | None:
 
 def _enqueue(job: Job) -> None:
     if job.kind == "product_application":
-        from apps.product_data.tasks import execute_product_application
+        from apps.product_data.product_applications.tasks import execute_product_application
 
         execute_product_application.delay(job.id)
+        return
+    if job.kind == "application_link_generation":
+        from apps.product_data.application_links.tasks import execute_application_link
+
+        execute_application_link.delay(job.id)
         return
     raise ValueError(f"不支持的任务类型：{job.kind}")
 
