@@ -1,0 +1,1 @@
+import axios from'axios';export const loanStatusClient=axios.create({baseURL:'/api',timeout:15000});loanStatusClient.interceptors.response.use(r=>r,e=>Promise.reject(new Error(e.response?.data?.message||e.message||'请求失败')));

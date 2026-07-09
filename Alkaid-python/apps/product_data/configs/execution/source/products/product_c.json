@@ -1,0 +1,33 @@
+{
+  "product": {
+    "code": "product-c",
+    "name": "产品C",
+    "product_type": "credit_product",
+    "handler": "credit_application_v1",
+    "switch_field": "credit_enabled",
+    "default_application_method": "normal",
+    "ownership_categories": [
+      {"code": "farmer", "name": "农户"},
+      {"code": "legal_person", "name": "法人"},
+      {"code": "shareholder", "name": "股东"}
+    ],
+    "organizations": [
+      {"code": "example-branch", "name": "示例机构"}
+    ],
+    "common_field_sets": ["customer_base", "organization_base"],
+    "application_methods": {
+      "normal": {
+        "name": "普通申请",
+        "operation": "mock_product.product_c.apply",
+        "fields": ["credit_enabled"],
+        "required_fields": ["credit_enabled"]
+      },
+      "dynamic": {
+        "name": "动态申请",
+        "operation": "mock_product.product_c.dynamic_apply",
+        "fields": ["credit_enabled", "dynamic_term", "dynamic_amount"],
+        "required_fields": ["credit_enabled", "dynamic_term", "dynamic_amount"]
+      }
+    }
+  }
+}

@@ -1,0 +1,40 @@
+{
+  "product": {
+    "code": "product-a",
+    "name": "产品A",
+    "product_type": "whitelist_product",
+    "handler": "whitelist_application_v1",
+    "switch_field": "whitelist_enabled",
+    "default_application_method": "normal",
+    "ownership_categories": [
+      {"code": "farmer", "name": "农户"},
+      {"code": "legal_person", "name": "法人"},
+      {"code": "shareholder", "name": "股东"}
+    ],
+    "organizations": [
+      {"code": "example-branch", "name": "示例机构"}
+    ],
+    "common_field_sets": ["customer_base", "organization_base"],
+    "application_methods": {
+      "normal": {
+        "name": "普通申请",
+        "operation": "mock_product.product_a.apply",
+        "fields": ["whitelist_enabled", "red_shield_enabled"],
+        "required_fields": ["whitelist_enabled", "red_shield_enabled"]
+      },
+      "dynamic": {
+        "name": "动态申请",
+        "operation": "mock_product.product_a.dynamic_apply",
+        "fields": ["whitelist_enabled", "red_shield_enabled", "dynamic_term", "dynamic_amount"],
+        "required_fields": ["whitelist_enabled", "red_shield_enabled", "dynamic_term", "dynamic_amount"]
+      },
+      "extra": {
+        "name": "额外申请",
+        "operation": "mock_product.product_a.extra_apply",
+        "field_sets": ["extra_common"],
+        "fields": ["whitelist_enabled", "red_shield_enabled", "extra_reason"],
+        "required_fields": ["whitelist_enabled", "red_shield_enabled", "extra_reason"]
+      }
+    }
+  }
+}

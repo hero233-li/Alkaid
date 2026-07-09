@@ -1,0 +1,1 @@
+import axios from'axios';export const cardStatusClient=axios.create({baseURL:'/api',timeout:15000});cardStatusClient.interceptors.response.use(response=>response,error=>Promise.reject(new Error(error.response?.data?.message||error.message||'请求失败')));

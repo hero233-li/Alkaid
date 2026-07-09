@@ -1,0 +1,3 @@
+import{Modal,Progress,Space,Tag,Typography}from'antd';
+import type{WorkflowActivity}from'../types';
+export default function HighFrequencyWorkflowModal({activity}:{activity:WorkflowActivity|null}){return <Modal title="高频交易处理" open={Boolean(activity)} centered closable={false} keyboard={false} maskClosable={false} footer={null}>{activity&&<><Space style={{display:'flex',justifyContent:'space-between',marginBottom:16}}><Typography.Text strong>{activity.label}</Typography.Text><Tag color="processing">{activity.status}</Tag></Space><Progress percent={activity.progress??0} status="active"/>{activity.currentStep&&<Typography.Text type="secondary">当前步骤：{activity.currentStep}</Typography.Text>}</>}</Modal>}

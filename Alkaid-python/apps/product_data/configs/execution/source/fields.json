@@ -1,0 +1,16 @@
+{
+  "fields": {
+    "customer_name": {"source": "application.personName", "required": true, "normalizer": "strip"},
+    "certificate_no": {"source": "application.certificateNo", "required": true, "normalizer": "strip"},
+    "phone": {"source": "application.phone", "required": true, "normalizer": "strip"},
+    "customer_type": {"source": "application.customerType", "required": true},
+    "organization_code": {"source": "application.branch", "required": true},
+    "outlet_code": {"source": "application.outlet", "required": true},
+    "whitelist_enabled": {"source": "application.whitelistEnabled", "required": true, "normalizer": "boolean"},
+    "red_shield_enabled": {"source": "application.redShieldEnabled", "required": true, "normalizer": "boolean"},
+    "credit_enabled": {"source": "application.creditEnabled", "required": true, "normalizer": "boolean"},
+    "dynamic_term": {"source": "application.dynamicTerm", "required": true},
+    "dynamic_amount": {"source": "application.dynamicAmount", "required": true},
+    "extra_reason": {"source": "application.extraReason", "required": true, "normalizer": "strip"}
+  }
+}

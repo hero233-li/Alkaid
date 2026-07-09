@@ -1,0 +1,8 @@
+{
+  "version": 5,
+  "products": [
+    "products/product_a.json",
+    "products/product_b.json",
+    "products/product_c.json"
+  ]
+}

@@ -1,0 +1,53 @@
+# Local environment and secrets
+.env
+.env.local
+.env.*.local
+Alkaid-python/.env
+Alkaid-python/.env.*
+!*.example
+!**/*.example
+!.env.local.example
+!Alkaid-python/.env.example
+!Alkaid-python/.env.server.example
+
+# Runtime and release output
+Alkaid-runtime/
+Alkaid-releases/
+*.log
+*.pid
+
+# Local archives and exported packages
+*.zip
+*.tar
+*.tar.gz
+*.tgz
+
+# Dependencies
+node_modules/
+Alkaid-react/node_modules/
+Alkaid-python/.venv/
+.venv/
+
+# Build output
+Alkaid-react/dist/
+.vite/
+*.tsbuildinfo
+Alkaid-python/staticfiles/
+staticfiles/
+htmlcov/
+
+# Python cache and local data
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.ruff_cache/
+.coverage
+*.sqlite3
+Alkaid-python/db.sqlite3
+Alkaid-python/media/
+
+# Editor and OS files
+.DS_Store
+.idea/
+.vscode/
+*.iml
