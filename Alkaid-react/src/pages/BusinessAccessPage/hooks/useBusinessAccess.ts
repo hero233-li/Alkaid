@@ -6,20 +6,23 @@ import {
   pollBusinessAccessJob,
   pushBusinessAccessNotification,
   searchBusinessAccess,
-  type BusinessAccessJobDetail,
-  type BusinessAccessJobSubmission,
-  type BusinessAccessNotification,
-  type BusinessAccessOperation,
-  type BusinessAccessRecord,
-  type BusinessAccessSearchValues,
-  type BusinessAccessWorkflowActivity,
-  type NotificationPushResult,
-  type NotificationVersionType,
-} from '../../../api/businessAccess';
-
-function resultValue<T>(detail: BusinessAccessJobDetail, key: string) {
-  return detail.result[key] as T;
-}
+} from '../api/businessAccess';
+import {
+  buildBusinessAccessWorkflowActivity,
+  extractBusinessAccessNotifications,
+  extractBusinessAccessRecord,
+  extractBusinessAccessRecords,
+  extractNotificationPushResult,
+} from '../model/jobModel';
+import type {
+  BusinessAccessJobSubmission,
+  BusinessAccessNotification,
+  BusinessAccessOperation,
+  BusinessAccessRecord,
+  BusinessAccessSearchSubmission,
+  BusinessAccessWorkflowActivity,
+  NotificationVersionType,
+} from '../types';
 
 export function useBusinessAccess() {
   const [results, setResults] = useState<BusinessAccessRecord[]>([]);
@@ -39,24 +42,24 @@ export function useBusinessAccess() {
       throw new Error('已有业务准入任务正在执行，请稍候');
     }
     runningRef.current = true;
-    setActivity({ operation, label, status: 'submitting', progress: 0 });
+    setActivity(buildBusinessAccessWorkflowActivity(operation, label, 'submitting', 0));
     try {
       const submitted = await submit();
-      setActivity({
-        jobId: submitted.id,
+      setActivity(buildBusinessAccessWorkflowActivity(
         operation,
         label,
-        status: submitted.status,
-        progress: submitted.progress,
-      });
+        submitted.status,
+        submitted.progress,
+        submitted.id,
+      ));
       return await pollBusinessAccessJob(submitted.id, (detail) => {
-        setActivity({
-          jobId: detail.id,
+        setActivity(buildBusinessAccessWorkflowActivity(
           operation,
           label,
-          status: detail.status,
-          progress: detail.progress,
-        });
+          detail.status,
+          detail.progress,
+          detail.id,
+        ));
       });
     } finally {
       runningRef.current = false;
@@ -64,13 +67,13 @@ export function useBusinessAccess() {
     }
   }, []);
 
-  const search = useCallback(async (values: BusinessAccessSearchValues) => {
+  const search = useCallback(async (values: BusinessAccessSearchSubmission) => {
     setResults([]);
     setSelectedRecord(null);
     setNotifications([]);
     try {
       const detail = await runWorkflow('search', '正在查询业务准入结果', () => searchBusinessAccess(values));
-      const records = resultValue<BusinessAccessRecord[]>(detail, 'records') ?? [];
+      const records = extractBusinessAccessRecords(detail);
       setResults(records);
       message.success(`查询完成，共返回 ${records.length} 条记录`);
     } catch (error) {
@@ -86,7 +89,7 @@ export function useBusinessAccess() {
         `正在将 ${record.businessNo} 设为失效`,
         () => invalidateBusinessAccess(record.id),
       );
-      const updated = resultValue<BusinessAccessRecord>(detail, 'record');
+      const updated = extractBusinessAccessRecord(detail);
       setResults((current) => current.map((item) => (item.id === updated.id ? updated : item)));
       setSelectedRecord((current) => (current?.id === updated.id ? updated : current));
       message.success(`${record.businessNo} 已失效`);
@@ -106,7 +109,7 @@ export function useBusinessAccess() {
         `正在加载 ${record.businessNo} 的通知记录`,
         () => listBusinessAccessNotifications(record.id),
       );
-      setNotifications(resultValue<BusinessAccessNotification[]>(detail, 'notifications') ?? []);
+      setNotifications(extractBusinessAccessNotifications(detail));
     } catch (error) {
       setSelectedRecord(null);
       message.error(error instanceof Error ? error.message : '获取通知记录失败');
@@ -128,7 +131,7 @@ export function useBusinessAccess() {
         `正在推送 ${notification.notificationNo}`,
         () => pushBusinessAccessNotification(selectedRecord.id, notification.id, versionType),
       );
-      const result = resultValue<NotificationPushResult>(detail, 'pushResult');
+      const result = extractNotificationPushResult(detail);
       message.success(result.message);
     } catch (error) {
       message.error(error instanceof Error ? error.message : '通知推送失败');

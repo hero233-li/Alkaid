@@ -1,6 +1,6 @@
 from typing import ClassVar
 
-from apps.integrations.mock_product.adapter import MockProductAdapter
+from apps.integrations.mock_product.adapters import MockProductApplicationAdapter
 from apps.integrations.mock_product.models import ProductCheckInput, ProductSubmissionInput
 from apps.jobs.models import Job
 from apps.product_data.product_applications.schemas import ProductApplicationSubmission
@@ -15,7 +15,7 @@ class BaseProductApplicationHandler:
     check_code: ClassVar[str]
 
     def execute(self, job: Job, submission: ProductApplicationSubmission) -> dict[str, object]:
-        with MockProductAdapter(job) as adapter:
+        with MockProductApplicationAdapter(job) as adapter:
             request_head = adapter.request_head()
             adapter.login(request_head)
             version_after_login = adapter.flow_token_version
@@ -35,6 +35,8 @@ class BaseProductApplicationHandler:
             application = adapter.submit_application(
                 request_head,
                 ProductSubmissionInput(
+                    product=submission.product,
+                    environment=submission.payload["environment"],
                     product_type=self.product_type,
                     organization_code=submission.payload["branch"],
                     customer_name=submission.payload["personName"],

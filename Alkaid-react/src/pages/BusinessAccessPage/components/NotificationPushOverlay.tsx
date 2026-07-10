@@ -5,7 +5,7 @@ import type {
   BusinessAccessNotification,
   BusinessAccessRecord,
   NotificationVersionType,
-} from '../../../api/businessAccess';
+} from '../types';
 
 function formatDate(value: string) {
   const date = new Date(value);

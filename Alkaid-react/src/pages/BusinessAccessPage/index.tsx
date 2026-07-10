@@ -1,23 +1,34 @@
-import { Form } from 'antd';
-import type { BusinessAccessSearchValues } from '../../api/businessAccess';
+import { message } from 'antd';
 import BusinessAccessResultList from './components/BusinessAccessResultList';
 import BusinessAccessSearchForm from './components/BusinessAccessSearchForm';
 import BusinessAccessWorkflowModal from './components/BusinessAccessWorkflowModal';
 import NotificationPushOverlay from './components/NotificationPushOverlay';
 import { useBusinessAccess } from './hooks/useBusinessAccess';
+import { useBusinessAccessForm } from './hooks/useBusinessAccessForm';
+import type { BusinessAccessSearchValues } from './types';
 
 export default function BusinessAccessPage() {
-  const [form] = Form.useForm<BusinessAccessSearchValues>();
+  const businessAccessForm = useBusinessAccessForm();
   const businessAccess = useBusinessAccess();
+
+  const submit = (values: BusinessAccessSearchValues) => {
+    try {
+      void businessAccess.search(businessAccessForm.createSubmission(values));
+    } catch (error) {
+      message.error(error instanceof Error ? error.message : '查询条件不完整');
+    }
+  };
 
   return (
     <div className="page-surface business-access-page">
       <div className="business-access-stack">
         <BusinessAccessSearchForm
-          form={form}
+          form={businessAccessForm.form}
+          initialValues={businessAccessForm.initialValues}
           busy={businessAccess.busy}
           searching={businessAccess.activity?.operation === 'search'}
-          onSearch={(values) => void businessAccess.search(values)}
+          onSearch={submit}
+          onReset={businessAccessForm.reset}
         />
         <BusinessAccessResultList
           results={businessAccess.results}

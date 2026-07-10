@@ -1,107 +1,66 @@
 import json
+from datetime import datetime
 from urllib.parse import parse_qs
 
 import httpx
+from django.conf import settings
+from django.utils import timezone
 
-from apps.integrations.contracts import (
-    AuthSpec,
-    EndpointSpec,
-    TokenSource,
-    TokenUpdateSpec,
-)
+from apps.integrations.auth import FlowTokenProvider, StaticTokenProvider, TokenManager
+from apps.integrations.executor import EndpointExecutor
 from apps.integrations.http import HttpClient, HttpClientConfig
-from apps.integrations.mock_product.models import LoginResponse, OperationResponse
+from apps.integrations.mock_product.api import FIXED_PROVIDER, FLOW_PROVIDER
+from apps.integrations.mock_product.models import OperationResponse, RequestHead
+from apps.jobs.http import JobHttpCallObserver
+from apps.jobs.models import Job
 
-FLOW_PROVIDER = "product_flow"
-FIXED_PROVIDER = "fixed_external"
 
-LOGIN = EndpointSpec(
-    operation_id="mock_product.login",
-    method="POST",
-    path="/auth/token",
-    response_model=LoginResponse,
-    token_update=TokenUpdateSpec(
-        provider=FLOW_PROVIDER,
-        source=TokenSource.RESPONSE_BODY,
-        path="data.token",
-    ),
-)
+class MockProductClient:
+    """Shared HTTP, token and audit boundary for this external system."""
 
-PRODUCT_CHECKS = {
-    "product-a": EndpointSpec(
-        operation_id="mock_product.whitelist_check",
-        method="POST",
-        path="/checks/whitelist",
-        response_model=OperationResponse,
-        auth=AuthSpec(provider=FLOW_PROVIDER),
-        success_path="code",
-        success_values=("0000",),
-    ),
-    "product-b": EndpointSpec(
-        operation_id="mock_product.red_shield_check",
-        method="POST",
-        path="/checks/red-shield",
-        response_model=OperationResponse,
-        auth=AuthSpec(provider=FLOW_PROVIDER),
-        success_path="code",
-        success_values=("0000",),
-    ),
-    "product-c": EndpointSpec(
-        operation_id="mock_product.credit_check",
-        method="POST",
-        path="/checks/credit",
-        response_model=OperationResponse,
-        auth=AuthSpec(provider=FLOW_PROVIDER),
-        success_path="code",
-        success_values=("0000",),
-    ),
-}
+    def __init__(self, job: Job) -> None:
+        self.job = job
+        self._fixed_token = settings.MOCK_FIXED_SYSTEM_TOKEN
+        self.tokens = TokenManager(
+            {
+                FLOW_PROVIDER: FlowTokenProvider(),
+                FIXED_PROVIDER: StaticTokenProvider(self._fixed_token),
+            }
+        )
+        self._http_client: HttpClient | None = None
+        self._executor: EndpointExecutor | None = None
 
-ROTATE_TOKEN = EndpointSpec(
-    operation_id="mock_product.rotate_token",
-    method="POST",
-    path="/auth/rotate",
-    response_model=OperationResponse,
-    auth=AuthSpec(provider=FLOW_PROVIDER),
-    token_update=TokenUpdateSpec(
-        provider=FLOW_PROVIDER,
-        source=TokenSource.RESPONSE_HEADER,
-        path="X-New-Token",
-    ),
-    success_path="code",
-    success_values=("0000",),
-)
+    def __enter__(self) -> "MockProductClient":
+        self._http_client = create_mock_http_client(self._fixed_token)
+        self._executor = EndpointExecutor(self._http_client, self.tokens)
+        return self
 
-SUBMIT_APPLICATION = EndpointSpec(
-    operation_id="mock_product.submit_application",
-    method="POST",
-    path="/applications",
-    response_model=OperationResponse,
-    auth=AuthSpec(provider=FLOW_PROVIDER),
-    success_path="code",
-    success_values=("0000",),
-)
+    def __exit__(self, *_: object) -> None:
+        if self._http_client:
+            self._http_client.close()
+        self._http_client = None
+        self._executor = None
 
-FIXED_AUDIT = EndpointSpec(
-    operation_id="fixed_external.audit",
-    method="POST",
-    path="/fixed/audit",
-    response_model=OperationResponse,
-    auth=AuthSpec(provider=FIXED_PROVIDER, header="X-Api-Token", prefix=""),
-    success_path="code",
-    success_values=("0000",),
-)
+    @property
+    def flow_token_version(self) -> int:
+        return self.tokens.state(FLOW_PROVIDER).version
 
-ENDPOINT_SPECS = {
-    endpoint.operation_id: endpoint
-    for endpoint in (
-        LOGIN,
-        *PRODUCT_CHECKS.values(),
-        ROTATE_TOKEN,
-        SUBMIT_APPLICATION,
-        FIXED_AUDIT,
-    )
-}
+    def request_head(self) -> RequestHead:
+        return RequestHead(
+            traceno=self.job.trace_id,
+            starttime=_format_start_time(self.job.created_at),
+            product=self.job.product,
+        )
+
+    def call(self, step: str, endpoint: object, fields: dict[str, object]) -> OperationResponse:
+        if self._executor is None:
+            raise RuntimeError("MockProductClient 必须在 with 块中使用")
+        return self._executor.execute(
+            endpoint,  # type: ignore[arg-type]
+            form_data=fields,
+            trace_id=self.job.trace_id,
+            observer=JobHttpCallObserver(self.job, step=step),
+        )
 
 
 def create_mock_http_client(fixed_token: str) -> HttpClient:
@@ -166,3 +125,7 @@ def _request_payload(request: httpx.Request) -> dict[str, object]:
                 result[name] = value
         return result
     return json.loads(content or "{}")
+
+
+def _format_start_time(value: datetime) -> str:
+    return timezone.localtime(value).strftime("%Y%m%d%H%M%S")

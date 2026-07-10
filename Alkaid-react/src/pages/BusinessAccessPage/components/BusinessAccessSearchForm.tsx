@@ -1,30 +1,42 @@
 import { Button, Card, Col, Form, Input, Row, Select, Space, type FormInstance } from 'antd';
 import { RotateCcw, Search } from 'lucide-react';
-import type { BusinessAccessSearchValues } from '../../../api/businessAccess';
-import { businessAccessConfig } from '../config/businessAccessConfig';
-
-const environmentOptions = businessAccessConfig.environments.map((value) => ({ value, label: value }));
+import {
+  getBusinessAccessEnvironmentOptions,
+  validateBusinessAccessSearchCriteria,
+} from '../model/searchModel';
+import type { BusinessAccessSearchValues } from '../types';
 
 interface BusinessAccessSearchFormProps {
   form: FormInstance<BusinessAccessSearchValues>;
+  initialValues: BusinessAccessSearchValues;
   busy: boolean;
   searching: boolean;
   onSearch: (values: BusinessAccessSearchValues) => void;
+  onReset: () => void;
 }
 
 export default function BusinessAccessSearchForm({
   form,
+  initialValues,
   busy,
   searching,
   onSearch,
+  onReset,
 }: BusinessAccessSearchFormProps) {
-  const submitSearch = (values: BusinessAccessSearchValues) => {
-    onSearch({
-      environment: values.environment,
-      name: values.name?.trim(),
-      certificateNo: values.certificateNo?.trim(),
-    });
-  };
+  const environmentOptions = getBusinessAccessEnvironmentOptions();
+  const validateSearchCriteria = ({ getFieldValue }: { getFieldValue: (name: string) => unknown }) => ({
+    validator: () => {
+      try {
+        validateBusinessAccessSearchCriteria({
+          name: String(getFieldValue('name') ?? ''),
+          certificateNo: String(getFieldValue('certificateNo') ?? ''),
+        });
+        return Promise.resolve();
+      } catch (error) {
+        return Promise.reject(error);
+      }
+    },
+  });
 
   return (
     <Card title="查询条件">
@@ -32,8 +44,8 @@ export default function BusinessAccessSearchForm({
         form={form}
         layout="vertical"
         disabled={busy}
-        initialValues={{ environment: businessAccessConfig.environments[0] }}
-        onFinish={submitSearch}
+        initialValues={initialValues}
+        onFinish={onSearch}
       >
         <div className="business-access-search-form">
           <Row gutter={[16, 4]} justify="center">
@@ -51,17 +63,7 @@ export default function BusinessAccessSearchForm({
                 name="name"
                 label="姓名"
                 dependencies={['certificateNo']}
-                rules={[
-                  ({ getFieldValue }) => ({
-                    validator() {
-                      const name = String(getFieldValue('name') ?? '').trim();
-                      const certificateNo = String(getFieldValue('certificateNo') ?? '').trim();
-                      return name || certificateNo
-                        ? Promise.resolve()
-                        : Promise.reject(new Error('姓名和身份证号至少填写一个'));
-                    },
-                  }),
-                ]}
+                rules={[validateSearchCriteria]}
               >
                 <Input placeholder="请输入姓名" allowClear />
               </Form.Item>
@@ -71,17 +73,7 @@ export default function BusinessAccessSearchForm({
                 name="certificateNo"
                 label="身份证号"
                 dependencies={['name']}
-                rules={[
-                  ({ getFieldValue }) => ({
-                    validator() {
-                      const name = String(getFieldValue('name') ?? '').trim();
-                      const certificateNo = String(getFieldValue('certificateNo') ?? '').trim();
-                      return name || certificateNo
-                        ? Promise.resolve()
-                        : Promise.reject(new Error('姓名和身份证号至少填写一个'));
-                    },
-                  }),
-                ]}
+                rules={[validateSearchCriteria]}
               >
                 <Input placeholder="请输入身份证号" maxLength={18} allowClear />
               </Form.Item>
@@ -102,10 +94,7 @@ export default function BusinessAccessSearchForm({
             <Button
               disabled={busy}
               icon={<RotateCcw size={16} />}
-              onClick={() => {
-                form.resetFields();
-                form.setFieldValue('environment', businessAccessConfig.environments[0]);
-              }}
+              onClick={onReset}
             >
               重置
             </Button>

@@ -1,18 +1,6 @@
 from typing import Any
 
-from pydantic import BaseModel, Field, RootModel
-
-
-class LoginRequest(BaseModel):
-    product: str
-
-
-class TokenData(BaseModel):
-    token: str
-
-
-class LoginResponse(BaseModel):
-    data: TokenData
+from pydantic import BaseModel, RootModel
 
 
 class ProductCheckRequest(BaseModel):
@@ -20,12 +8,6 @@ class ProductCheckRequest(BaseModel):
     customerType: str
     switchName: str
     switchEnabled: bool
-
-
-class OperationResponse(BaseModel):
-    code: str
-    message: str
-    data: dict[str, Any] = Field(default_factory=dict)
 
 
 class RotateTokenRequest(BaseModel):
@@ -61,6 +43,8 @@ class ProductCheckInput(BaseModel):
 
 
 class ProductSubmissionInput(BaseModel):
+    product: str
+    environment: str
     product_type: str
     organization_code: str
     customer_name: str
@@ -73,3 +57,4 @@ class ProductSubmissionInput(BaseModel):
     dynamic_term: str | None = None
     dynamic_amount: str | None = None
     extra_reason: str | None = None
+    order_no: str | None = None

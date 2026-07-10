@@ -1,0 +1,22 @@
+{
+  "REQ_BODY": {
+    "appId": "appohjkk1202307100001",
+    "env": "UATC",
+    "request": {
+      "cooperatorId": "JLHB",
+      "cooperatorName": "吉农e贷",
+      "custNme": "马凡",
+      "distId": "220102",
+      "flowId": "JLHB100507",
+      "idtyNo": "21060419951125196X",
+      "loanFlowStag": "1",
+      "orderNo": "202506190507AAAAAA",
+      "selblProdId": "CJDK-JLHB",
+      "gbIndsTpCd": "A0143",
+      "spclCdtPolcyFlg": "02",
+      "loanPurpSubCatgCd": "26",
+      "thdptyCallbackUrlAddr": "https://stage-m.loan.cacfintech.com/#/app/success-page"
+    }
+  },
+  "REQ_HEAD": {}
+}

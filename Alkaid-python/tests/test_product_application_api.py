@@ -218,12 +218,22 @@ def test_product_application_task_updates_job_and_logs():
         assert step in steps
     assert job.api_calls.count() == 5
     submit_call = job.api_calls.get(step="product.submit")
-    submit_message = submit_call.request_body["form"]["req_message"]
-    submit_payload = submit_message["req_body"]["request"]
-    assert submit_payload["customer"]["name"] == "测试用户"
-    assert submit_payload["risk"]["whitelistEnabled"] is True
-    assert submit_payload["risk"]["redShieldEnabled"] is True
-    assert submit_call.request_body["form"]["traceno"] == job.trace_id
+    submit_body = submit_call.request_body["form"]["REQ_BODY"]
+    submit_payload = submit_body["request"]
+    assert submit_body["appId"] == "appohjkk1202307100001"
+    assert submit_body["env"] == "UATC"
+    assert submit_payload["cooperatorId"] == "JLHB"
+    assert submit_payload["cooperatorName"] == "吉农e贷"
+    assert submit_payload["custNme"] != "测试用户"
+    assert submit_payload["idtyNo"] != "330101199001011234"
+    assert submit_payload["distId"] == "220102"
+    assert submit_payload["flowId"] == "JLHB100507"
+    assert submit_payload["loanFlowStag"] == "1"
+    assert submit_payload["selblProdId"] == "CJDK-JLHB"
+    assert submit_payload["gbIndsTpCd"] == "A0143"
+    assert submit_payload["spclCdtPolcyFlg"] == "02"
+    assert submit_payload["loanPurpSubCatgCd"] == "26"
+    assert submit_call.request_body["form"]["REQ_HEAD"] == {}
     audit_json = json.dumps(
         list(
             job.api_calls.values(
@@ -237,6 +247,7 @@ def test_product_application_task_updates_job_and_logs():
     assert "flow-token-v1" not in audit_json
     assert "flow-token-v2" not in audit_json
     assert "mock-fixed-token" not in audit_json
+    assert "330101199001011234" not in audit_json
 
     detail = Client().get(f"/api/jobs/{job_id}")
     assert detail.status_code == 200

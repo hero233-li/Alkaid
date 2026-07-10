@@ -20,7 +20,9 @@ SENSITIVE_KEYS = {
     "certificate_no",
     "cardno",
     "card_no",
+    "custnme",
     "phone",
+    "idtyno",
 }
 
 
