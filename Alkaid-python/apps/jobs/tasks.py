@@ -5,6 +5,12 @@ from django.conf import settings
 from django.utils import timezone
 
 from apps.jobs.models import Job, JobApiCall, JobLog, JobStatus
+from apps.jobs.services import reconcile_expired_jobs as reconcile_expired_job_records
+
+
+@shared_task(name="apps.jobs.tasks.reconcile_expired_jobs")
+def reconcile_expired_jobs() -> dict[str, int]:
+    return reconcile_expired_job_records()
 
 
 @shared_task(name="apps.jobs.tasks.cleanup_expired_jobs")

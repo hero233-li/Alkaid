@@ -4,7 +4,12 @@ from typing import Any
 from pydantic import BaseModel
 
 from apps.integrations.auth import TokenManager
-from apps.integrations.contracts import BusinessResponseError, EndpointSpec, ResponseModel
+from apps.integrations.contracts import (
+    BusinessResponseError,
+    EndpointSpec,
+    ResponseModel,
+    RetryMode,
+)
 from apps.integrations.http import HttpCallObserver, HttpClient
 
 
@@ -34,8 +39,11 @@ class EndpointExecutor:
             form_data=form_data,
             params=params,
             headers=request_headers,
-            workflow_id=trace_id,
+            trace_id=trace_id,
             observer=observer,
+            max_retries=(
+                self.client.config.max_retries if endpoint.retry_mode == RetryMode.SAFE else 0
+            ),
             response_validator=lambda response: self._validate_business_response(
                 endpoint,
                 response,

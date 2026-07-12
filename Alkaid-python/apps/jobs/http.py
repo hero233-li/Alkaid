@@ -6,7 +6,7 @@ from django.conf import settings
 from django.utils import timezone
 
 from apps.jobs.models import ApiCallStatus, Job, JobApiCall
-from apps.jobs.services import JobRepository
+from apps.jobs.services import add_job_log
 
 SENSITIVE_KEYS = {
     "authorization",
@@ -16,6 +16,9 @@ SENSITIVE_KEYS = {
     "access_token",
     "password",
     "secret",
+    "privatekey",
+    "private_key",
+    "myprivatekey",
     "certificateno",
     "certificate_no",
     "cardno",
@@ -46,6 +49,7 @@ def sanitize(value: Any, *, key: str = "") -> Any:
         or "authorization" in compact_key
         or "password" in compact_key
         or "secret" in compact_key
+        or "privatekey" in compact_key
         or "cookie" in compact_key
     ):
         return _masked(value)
@@ -93,7 +97,7 @@ class JobHttpCallObserver:
             request_headers=sanitize(dict(headers)),
             request_body=safe_body,
         )
-        JobRepository.add_log(
+        add_job_log(
             self.job,
             "INFO",
             f"请求外部接口：{method.upper()} {path}",
@@ -139,7 +143,7 @@ class JobHttpCallObserver:
         )
         outcome = "失败" if error else "成功"
         status_text = str(status_code) if status_code is not None else "无响应"
-        JobRepository.add_log(
+        add_job_log(
             self.job,
             "ERROR" if error else "INFO",
             f"外部接口{outcome}：{call.method} {call.url} -> {status_text} ({duration_ms}ms)",

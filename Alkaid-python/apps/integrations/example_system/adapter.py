@@ -12,13 +12,13 @@ class ExampleSystemAdapter:
     def __init__(self, client: HttpClient) -> None:
         self.client = client
 
-    def lookup(self, request: ExampleLookupRequest, *, workflow_id: str) -> ExampleLookupResult:
+    def lookup(self, request: ExampleLookupRequest, *, trace_id: str) -> ExampleLookupResult:
         response = self.client.request(
             "GET",
             "/v1/lookup",
             response_model=ExampleEnvelope,
             params={"value": request.value},
-            workflow_id=workflow_id,
+            trace_id=trace_id,
         )
         return ExampleLookupResult(
             reference=response.data.reference,

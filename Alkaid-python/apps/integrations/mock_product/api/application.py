@@ -1,4 +1,4 @@
-from apps.integrations.contracts import AuthSpec, EndpointSpec
+from apps.integrations.contracts import AuthSpec, EndpointSpec, RetryMode
 from apps.integrations.mock_product.api.auth import FLOW_PROVIDER
 from apps.integrations.mock_product.models import OperationResponse
 
@@ -11,6 +11,7 @@ PRODUCT_CHECKS = {
         auth=AuthSpec(provider=FLOW_PROVIDER),
         success_path="code",
         success_values=("0000",),
+        retry_mode=RetryMode.SAFE,
     ),
     "product-b": EndpointSpec(
         operation_id="mock_product.red_shield_check",
@@ -20,6 +21,7 @@ PRODUCT_CHECKS = {
         auth=AuthSpec(provider=FLOW_PROVIDER),
         success_path="code",
         success_values=("0000",),
+        retry_mode=RetryMode.SAFE,
     ),
     "product-c": EndpointSpec(
         operation_id="mock_product.credit_check",
@@ -29,6 +31,7 @@ PRODUCT_CHECKS = {
         auth=AuthSpec(provider=FLOW_PROVIDER),
         success_path="code",
         success_values=("0000",),
+        retry_mode=RetryMode.SAFE,
     ),
 }
 

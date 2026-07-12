@@ -13,12 +13,54 @@ if not defined ALKAID_RUNTIME_DIR (
   )
 )
 if not defined ALKAID_PORT set "ALKAID_PORT=9000"
+if not defined CELERY_QUEUE set "CELERY_QUEUE=alkaid-prod"
 if not defined MYSQL_HOST set "MYSQL_HOST=127.0.0.1"
 if not defined MYSQL_PORT set "MYSQL_PORT=3306"
 if not defined MYSQL_DATABASE set "MYSQL_DATABASE=alkaid_prod"
 if not defined MYSQL_USER set "MYSQL_USER=workflow"
 if not defined MYSQL_PASSWORD set "MYSQL_PASSWORD=workflow"
 if not defined MYSQL_SSL_DISABLED set "MYSQL_SSL_DISABLED=true"
+
+if not defined DJANGO_SECRET_KEY (
+  echo DJANGO_SECRET_KEY is required for production.
+  exit /b 1
+)
+if not defined CELERY_BROKER_URL (
+  echo CELERY_BROKER_URL is required for production.
+  exit /b 1
+)
+if not defined MOCK_PRODUCT_BASE_URL (
+  echo MOCK_PRODUCT_BASE_URL is required for production.
+  exit /b 1
+)
+if not defined APPLICATION_LINK_BASE_URL (
+  echo APPLICATION_LINK_BASE_URL is required for production.
+  exit /b 1
+)
+if not defined APPLICATION_LINK_API_TOKEN (
+  echo APPLICATION_LINK_API_TOKEN is required for production.
+  exit /b 1
+)
+if not defined BUSINESS_ACCESS_BASE_URL (
+  echo BUSINESS_ACCESS_BASE_URL is required for production.
+  exit /b 1
+)
+if not defined BUSINESS_ACCESS_API_TOKEN (
+  echo BUSINESS_ACCESS_API_TOKEN is required for production.
+  exit /b 1
+)
+if not defined VERIFICATION_APPROVAL_BASE_URL (
+  echo VERIFICATION_APPROVAL_BASE_URL is required for production.
+  exit /b 1
+)
+if not defined VERIFICATION_APPROVAL_API_TOKEN (
+  echo VERIFICATION_APPROVAL_API_TOKEN is required for production.
+  exit /b 1
+)
+if not defined MOCK_FIXED_SYSTEM_TOKEN (
+  echo MOCK_FIXED_SYSTEM_TOKEN is required for production.
+  exit /b 1
+)
 
 set "CURRENT_FILE=%ALKAID_RUNTIME_DIR%\current-release.txt"
 if not exist "%CURRENT_FILE%" (
@@ -47,7 +89,8 @@ if not exist "%FRONTEND_DIST_DIR%\index.html" (
   exit /b 1
 )
 
-set "DJANGO_SETTINGS_MODULE=config.settings.local"
+set "DJANGO_SETTINGS_MODULE=config.settings.server"
+set "EXTERNAL_SYSTEM_MODE=real"
 set "DB_ENGINE=mysql"
 set "MYSQL_HOST=%MYSQL_HOST%"
 set "MYSQL_PORT=%MYSQL_PORT%"
@@ -55,7 +98,8 @@ set "MYSQL_DATABASE=%MYSQL_DATABASE%"
 set "MYSQL_USER=%MYSQL_USER%"
 set "MYSQL_PASSWORD=%MYSQL_PASSWORD%"
 set "MYSQL_SSL_DISABLED=%MYSQL_SSL_DISABLED%"
-set "CELERY_TASK_ALWAYS_EAGER=true"
+set "CELERY_TASK_ALWAYS_EAGER=false"
+set "CELERY_QUEUE=%CELERY_QUEUE%"
 set "APP_VERSION=%RELEASE_NAME%"
 set "FRONTEND_DIST_DIR=%FRONTEND_DIST_DIR%"
 
@@ -69,5 +113,5 @@ echo   http://127.0.0.1:%ALKAID_PORT%
 pushd "%RELEASE_DIR%\Alkaid-python"
 "%PYTHON_EXE%" manage.py migrate --noinput
 if errorlevel 1 exit /b 1
-"%PYTHON_EXE%" -m uvicorn config.asgi:application --host 127.0.0.1 --port %ALKAID_PORT%
+"%PYTHON_EXE%" scripts\run_server.py --host 127.0.0.1 --port %ALKAID_PORT% --queue %CELERY_QUEUE%
 popd

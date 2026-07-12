@@ -37,6 +37,8 @@ export interface ApplicationLinkSubmission {
   category: LinkCategory;
   cooperationProject: string;
   loanType: string;
+  recommender?: string;
+  recommenderPhone?: string;
   requestJson?: Record<string, unknown>;
   restoreStatus?: string;
   spcode?: string;

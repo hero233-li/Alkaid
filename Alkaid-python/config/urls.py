@@ -2,14 +2,14 @@ from django.conf import settings
 from django.contrib import admin
 from django.urls import include, path, re_path
 
-from apps.core.views import frontend, health
+from apps.core.views import frontend, health, readiness
 
 urlpatterns = [
     path("admin/", admin.site.urls),
     path("health/", health, name="health"),
+    path("health/ready/", readiness, name="readiness"),
     path("api/jobs/", include("apps.jobs.urls")),
     path("api/product-data/", include("apps.product_data.urls")),
-    path("api/workflows/", include("apps.workflows.urls")),
 ]
 
 if settings.FRONTEND_DIST_DIR:

@@ -7,9 +7,9 @@
 
 - 本地开发的服务根地址通常为 `http://127.0.0.1:8000`；以下路径均相对该地址。
 - 所有 JSON 请求都应发送 `Content-Type: application/json`。
-- 路径中的末尾 `/` 有区别：工作流接口带 `/`，产品与 Job 的 REST 接口不带 `/`。请使用下文列出的精确路径。
+- 产品与 Job 的 REST 接口不带末尾 `/`。请使用下文列出的精确路径。
 - 目前这些业务接口没有应用层的身份校验；部署时应在反向代理或网关处补充认证、授权、限流和 TLS。
-- 产品申请、任务重试和任务取消已豁免 CSRF。工作流创建沿用 Django 的 CSRF 中间件；使用基于 Cookie 的浏览器会话时，应照 Django 约定提供 CSRF token。
+- 产品申请、申请链接生成、任务重试和任务取消已豁免 CSRF。
 
 ### 1.1 常规响应信封
 
@@ -23,23 +23,34 @@
 }
 ```
 
-失败时 `ok` 为 `false`，`message` 包含可读错误信息，`data` 通常为 `null`。工作流接口不使用此信封，详见[工作流](#6-工作流接口)。`405 Method Not Allowed` 由 Django 的方法装饰器生成，不保证采用上述格式。
+失败时 `ok` 为 `false`，`message` 包含可读错误信息，`data` 通常为 `null`。`405 Method Not Allowed` 由 Django 的方法装饰器生成，不保证采用上述格式。
 
 ### 1.2 接口总览
 
 | 方法 | 路径 | 说明 |
 | --- | --- | --- |
 | `GET` | `/health/` | 健康检查 |
+| `GET` | `/health/ready/` | 数据库与静态运行配置就绪检查 |
 | `GET` | `/api/product-data/applications/config` | 获取产品申请表单配置 |
 | `POST` | `/api/product-data/applications` | 创建或幂等返回产品申请 Job |
+| `POST` | `/api/product-data/tools/application-links/generate` | 创建申请链接生成 Job |
+| `GET` | `/api/product-data/business-access/config` | 获取业务准入环境配置 |
+| `POST` | `/api/product-data/business-access/search` | 创建业务准入查询 Job |
+| `POST` | `/api/product-data/business-access/{recordId}/invalidate` | 创建准入记录失效 Job |
+| `POST` | `/api/product-data/business-access/{recordId}/notifications/query` | 创建通知查询 Job |
+| `POST` | `/api/product-data/business-access/{recordId}/notifications/{notificationId}/{push-new\|push-old}` | 创建通知推送 Job |
+| `GET` | `/api/product-data/verification-approval/config` | 获取核实审批搜索配置 |
+| `POST` | `/api/product-data/verification-approval/search` | 查询核实审批任务 |
+| `POST` | `/api/product-data/verification-approval/{taskId}/claim` | 领取核实任务 |
+| `POST` | `/api/product-data/verification-approval/{taskId}/return` | 退回核实任务 |
+| `POST` | `/api/product-data/verification-approval/{taskId}/items/{itemId}` | 更新核实项 |
+| `POST` | `/api/product-data/verification-approval/{taskId}/actions/{action}` | 执行核实审批快捷操作 |
 | `GET` | `/api/jobs/{jobId}` | 查询 Job 详情和已保存日志 |
 | `POST` | `/api/jobs/{jobId}/retry` | 重试失败、超时或已取消 Job |
 | `POST` | `/api/jobs/{jobId}/cancel` | 请求取消 Job |
 | `GET` | `/api/jobs/{jobId}/logs` | 增量查询 Job 日志 |
 | `GET` | `/api/jobs/{jobId}/logs/stream` | 订阅 Job 日志与状态（SSE） |
 | `GET` | `/api/jobs/{jobId}/calls/{callId}` | 查询一次外部接口调用审计记录 |
-| `POST` | `/api/workflows/` | 创建或幂等返回示例工作流 |
-| `GET` | `/api/workflows/{workflowId}/` | 查询示例工作流状态 |
 
 ## 2. 健康检查
 
@@ -51,7 +62,13 @@
 {"status":"ok"}
 ```
 
-该接口不检查数据库、Celery 或外部系统的连通性。当前实现没有限制 HTTP 方法，但健康检查客户端应使用 `GET`。
+该接口只表示 Web 进程存活，不检查数据库、Celery 或外部系统连通性，只接受 `GET`。
+
+### `GET /health/ready/`
+
+检查数据库查询、产品 Catalog、产品外系统接口覆盖和全部原始报文结构。全部正常返回 `200` 和
+`{"status":"ready","checks":...}`；任一项失败返回 `503`。该接口不主动调用真实外系统，
+因此不会产生业务副作用；Worker/Broker 可用性仍由进程监管和运行监控负责。
 
 ## 3. 产品申请
 
@@ -245,68 +262,7 @@ data: {"status":"running","progress":40}
 - 连接空闲约 15 秒会发送 `: heartbeat` 注释。
 - 服务端不会因 Job 进入终态自动关闭连接。客户端收到终态状态后应主动断开，并在断线重连时使用最后一个 `log.id`。
 
-## 6. 工作流接口
-
-这一组接口是独立的示例工作流：worker 会把输入中的连续空白折叠为单个空格，并把结果写入 `context.output.normalized_value`。它的响应格式不同于产品和 Job 接口。
-
-### `POST /api/workflows/`
-
-请求体：
-
-```json
-{
-  "input": {"value": "  hello   world "},
-  "idempotency_key": "optional-client-key"
-}
-```
-
-`input.value` 必须为长度 1–500 的字符串。`idempotency_key` 可选，提供时长度为 1–128。
-
-首次创建返回 HTTP `202`：
-
-```json
-{
-  "workflow_id": "6ce3274c-4d43-4c50-9059-15e8d59342e2",
-  "status": "pending",
-  "created": true
-}
-```
-
-使用相同幂等键和相同输入会返回 HTTP `200`、原 `workflow_id` 及 `created: false`，不会重复投递。相同键但不同输入返回 HTTP `409`：
-
-```json
-{
-  "error": {
-    "code": "idempotency_conflict",
-    "message": "idempotency_key already belongs to a workflow with different input"
-  }
-}
-```
-
-JSON 格式或字段校验失败返回 HTTP `400`，错误码为 `invalid_request`。
-
-### `GET /api/workflows/{workflowId}/`
-
-返回 HTTP `200`：
-
-```json
-{
-  "workflow_id": "6ce3274c-4d43-4c50-9059-15e8d59342e2",
-  "status": "succeeded",
-  "current_step": "completed",
-  "context": {
-    "input": {"value": "  hello   world "},
-    "output": {"normalized_value": "hello world"}
-  },
-  "error": null,
-  "created_at": "2026-07-10T12:00:00+08:00",
-  "updated_at": "2026-07-10T12:00:01+08:00"
-}
-```
-
-状态为 `pending`、`running`、`succeeded` 或 `failed`。不存在的 UUID 对应工作流返回 HTTP `404` 和错误码 `not_found`；路径参数不是 UUID 时由 Django 路由拒绝。
-
-## 7. 客户端调用建议
+## 6. 客户端调用建议
 
 1. 先调用产品配置接口，再构建产品申请表单和选择项。
 2. 为每次“创建”操作生成并持久化幂等键；网络重试时复用同一键。

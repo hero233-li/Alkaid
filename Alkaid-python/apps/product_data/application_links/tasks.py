@@ -4,13 +4,21 @@ from django.conf import settings
 from django.utils import timezone
 
 from apps.jobs.models import JobStatus
-from apps.jobs.services import InvalidJobTransition, JobRepository
+from apps.jobs.services import (
+    InvalidJobTransition,
+    mark_job_cancelled,
+    mark_job_failed,
+    mark_job_running,
+    mark_job_success,
+    mark_job_timed_out,
+    update_job_progress,
+)
 from apps.product_data.application_links.schemas import (
     ApplicationLinkExecutionSnapshot,
     ApplicationLinkSubmission,
 )
 from apps.product_data.application_links.services import (
-    ApplicationLinkGenerator,
+    generate_application_links,
     resolve_execution_snapshot,
     validate_submission,
 )
@@ -26,12 +34,12 @@ from apps.product_data.application_links.services import (
 )
 def execute_application_link(self, job_id: int) -> None:
     task_id = str(self.request.id or "local-eager-task")
-    job = JobRepository.mark_running(job_id, task_id)
+    job = mark_job_running(job_id, task_id)
     if job is None:
         return
     try:
         if job.deadline_at and job.deadline_at <= timezone.now():
-            JobRepository.mark_timed_out(job.id, "申请链接任务在队列中等待超时")
+            mark_job_timed_out(job.id, "申请链接任务在队列中等待超时")
             return
         submission = ApplicationLinkSubmission.model_validate(job.payload)
         snapshot = (
@@ -40,7 +48,7 @@ def execute_application_link(self, job_id: int) -> None:
             else resolve_execution_snapshot(submission)
         )
         validate_submission(submission, snapshot)
-        JobRepository.update_progress(
+        update_job_progress(
             job.id,
             stage="validate",
             progress=30,
@@ -48,21 +56,21 @@ def execute_application_link(self, job_id: int) -> None:
         )
         job.refresh_from_db()
         if job.status == JobStatus.CANCEL_REQUESTED:
-            JobRepository.mark_cancelled(job.id)
+            mark_job_cancelled(job.id)
             return
-        result = ApplicationLinkGenerator().generate(job, submission, snapshot=snapshot)
-        JobRepository.update_progress(
+        result = generate_application_links(job, submission, snapshot=snapshot)
+        update_job_progress(
             job.id,
             stage="generate",
             progress=90,
             message="申请链接生成完成，正在保存结果",
         )
-        JobRepository.mark_success(job.id, {"links": result.model_dump(mode="json")})
+        mark_job_success(job.id, {"links": result.model_dump(mode="json")})
     except InvalidJobTransition:
-        JobRepository.mark_cancelled(job.id)
+        mark_job_cancelled(job.id)
     except SoftTimeLimitExceeded:
-        JobRepository.mark_timed_out(job.id)
+        mark_job_timed_out(job.id)
         raise
     except Exception as exc:
-        JobRepository.mark_failed(job.id, f"{type(exc).__name__}: {exc}")
+        mark_job_failed(job.id, f"{type(exc).__name__}: {exc}")
         raise

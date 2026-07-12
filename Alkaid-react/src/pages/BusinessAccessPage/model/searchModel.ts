@@ -1,5 +1,5 @@
-import { businessAccessConfig } from '../config/businessAccessConfig';
 import type {
+  BusinessAccessConfig,
   BusinessAccessSearchSubmission,
   BusinessAccessSearchValues,
 } from '../types';
@@ -22,12 +22,16 @@ function requiredTrimmedText(value: unknown, message: string) {
   return text;
 }
 
-export function getInitialBusinessAccessSearchValues(): BusinessAccessSearchValues {
-  return { environment: businessAccessConfig.environments[0] };
+export function getInitialBusinessAccessSearchValues(
+  config: BusinessAccessConfig | null,
+): BusinessAccessSearchValues {
+  return { environment: config?.environments[0] };
 }
 
-export function getBusinessAccessEnvironmentOptions(): BusinessAccessOption[] {
-  return businessAccessConfig.environments.map((value) => ({ value, label: value }));
+export function getBusinessAccessEnvironmentOptions(
+  config: BusinessAccessConfig | null,
+): BusinessAccessOption[] {
+  return (config?.environments ?? []).map((value) => ({ value, label: value }));
 }
 
 export function validateBusinessAccessSearchCriteria(values: BusinessAccessSearchValues) {

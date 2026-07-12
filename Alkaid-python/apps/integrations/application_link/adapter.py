@@ -2,16 +2,16 @@
 
 from __future__ import annotations
 
-import json
-from typing import Any
-
-import httpx
 from django.conf import settings
+from django.core.exceptions import ImproperlyConfigured
 
 from apps.integrations.application_link.api import (
     CREATE_APPLICATION,
     CREATE_DYNAMIC_LINKS,
     CREATE_SUN_CODE_LINKS,
+)
+from apps.integrations.application_link.mock_transport import (
+    create_application_link_mock_transport,
 )
 from apps.integrations.application_link.models import (
     ApplicationLinks,
@@ -56,9 +56,7 @@ class ApplicationLinkAdapter:
         category: object,
     ) -> ApplicationLinks:
         category_value = getattr(category, "value", category)
-        endpoint = (
-            CREATE_DYNAMIC_LINKS if category_value == "动态链接" else CREATE_SUN_CODE_LINKS
-        )
+        endpoint = CREATE_DYNAMIC_LINKS if category_value == "动态链接" else CREATE_SUN_CODE_LINKS
         response = self._execute("application_link.generate_links", endpoint, request)
         return response.data
 
@@ -74,49 +72,27 @@ class ApplicationLinkAdapter:
 
 
 def _create_client() -> HttpClient:
+    if settings.EXTERNAL_SYSTEM_MODE == "mock":
+        return _create_mock_client()
     if settings.APPLICATION_LINK_BASE_URL:
         return HttpClient(
             HttpClientConfig(
                 base_url=settings.APPLICATION_LINK_BASE_URL,
                 token=settings.APPLICATION_LINK_API_TOKEN or None,
+                timeout_seconds=settings.HTTP_TIMEOUT_SECONDS,
+                connect_timeout_seconds=settings.HTTP_CONNECT_TIMEOUT_SECONDS,
+                write_timeout_seconds=settings.HTTP_WRITE_TIMEOUT_SECONDS,
+                pool_timeout_seconds=settings.HTTP_POOL_TIMEOUT_SECONDS,
+                max_retries=settings.HTTP_MAX_RETRIES,
+                retry_backoff_seconds=settings.HTTP_RETRY_BACKOFF_SECONDS,
+                retry_max_backoff_seconds=settings.HTTP_RETRY_MAX_BACKOFF_SECONDS,
             )
         )
-    return _create_mock_client()
+    raise ImproperlyConfigured("APPLICATION_LINK_BASE_URL 未配置")
 
 
 def _create_mock_client() -> HttpClient:
-    def handler(request: httpx.Request) -> httpx.Response:
-        payload = _read_json(request)
-        if request.url.path == "/applications":
-            product = str(payload.get("product") or "unknown").replace(" ", "-")
-            return httpx.Response(
-                200,
-                json={"code": "0000", "data": {"application_no": f"MOCK-LINK-{product}-001"}},
-            )
-        if request.url.path in {"/links/sun-code", "/links/dynamic"}:
-            application_no = str(payload.get("application_no") or "MOCK-LINK-UNKNOWN")
-            path_kind = "dynamic" if request.url.path.endswith("dynamic") else "sun-code"
-            return httpx.Response(
-                200,
-                json={
-                    "code": "0000",
-                    "data": {
-                        "internal_url": f"https://internal.example.local/apply/{application_no}",
-                        "external_url": f"https://apply.example.local/{path_kind}/{application_no}",
-                    },
-                },
-            )
-        return httpx.Response(404, json={"code": "NOT_FOUND"})
-
     return HttpClient(
         HttpClientConfig(base_url="https://mock-application-link.local", max_retries=0),
-        transport=httpx.MockTransport(handler),
+        transport=create_application_link_mock_transport(),
     )
-
-
-def _read_json(request: httpx.Request) -> dict[str, Any]:
-    try:
-        value = json.loads(request.content.decode("utf-8") or "{}")
-    except (UnicodeDecodeError, json.JSONDecodeError):
-        return {}
-    return value if isinstance(value, dict) else {}

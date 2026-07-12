@@ -1,12 +1,47 @@
+import logging
 import mimetypes
 from pathlib import Path
 
 from django.conf import settings
+from django.db import connection
 from django.http import FileResponse, Http404, JsonResponse
+from django.views.decorators.http import require_GET
+
+from apps.integrations.mock_product.api import validate_product_endpoint_coverage
+from apps.integrations.mock_product.messages import validate_message_catalog
+from apps.product_data.catalog import load_product_catalog
+
+logger = logging.getLogger(__name__)
 
 
+@require_GET
 def health(request):
     return JsonResponse({"status": "ok"})
+
+
+@require_GET
+def readiness(request):
+    checks: dict[str, object] = {}
+    try:
+        with connection.cursor() as cursor:
+            cursor.execute("SELECT 1")
+            cursor.fetchone()
+        checks["database"] = "ok"
+
+        catalog = load_product_catalog()
+        checks["catalog"] = {
+            "status": "ok",
+            "version": catalog.reference.version,
+            "products": len(catalog.products),
+        }
+        validate_product_endpoint_coverage(set(catalog.products))
+        checks["productEndpoints"] = "ok"
+        checks["rawMessages"] = {"status": "ok", **validate_message_catalog()}
+    except Exception as exc:
+        logger.exception("readiness_check_failed")
+        checks["error"] = type(exc).__name__
+        return JsonResponse({"status": "not_ready", "checks": checks}, status=503)
+    return JsonResponse({"status": "ready", "checks": checks})
 
 
 def frontend(request, path: str = ""):

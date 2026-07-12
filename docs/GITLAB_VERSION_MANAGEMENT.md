@@ -204,7 +204,6 @@ __pycache__/
 ```text
 Alkaid-react/package-lock.json
 Alkaid-python/requirements-dev.lock
-Alkaid-python/uv.lock
 ```
 
 本机 MySQL 数据不进入 Git，通过 migration 管理结构，通过备份工具管理数据。

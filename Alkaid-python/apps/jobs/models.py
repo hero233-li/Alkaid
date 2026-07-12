@@ -55,6 +55,7 @@ class Job(models.Model):
         ordering = ["-created_at"]
         indexes = [
             models.Index(fields=["status", "expires_at"], name="job_status_exp_idx"),
+            models.Index(fields=["status", "deadline_at"], name="job_status_dead_idx"),
         ]
 
 

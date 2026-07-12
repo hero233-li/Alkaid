@@ -6,9 +6,10 @@ from typing import Any
 from urllib.parse import parse_qs
 
 from asgiref.sync import sync_to_async
+from django.conf import settings
 from django.db import close_old_connections
 
-from apps.jobs.models import Job
+from apps.jobs.models import TERMINAL_JOB_STATUSES, Job
 from apps.jobs.services import serialize_log
 
 ASGIReceive = Callable[[], Awaitable[dict[str, Any]]]
@@ -22,11 +23,14 @@ def _snapshot(job_id: int, after_id: int) -> dict[str, Any] | None:
         job = Job.objects.get(id=job_id)
     except Job.DoesNotExist:
         return None
-    logs = list(job.logs.filter(id__gt=after_id).order_by("id")[:500])
+    logs = list(job.logs.filter(id__gt=after_id).order_by("id")[:501])
+    has_more = len(logs) > 500
+    logs = logs[:500]
     return {
         "status": job.status,
         "progress": job.progress,
         "logs": [serialize_log(log) for log in logs],
+        "has_more": has_more,
     }
 
 
@@ -73,7 +77,8 @@ class JobLogSSEApplication:
             }
         )
         last_status: tuple[str, int] | None = None
-        heartbeat_seconds = 15.0
+        heartbeat_seconds = max(1.0, settings.JOB_SSE_HEARTBEAT_SECONDS)
+        poll_seconds = max(0.1, settings.JOB_SSE_POLL_SECONDS)
         last_heartbeat = asyncio.get_running_loop().time()
 
         while True:
@@ -100,6 +105,11 @@ class JobLogSSEApplication:
                 )
                 last_status = current_status
 
+            if snapshot["has_more"]:
+                continue
+            if snapshot["status"] in TERMINAL_JOB_STATUSES:
+                break
+
             now = asyncio.get_running_loop().time()
             if now - last_heartbeat >= heartbeat_seconds:
                 await send(
@@ -111,7 +121,7 @@ class JobLogSSEApplication:
                 )
                 last_heartbeat = now
             try:
-                message = await asyncio.wait_for(receive(), timeout=0.5)
+                message = await asyncio.wait_for(receive(), timeout=poll_seconds)
                 if message.get("type") == "http.disconnect":
                     return
             except asyncio.TimeoutError:

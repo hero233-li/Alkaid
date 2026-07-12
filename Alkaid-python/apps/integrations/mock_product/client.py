@@ -1,16 +1,16 @@
-import json
 from datetime import datetime
-from urllib.parse import parse_qs
 
-import httpx
 from django.conf import settings
+from django.core.exceptions import ImproperlyConfigured
 from django.utils import timezone
 
 from apps.integrations.auth import FlowTokenProvider, StaticTokenProvider, TokenManager
+from apps.integrations.contracts import EndpointSpec, ResponseModel
 from apps.integrations.executor import EndpointExecutor
 from apps.integrations.http import HttpClient, HttpClientConfig
 from apps.integrations.mock_product.api import FIXED_PROVIDER, FLOW_PROVIDER
-from apps.integrations.mock_product.models import OperationResponse, RequestHead
+from apps.integrations.mock_product.mock_transport import create_mock_product_transport
+from apps.integrations.mock_product.models import RequestHead
 from apps.jobs.http import JobHttpCallObserver
 from apps.jobs.models import Job
 
@@ -31,7 +31,7 @@ class MockProductClient:
         self._executor: EndpointExecutor | None = None
 
     def __enter__(self) -> "MockProductClient":
-        self._http_client = create_mock_http_client(self._fixed_token)
+        self._http_client = create_product_http_client(self._fixed_token)
         self._executor = EndpointExecutor(self._http_client, self.tokens)
         return self
 
@@ -52,79 +52,51 @@ class MockProductClient:
             product=self.job.product,
         )
 
-    def call(self, step: str, endpoint: object, fields: dict[str, object]) -> OperationResponse:
+    def request(
+        self,
+        step: str,
+        endpoint: EndpointSpec[ResponseModel],
+        *,
+        payload: dict[str, object] | None,
+        req_message: dict[str, object],
+    ) -> ResponseModel:
         if self._executor is None:
             raise RuntimeError("MockProductClient 必须在 with 块中使用")
         return self._executor.execute(
-            endpoint,  # type: ignore[arg-type]
-            form_data=fields,
+            endpoint,
+            form_data={
+                "payload": payload or {},
+                "req_message": req_message,
+            },
             trace_id=self.job.trace_id,
             observer=JobHttpCallObserver(self.job, step=step),
         )
 
 
-def create_mock_http_client(fixed_token: str) -> HttpClient:
-    state = {"flow_token": "flow-token-v1"}
-
-    def handler(request: httpx.Request) -> httpx.Response:
-        path = request.url.path
-        payload = _request_payload(request)
-        if path == "/auth/token":
-            return httpx.Response(200, json={"data": {"token": state["flow_token"]}})
-
-        if path == "/fixed/audit":
-            if request.headers.get("X-Api-Token") != fixed_token:
-                return httpx.Response(401, json={"code": "UNAUTHORIZED"})
-            return httpx.Response(
-                200,
-                json={"code": "0000", "message": "固定 Token 校验成功", "data": payload},
-            )
-
-        expected = f"Bearer {state['flow_token']}"
-        if request.headers.get("Authorization") != expected:
-            return httpx.Response(401, json={"code": "UNAUTHORIZED"})
-        if path == "/auth/rotate":
-            state["flow_token"] = "flow-token-v2"
-            return httpx.Response(
-                200,
-                headers={"X-New-Token": state["flow_token"]},
-                json={"code": "0000", "message": "Token 已更新", "data": payload},
-            )
-        if path.startswith("/checks/"):
-            return httpx.Response(
-                200,
-                json={"code": "0000", "message": "产品检查通过", "data": payload},
-            )
-        if path.startswith("/applications"):
-            return httpx.Response(
-                200,
-                json={
-                    "code": "0000",
-                    "message": "产品申请成功",
-                    "data": {"applicationNo": "MOCK-APPLICATION-001"},
-                },
-            )
-        return httpx.Response(404, json={"code": "NOT_FOUND"})
-
+def create_product_http_client(fixed_token: str) -> HttpClient:
+    if settings.EXTERNAL_SYSTEM_MODE == "mock":
+        return create_mock_http_client(fixed_token)
+    if not settings.MOCK_PRODUCT_BASE_URL:
+        raise ImproperlyConfigured("MOCK_PRODUCT_BASE_URL 未配置")
     return HttpClient(
-        HttpClientConfig(base_url="https://mock-product.local", max_retries=0),
-        transport=httpx.MockTransport(handler),
+        HttpClientConfig(
+            base_url=settings.MOCK_PRODUCT_BASE_URL,
+            timeout_seconds=settings.HTTP_TIMEOUT_SECONDS,
+            connect_timeout_seconds=settings.HTTP_CONNECT_TIMEOUT_SECONDS,
+            write_timeout_seconds=settings.HTTP_WRITE_TIMEOUT_SECONDS,
+            pool_timeout_seconds=settings.HTTP_POOL_TIMEOUT_SECONDS,
+            max_retries=settings.HTTP_MAX_RETRIES,
+            retry_backoff_seconds=settings.HTTP_RETRY_BACKOFF_SECONDS,
+            retry_max_backoff_seconds=settings.HTTP_RETRY_MAX_BACKOFF_SECONDS,
+        )
     )
 
 
-def _request_payload(request: httpx.Request) -> dict[str, object]:
-    content = request.content.decode("utf-8") if request.content else ""
-    if "application/x-www-form-urlencoded" in request.headers.get("Content-Type", ""):
-        parsed = parse_qs(content, keep_blank_values=True)
-        result: dict[str, object] = {}
-        for name, values in parsed.items():
-            value = values[-1]
-            try:
-                result[name] = json.loads(value)
-            except json.JSONDecodeError:
-                result[name] = value
-        return result
-    return json.loads(content or "{}")
+def create_mock_http_client(fixed_token: str) -> HttpClient:
+    return HttpClient(
+        HttpClientConfig(base_url="https://mock-product.local", max_retries=0),
+        transport=create_mock_product_transport(fixed_token),
+    )
 
 
 def _format_start_time(value: datetime) -> str:

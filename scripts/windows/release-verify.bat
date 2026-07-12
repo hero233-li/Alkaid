@@ -14,6 +14,47 @@ if not defined MYSQL_USER set "MYSQL_USER=workflow"
 if not defined MYSQL_PASSWORD set "MYSQL_PASSWORD=workflow"
 if not defined MYSQL_SSL_DISABLED set "MYSQL_SSL_DISABLED=true"
 
+if not defined DJANGO_SECRET_KEY (
+  echo DJANGO_SECRET_KEY is required for release verification.
+  exit /b 1
+)
+if not defined CELERY_BROKER_URL (
+  echo CELERY_BROKER_URL is required for release verification.
+  exit /b 1
+)
+if not defined MOCK_PRODUCT_BASE_URL (
+  echo MOCK_PRODUCT_BASE_URL is required for release verification.
+  exit /b 1
+)
+if not defined APPLICATION_LINK_BASE_URL (
+  echo APPLICATION_LINK_BASE_URL is required for release verification.
+  exit /b 1
+)
+if not defined APPLICATION_LINK_API_TOKEN (
+  echo APPLICATION_LINK_API_TOKEN is required for release verification.
+  exit /b 1
+)
+if not defined BUSINESS_ACCESS_BASE_URL (
+  echo BUSINESS_ACCESS_BASE_URL is required for release verification.
+  exit /b 1
+)
+if not defined BUSINESS_ACCESS_API_TOKEN (
+  echo BUSINESS_ACCESS_API_TOKEN is required for release verification.
+  exit /b 1
+)
+if not defined VERIFICATION_APPROVAL_BASE_URL (
+  echo VERIFICATION_APPROVAL_BASE_URL is required for release verification.
+  exit /b 1
+)
+if not defined VERIFICATION_APPROVAL_API_TOKEN (
+  echo VERIFICATION_APPROVAL_API_TOKEN is required for release verification.
+  exit /b 1
+)
+if not defined MOCK_FIXED_SYSTEM_TOKEN (
+  echo MOCK_FIXED_SYSTEM_TOKEN is required for release verification.
+  exit /b 1
+)
+
 if "%~1"=="" (
   set "LAST_BUILT_FILE=%ALKAID_RUNTIME_DIR%\last-built-release.txt"
   if not exist "%LAST_BUILT_FILE%" (
@@ -47,7 +88,8 @@ if not exist "%ALKAID_RUNTIME_DIR%" mkdir "%ALKAID_RUNTIME_DIR%"
 
 set "VERIFY_RUNNER=%ALKAID_RUNTIME_DIR%\verify-%RELEASE_NAME%.bat"
 >"%VERIFY_RUNNER%" echo @echo off
->>"%VERIFY_RUNNER%" echo set "DJANGO_SETTINGS_MODULE=config.settings.local"
+>>"%VERIFY_RUNNER%" echo set "DJANGO_SETTINGS_MODULE=config.settings.server"
+>>"%VERIFY_RUNNER%" echo set "EXTERNAL_SYSTEM_MODE=real"
 >>"%VERIFY_RUNNER%" echo set "DB_ENGINE=mysql"
 >>"%VERIFY_RUNNER%" echo set "MYSQL_HOST=%MYSQL_HOST%"
 >>"%VERIFY_RUNNER%" echo set "MYSQL_PORT=%MYSQL_PORT%"
@@ -55,13 +97,24 @@ set "VERIFY_RUNNER=%ALKAID_RUNTIME_DIR%\verify-%RELEASE_NAME%.bat"
 >>"%VERIFY_RUNNER%" echo set "MYSQL_USER=%MYSQL_USER%"
 >>"%VERIFY_RUNNER%" echo set "MYSQL_PASSWORD=%MYSQL_PASSWORD%"
 >>"%VERIFY_RUNNER%" echo set "MYSQL_SSL_DISABLED=%MYSQL_SSL_DISABLED%"
->>"%VERIFY_RUNNER%" echo set "CELERY_TASK_ALWAYS_EAGER=true"
+>>"%VERIFY_RUNNER%" echo set "CELERY_TASK_ALWAYS_EAGER=false"
+>>"%VERIFY_RUNNER%" echo set "CELERY_QUEUE=alkaid-verify-%RELEASE_NAME%"
+>>"%VERIFY_RUNNER%" echo set "CELERY_BROKER_URL=%CELERY_BROKER_URL%"
+>>"%VERIFY_RUNNER%" echo set "DJANGO_SECRET_KEY=%DJANGO_SECRET_KEY%"
+>>"%VERIFY_RUNNER%" echo set "MOCK_PRODUCT_BASE_URL=%MOCK_PRODUCT_BASE_URL%"
+>>"%VERIFY_RUNNER%" echo set "APPLICATION_LINK_BASE_URL=%APPLICATION_LINK_BASE_URL%"
+>>"%VERIFY_RUNNER%" echo set "APPLICATION_LINK_API_TOKEN=%APPLICATION_LINK_API_TOKEN%"
+>>"%VERIFY_RUNNER%" echo set "BUSINESS_ACCESS_BASE_URL=%BUSINESS_ACCESS_BASE_URL%"
+>>"%VERIFY_RUNNER%" echo set "BUSINESS_ACCESS_API_TOKEN=%BUSINESS_ACCESS_API_TOKEN%"
+>>"%VERIFY_RUNNER%" echo set "VERIFICATION_APPROVAL_BASE_URL=%VERIFICATION_APPROVAL_BASE_URL%"
+>>"%VERIFY_RUNNER%" echo set "VERIFICATION_APPROVAL_API_TOKEN=%VERIFICATION_APPROVAL_API_TOKEN%"
+>>"%VERIFY_RUNNER%" echo set "MOCK_FIXED_SYSTEM_TOKEN=%MOCK_FIXED_SYSTEM_TOKEN%"
 >>"%VERIFY_RUNNER%" echo set "APP_VERSION=verify-%RELEASE_NAME%"
 >>"%VERIFY_RUNNER%" echo set "FRONTEND_DIST_DIR=%FRONTEND_DIST_DIR%"
 >>"%VERIFY_RUNNER%" echo pushd "%RELEASE_DIR%\Alkaid-python"
 >>"%VERIFY_RUNNER%" echo "%PYTHON_EXE%" manage.py migrate --noinput
 >>"%VERIFY_RUNNER%" echo if errorlevel 1 exit /b 1
->>"%VERIFY_RUNNER%" echo "%PYTHON_EXE%" -m uvicorn config.asgi:application --host 127.0.0.1 --port %VERIFY_PORT%
+>>"%VERIFY_RUNNER%" echo "%PYTHON_EXE%" scripts\run_server.py --host 127.0.0.1 --port %VERIFY_PORT% --queue alkaid-verify-%RELEASE_NAME% --without-beat
 >>"%VERIFY_RUNNER%" echo popd
 
 echo Starting verification server:
@@ -73,7 +126,7 @@ echo   %MYSQL_USER%@%MYSQL_HOST%:%MYSQL_PORT%/%VERIFY_MYSQL_DATABASE%
 
 start "Alkaid verify %RELEASE_NAME%" "%VERIFY_RUNNER%"
 
-powershell -NoProfile -ExecutionPolicy Bypass -Command "$u='http://127.0.0.1:%VERIFY_PORT%/health/'; for ($i=0; $i -lt 30; $i++) { try { $r = Invoke-WebRequest -UseBasicParsing -Uri $u -TimeoutSec 2; if ($r.StatusCode -eq 200) { exit 0 } } catch { }; Start-Sleep -Seconds 1 }; exit 1"
+powershell -NoProfile -ExecutionPolicy Bypass -Command "$u='http://127.0.0.1:%VERIFY_PORT%/health/ready/'; for ($i=0; $i -lt 30; $i++) { try { $r = Invoke-WebRequest -UseBasicParsing -Uri $u -TimeoutSec 2; if ($r.StatusCode -eq 200) { exit 0 } } catch { }; Start-Sleep -Seconds 1 }; exit 1"
 if errorlevel 1 (
   echo Verification server did not become healthy in time.
   echo Check the Alkaid verify window for errors.

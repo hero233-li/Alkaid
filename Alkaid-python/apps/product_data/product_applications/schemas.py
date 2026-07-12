@@ -80,8 +80,7 @@ class ProductApplicationConfig(BaseModel):
             unknown_fields = set(configured_fields) - known_fields
             if unknown_fields:
                 raise ValueError(
-                    f"字段组 {field_set_name} 引用了未知字段："
-                    f"{', '.join(sorted(unknown_fields))}"
+                    f"字段组 {field_set_name} 引用了未知字段：{', '.join(sorted(unknown_fields))}"
                 )
         for product in self.products:
             unknown_environments = set(product.environments) - environment_values

@@ -1,4 +1,10 @@
-from apps.integrations.contracts import AuthSpec, EndpointSpec, TokenSource, TokenUpdateSpec
+from apps.integrations.contracts import (
+    AuthSpec,
+    EndpointSpec,
+    RetryMode,
+    TokenSource,
+    TokenUpdateSpec,
+)
 from apps.integrations.mock_product.models import LoginResponse, OperationResponse
 
 FLOW_PROVIDER = "product_flow"
@@ -9,6 +15,7 @@ LOGIN = EndpointSpec(
     method="POST",
     path="/auth/token",
     response_model=LoginResponse,
+    retry_mode=RetryMode.SAFE,
     token_update=TokenUpdateSpec(
         provider=FLOW_PROVIDER,
         source=TokenSource.RESPONSE_BODY,

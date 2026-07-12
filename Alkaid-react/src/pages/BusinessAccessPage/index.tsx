@@ -1,4 +1,4 @@
-import { message } from 'antd';
+import { Alert, message } from 'antd';
 import BusinessAccessResultList from './components/BusinessAccessResultList';
 import BusinessAccessSearchForm from './components/BusinessAccessSearchForm';
 import BusinessAccessWorkflowModal from './components/BusinessAccessWorkflowModal';
@@ -22,11 +22,16 @@ export default function BusinessAccessPage() {
   return (
     <div className="page-surface business-access-page">
       <div className="business-access-stack">
+        {businessAccessForm.configError && (
+          <Alert type="error" showIcon message="业务准入配置加载失败" description={businessAccessForm.configError} />
+        )}
         <BusinessAccessSearchForm
           form={businessAccessForm.form}
           initialValues={businessAccessForm.initialValues}
           busy={businessAccess.busy}
           searching={businessAccess.activity?.operation === 'search'}
+          configLoading={businessAccessForm.configLoading}
+          environmentOptions={businessAccessForm.environmentOptions}
           onSearch={submit}
           onReset={businessAccessForm.reset}
         />

@@ -4,6 +4,7 @@ import { terminalBusinessAccessJobStatuses } from '../model/jobModel';
 import type {
   BusinessAccessJobDetail,
   BusinessAccessJobSubmission,
+  BusinessAccessConfig,
   BusinessAccessSearchSubmission,
   NotificationVersionType,
 } from '../types';
@@ -18,6 +19,14 @@ function unwrap<T>(response: ApiResponse<T>, fallbackMessage: string) {
     throw new Error(response.message || fallbackMessage);
   }
   return response.data;
+}
+
+export async function getBusinessAccessConfig() {
+  const { data } = await apiClient.get<ApiResponse<BusinessAccessConfig>>(
+    '/product-data/business-access/config',
+    pollingRequestConfig,
+  );
+  return unwrap(data, '获取业务准入配置失败');
 }
 
 function workflowRequestConfig() {

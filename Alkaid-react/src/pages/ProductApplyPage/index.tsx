@@ -2,6 +2,7 @@ import { Alert, Button, Card, Spin, message } from 'antd';
 import DynamicSearchForm from './components/DynamicSearchForm';
 import JobDetailOverlay from './components/JobDetailOverlay';
 import JobResultList from './components/JobResultList';
+import ProductApplicationWorkflowModal from './components/ProductApplicationWorkflowModal';
 import { useProductApplicationForm } from './hooks/useProductApplicationForm';
 import { useProductApplyJobs } from './hooks/useProductApplyJobs';
 import { useProductConfig } from './hooks/useProductConfig';
@@ -61,6 +62,7 @@ export default function ProductApplyPage({ pageInstanceKey }: ProductApplyPagePr
         />
       </div>
       <JobDetailOverlay result={jobs.selectedResult} onClose={jobs.closeDetail} presentation="drawer" />
+      <ProductApplicationWorkflowModal active={jobs.submitting} />
     </div>
   );
 }

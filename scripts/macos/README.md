@@ -23,7 +23,34 @@ npm run dev:env
 
 ```text
 Alkaid-runtime/dev-backend.log
+Alkaid-runtime/dev-backend.err.log
+Alkaid-runtime/dev-worker.log
+Alkaid-runtime/dev-worker.err.log
 ```
+
+如果暂时没有 RabbitMQ，可以在 `.env.local` 设置：
+
+```text
+CELERY_TASK_ALWAYS_EAGER=true
+DEV_START_WORKER=false
+```
+
+正常联调异步链路时保持：
+
+```text
+CELERY_TASK_ALWAYS_EAGER=false
+DEV_START_WORKER=true
+CELERY_QUEUE=alkaid-local
+```
+
+查看日志：
+
+```bash
+npm run logs:backend
+npm run logs:worker
+```
+
+开发虚拟环境固定在项目根目录 `.venv`，不要再使用 `Alkaid-python/.venv`。
 
 如果需要前后端分成两个窗口：
 

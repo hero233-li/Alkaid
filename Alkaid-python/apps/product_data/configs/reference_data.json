@@ -1,0 +1,15 @@
+{
+  "id": "product-application-example",
+  "version": 6,
+  "environments": [
+    {"label": "环境1", "value": "env-1"},
+    {"label": "环境2", "value": "env-2"},
+    {"label": "环境3", "value": "env-3"}
+  ],
+  "cascadeResetMap": {
+    "environment": ["product", "location", "branch", "outlet"],
+    "product": ["location", "branch", "outlet"],
+    "location": ["branch", "outlet"],
+    "branch": ["outlet"]
+  }
+}

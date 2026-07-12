@@ -1,7 +1,6 @@
 import { Button, Card, Col, Form, Input, Row, Select, Space, type FormInstance } from 'antd';
 import { RotateCcw, Search } from 'lucide-react';
 import {
-  getBusinessAccessEnvironmentOptions,
   validateBusinessAccessSearchCriteria,
 } from '../model/searchModel';
 import type { BusinessAccessSearchValues } from '../types';
@@ -11,6 +10,8 @@ interface BusinessAccessSearchFormProps {
   initialValues: BusinessAccessSearchValues;
   busy: boolean;
   searching: boolean;
+  configLoading: boolean;
+  environmentOptions: Array<{ value: string; label: string }>;
   onSearch: (values: BusinessAccessSearchValues) => void;
   onReset: () => void;
 }
@@ -20,10 +21,11 @@ export default function BusinessAccessSearchForm({
   initialValues,
   busy,
   searching,
+  configLoading,
+  environmentOptions,
   onSearch,
   onReset,
 }: BusinessAccessSearchFormProps) {
-  const environmentOptions = getBusinessAccessEnvironmentOptions();
   const validateSearchCriteria = ({ getFieldValue }: { getFieldValue: (name: string) => unknown }) => ({
     validator: () => {
       try {
@@ -43,7 +45,7 @@ export default function BusinessAccessSearchForm({
       <Form<BusinessAccessSearchValues>
         form={form}
         layout="vertical"
-        disabled={busy}
+        disabled={busy || configLoading}
         initialValues={initialValues}
         onFinish={onSearch}
       >
@@ -86,13 +88,13 @@ export default function BusinessAccessSearchForm({
               type="primary"
               htmlType="submit"
               icon={<Search size={16} />}
-              loading={searching}
-              disabled={busy}
+              loading={searching || configLoading}
+              disabled={busy || configLoading}
             >
               查询
             </Button>
             <Button
-              disabled={busy}
+              disabled={busy || configLoading}
               icon={<RotateCcw size={16} />}
               onClick={onReset}
             >

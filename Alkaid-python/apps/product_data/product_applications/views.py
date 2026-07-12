@@ -1,5 +1,4 @@
 import json
-import uuid
 
 from django.conf import settings
 from django.db import transaction
@@ -9,25 +8,25 @@ from django.views.decorators.http import require_GET, require_POST
 from pydantic import ValidationError
 
 from apps.core.responses import api_error, api_response
-from apps.jobs.services import JobConflict, JobRepository, serialize_job
-from apps.product_data.execution_config import (
-    ExecutionConfigurationError,
-    load_execution_catalog,
-)
-from apps.product_data.product_applications.config import (
-    ProductConfigurationError,
-    load_product_application_config,
+from apps.jobs.dispatch import enqueue_job
+from apps.jobs.services import JobConflict, create_job, resolve_job_identifiers, serialize_job
+from apps.product_data.catalog import (
+    ProductCatalogError,
+    load_product_catalog,
+    load_product_ui_config,
 )
 from apps.product_data.product_applications.schemas import ProductApplicationSubmission
-from apps.product_data.product_applications.services import validate_submission
-from apps.product_data.product_applications.tasks import execute_product_application
+from apps.product_data.product_applications.services import (
+    ProductConfigurationError,
+    validate_submission,
+)
 
 
 @require_GET
 def product_application_config(request: HttpRequest) -> JsonResponse:
     try:
-        config = load_product_application_config()
-    except ProductConfigurationError as exc:
+        config = load_product_ui_config()
+    except ProductCatalogError as exc:
         return api_error(str(exc), status=500)
     return api_response(config.model_dump(mode="json"))
 
@@ -37,26 +36,32 @@ def product_application_config(request: HttpRequest) -> JsonResponse:
 def create_product_application(request: HttpRequest) -> JsonResponse:
     try:
         submission = ProductApplicationSubmission.model_validate_json(request.body)
-        execution_catalog = load_execution_catalog()
-        execution_snapshot = execution_catalog.snapshot(
+        catalog = load_product_catalog()
+        execution_snapshot = catalog.snapshot(
             submission.product,
             str(submission.payload.get("applicationMethod") or "") or None,
         )
         submission.payload["applicationMethod"] = execution_snapshot.method_code
-        validate_submission(submission, execution_snapshot=execution_snapshot)
+        validate_submission(
+            submission,
+            execution_snapshot=execution_snapshot,
+            catalog=catalog,
+        )
+        idempotency_key, trace_id = resolve_job_identifiers(
+            request.headers.get("X-Idempotency-Key"),
+            request.headers.get("X-Trace-ID"),
+        )
     except (
         ValidationError,
         ProductConfigurationError,
-        ExecutionConfigurationError,
+        ProductCatalogError,
         ValueError,
         json.JSONDecodeError,
     ) as exc:
         return api_error(f"产品申请参数无效：{exc}", status=400)
 
-    idempotency_key = request.headers.get("X-Idempotency-Key") or str(uuid.uuid4())
-    trace_id = request.headers.get("X-Trace-ID") or uuid.uuid4().hex
     try:
-        created = JobRepository.create(
+        created = create_job(
             kind="product_application",
             name=submission.name,
             product=submission.product,
@@ -70,5 +75,5 @@ def create_product_application(request: HttpRequest) -> JsonResponse:
     except JobConflict as exc:
         return api_error(str(exc), status=409)
     if created.created:
-        transaction.on_commit(lambda: execute_product_application.delay(created.job.id))
+        transaction.on_commit(lambda: enqueue_job(created.job))
     return api_response(serialize_job(created.job), status=202 if created.created else 200)

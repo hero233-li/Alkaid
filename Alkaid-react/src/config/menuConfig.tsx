@@ -3,6 +3,7 @@ import type { MenuProps } from 'antd';
 import {
   CalendarClock,
   ClipboardList,
+  ClipboardCheck,
   Database,
   Home,
   Layers,
@@ -26,6 +27,7 @@ import SystemSettingsPage from '../pages/SystemSettingsPage';
 import WelcomePage from '../pages/WelcomePage';
 import WorkflowLearningPage from '../pages/WorkflowLearningPage';
 import ApplicationLinkGeneratorPage from '../pages/ApplicationLinkGeneratorPage';
+import VerificationApprovalPage from '../pages/VerificationApprovalPage';
 import ApplicationDataGeneratorPage from '../pages/ApplicationDataGeneratorPage';
 import CardStatusProcessingPage from '../pages/CardStatusProcessingPage';
 import LoanStatusProcessingPage from '../pages/LoanStatusProcessingPage';
@@ -42,6 +44,7 @@ export interface MenuRenderContext {
 export interface AppMenuNode {
   key: string;
   label: string;
+  route?: string;
   icon?: ReactNode;
   closable?: boolean;
   children?: AppMenuNode[];
@@ -52,6 +55,7 @@ export const appMenuTree: AppMenuNode[] = [
   {
     key: 'home',
     label: '首页',
+    route: '/',
     icon: <Home size={18} />,
     closable: false,
     render: ({ onNavigate }) => <WelcomePage shortcuts={getHomeShortcutCandidates()} onNavigate={onNavigate} />,
@@ -64,36 +68,49 @@ export const appMenuTree: AppMenuNode[] = [
       {
         key: 'product-application',
         label: '产品申请',
+        route: '/product-data/product-application',
         icon: <PackagePlus size={18} />,
         render: ({ tabKey }) => <ProductApplyPage pageInstanceKey={tabKey} />,
       },
       {
         key: 'business-access-query',
         label: '业务准入查询',
+        route: '/product-data/business-access',
         icon: <Search size={18} />,
         render: () => <BusinessAccessPage />,
       },
       {
         key: 'application-link-generator',
         label: '申请链接生成',
+        route: '/product-data/application-links',
         icon: <Link2 size={18} />,
         render: () => <ApplicationLinkGeneratorPage />,
       },
       {
+        key: 'verification-approval',
+        label: '核实审批',
+        route: '/product-data/verification-approval',
+        icon: <ClipboardCheck size={18} />,
+        render: () => <VerificationApprovalPage />,
+      },
+      {
         key: 'application-data-generator',
         label: '申请数据生成',
+        route: '/product-data/application-data',
         icon: <Database size={18} />,
         render: () => <ApplicationDataGeneratorPage />,
       },
       {
         key: 'card-status-processing',
         label: '卡状态处理',
+        route: '/product-data/card-status',
         icon: <Database size={18} />,
         render: () => <CardStatusProcessingPage />,
       },
       {
         key: 'loan-status-processing',
         label: '贷款状态处理',
+        route: '/product-data/loan-status',
         icon: <Database size={18} />,
         render: () => <LoanStatusProcessingPage />,
       },
@@ -105,6 +122,7 @@ export const appMenuTree: AppMenuNode[] = [
           {
             key: 'high-frequency-transaction',
             label: 'RIsk050009',
+            route: '/product-data/high-frequency/risk050009',
             icon: <Database size={18} />,
             render: () => <HighFrequencyTransactionPage />,
           },
@@ -120,30 +138,35 @@ export const appMenuTree: AppMenuNode[] = [
       {
         key: 'workflow-learning',
         label: 'Workflow 学习中心',
+        route: '/automation/workflow-learning',
         icon: <GraduationCap size={18} />,
         render: () => <WorkflowLearningPage />,
       },
       {
         key: 'workflow',
         label: 'Workflow 管理',
+        route: '/automation/workflows',
         icon: <Workflow size={18} />,
         render: () => <PlaceholderPage title="Workflow 管理" />,
       },
       {
         key: 'jobs',
         label: '任务中心',
+        route: '/automation/jobs',
         icon: <ClipboardList size={18} />,
         render: () => <PlaceholderPage title="任务中心" />,
       },
       {
         key: 'batch',
         label: '批量任务',
+        route: '/automation/batch',
         icon: <Layers size={18} />,
         render: () => <PlaceholderPage title="批量任务" />,
       },
       {
         key: 'schedule',
         label: '定时任务',
+        route: '/automation/schedule',
         icon: <CalendarClock size={18} />,
         render: () => <PlaceholderPage title="定时任务" />,
       },
@@ -157,6 +180,7 @@ export const appMenuTree: AppMenuNode[] = [
       {
         key: 'data',
         label: '数据管理',
+        route: '/data-platform/data',
         icon: <Database size={18} />,
         render: () => <PlaceholderPage title="数据管理" />,
       },
@@ -170,24 +194,28 @@ export const appMenuTree: AppMenuNode[] = [
       {
         key: 'workbench',
         label: '接口工作台',
+        route: '/system/workbench',
         icon: <SendHorizontal size={18} />,
         render: () => <InterfaceWorkbenchPage />,
       },
       {
         key: 'release-management',
         label: '版本管理',
+        route: '/system/releases',
         icon: <Megaphone size={18} />,
         render: () => <ReleaseManagementPage />,
       },
       {
         key: 'home-shortcut-management',
         label: '首页入口管理',
+        route: '/system/home-shortcuts',
         icon: <MousePointerClick size={18} />,
         render: () => <HomeShortcutManagementPage pages={getHomeShortcutCandidates()} />,
       },
       {
         key: 'settings',
         label: '系统设置',
+        route: '/system/settings',
         icon: <Settings size={18} />,
         render: () =>
           <SystemSettingsPage
@@ -266,6 +294,21 @@ export function getMenuClosable(key: string) {
 
 export function getMenuParentKey(key: string) {
   return appMenuParentMap.get(key);
+}
+
+function normalizeRoute(route: string) {
+  const path = route.trim() || '/';
+  const withLeadingSlash = path.startsWith('/') ? path : `/${path}`;
+  return withLeadingSlash.length > 1 ? withLeadingSlash.replace(/\/+$/, '') : withLeadingSlash;
+}
+
+export function getMenuRoute(key: string) {
+  return appMenuNodeMap.get(key)?.route || '/';
+}
+
+export function getMenuKeyByRoute(route: string) {
+  const normalizedRoute = normalizeRoute(route);
+  return appMenuLeafNodes.find((item) => normalizeRoute(item.route || '/') === normalizedRoute)?.key;
 }
 
 export function isMenuLeaf(key: string) {

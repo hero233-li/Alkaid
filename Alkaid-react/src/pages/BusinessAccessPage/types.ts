@@ -24,6 +24,10 @@ export interface BusinessAccessSearchSubmission {
   certificateNo?: string;
 }
 
+export interface BusinessAccessConfig {
+  environments: string[];
+}
+
 export interface BusinessAccessRecord {
   id: number;
   businessNo: string;

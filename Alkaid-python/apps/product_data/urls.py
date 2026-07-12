@@ -1,17 +1,8 @@
-from django.urls import path
-
-from apps.product_data.application_links.views import generate_application_link
-from apps.product_data.product_applications.views import (
-    create_product_application,
-    product_application_config,
-)
+from django.urls import include, path
 
 urlpatterns = [
-    path("applications/config", product_application_config, name="product-application-config"),
-    path("applications", create_product_application, name="product-application-create"),
-    path(
-        "tools/application-links/generate",
-        generate_application_link,
-        name="application-link-generate",
-    ),
+    path("", include("apps.product_data.product_applications.urls")),
+    path("", include("apps.product_data.application_links.urls")),
+    path("", include("apps.product_data.business_access.urls")),
+    path("", include("apps.product_data.verification_approval.urls")),
 ]

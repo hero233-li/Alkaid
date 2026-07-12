@@ -18,14 +18,19 @@ class ApplicationLinkSubmission(BaseModel):
     product: str = Field(min_length=1, max_length=128)
     category: LinkCategory
     cooperationProject: str = Field(min_length=1, max_length=128)
-    recommender: str = Field(min_length=1, max_length=128)
-    recommenderPhone: str = Field(min_length=1, max_length=32)
+    # Kept as optional compatibility fields.  The current page does not
+    # collect recommender information; a product route can make them required
+    # later through its ``requiredFields`` catalog entry without breaking the
+    # shared HTTP contract.
+    recommender: str | None = Field(default=None, max_length=128)
+    recommenderPhone: str | None = Field(default=None, max_length=32)
     loanType: str = Field(min_length=1, max_length=32)
     customerName: str | None = Field(default=None, max_length=128)
     customerPhone: str | None = Field(default=None, max_length=32)
     customerCertificateNo: str | None = Field(default=None, max_length=64)
     customerCompanyName: str | None = Field(default=None, max_length=255)
     customerCompanyCode: str | None = Field(default=None, max_length=128)
+    requestJson: dict[str, Any] | None = None
     restoreStatus: str | None = Field(default=None, max_length=64)
     spcode: str | None = Field(default=None, max_length=128)
 
@@ -60,8 +65,9 @@ class ApplicationLinkExecutionSnapshot(BaseModel):
     product: str
     environment: str
     category: LinkCategory
-    handler: str
     required_fields: tuple[str, ...]
+    # Accepted only so already-created Jobs remain executable after this refactor.
+    handler: str | None = None
 
 
 class ApplicationLinkResult(BaseModel):

@@ -1,35 +1,56 @@
-from apps.jobs.models import Job
-from apps.product_data.application_links.config import (
-    APPLICATION_LINK_CONFIG_VERSION,
-    ApplicationLinkConfigurationError,
-    get_application_link_route,
+from django.utils import timezone
+
+from apps.integrations.application_link.adapter import ApplicationLinkAdapter
+from apps.integrations.application_link.models import (
+    CreateApplicationRequest,
+    GenerateLinksRequest,
 )
-from apps.product_data.application_links.handlers import get_application_link_handler
+from apps.jobs.models import Job
 from apps.product_data.application_links.schemas import (
     ApplicationLinkExecutionSnapshot,
     ApplicationLinkResult,
     ApplicationLinkSubmission,
+    submission_payload,
 )
+from apps.product_data.catalog import ProductCatalogError, load_product_catalog
+
+
+class ApplicationLinkConfigurationError(ValueError):
+    pass
 
 
 def resolve_execution_snapshot(
     submission: ApplicationLinkSubmission,
 ) -> ApplicationLinkExecutionSnapshot:
-    route = get_application_link_route(
-        submission.product,
-        submission.environment,
-        submission.category,
+    """Resolve and freeze one link route directly from the product catalog."""
+    try:
+        catalog = load_product_catalog()
+        configured_product = catalog.product(submission.product)
+    except ProductCatalogError as exc:
+        raise ApplicationLinkConfigurationError("当前环境下没有该产品") from exc
+
+    environment_exists = any(
+        route.environment == submission.environment
+        for route in configured_product.features.applicationLinks
     )
-    snapshot = ApplicationLinkExecutionSnapshot(
-        config_version=APPLICATION_LINK_CONFIG_VERSION,
-        product=submission.product,
-        environment=submission.environment,
-        category=submission.category,
-        handler=route.handler,
-        required_fields=route.required_fields,
-    )
-    validate_submission(submission, snapshot)
-    return snapshot
+    if not environment_exists:
+        raise ApplicationLinkConfigurationError("当前环境下没有该产品")
+
+    for route in configured_product.features.applicationLinks:
+        if (
+            route.environment == submission.environment
+            and route.category == submission.category.value
+        ):
+            snapshot = ApplicationLinkExecutionSnapshot(
+                config_version=catalog.reference.version,
+                product=submission.product,
+                environment=submission.environment,
+                category=submission.category,
+                required_fields=route.requiredFields,
+            )
+            validate_submission(submission, snapshot)
+            return snapshot
+    raise ApplicationLinkConfigurationError("当前产品在该环境下不支持该类别")
 
 
 def validate_submission(
@@ -43,9 +64,7 @@ def validate_submission(
     ):
         raise ApplicationLinkConfigurationError("申请链接参数与 Job 执行配置不一致")
     missing = [
-        name
-        for name in snapshot.required_fields
-        if not (getattr(submission, name, None) or "").strip()
+        name for name in snapshot.required_fields if not _has_submission_field(submission, name)
     ]
     if missing:
         raise ApplicationLinkConfigurationError(
@@ -53,13 +72,45 @@ def validate_submission(
         )
 
 
-class ApplicationLinkGenerator:
-    def generate(
-        self,
-        job: Job,
-        submission: ApplicationLinkSubmission,
-        *,
-        snapshot: ApplicationLinkExecutionSnapshot,
-    ) -> ApplicationLinkResult:
-        validate_submission(submission, snapshot)
-        return get_application_link_handler(snapshot.handler).generate(job, submission)
+def _has_submission_field(submission: ApplicationLinkSubmission, name: str) -> bool:
+    """Accept fixed fields and fields supplied inside the dynamic JSON object."""
+
+    value = getattr(submission, name, None)
+    if value is None and submission.requestJson:
+        value = submission.requestJson.get(name)
+    if value is None:
+        return False
+    if isinstance(value, str):
+        return bool(value.strip())
+    return bool(value)
+
+
+def generate_application_links(
+    job: Job,
+    submission: ApplicationLinkSubmission,
+    *,
+    snapshot: ApplicationLinkExecutionSnapshot,
+) -> ApplicationLinkResult:
+    validate_submission(submission, snapshot)
+    with ApplicationLinkAdapter(job) as adapter:
+        application = adapter.create_application(
+            CreateApplicationRequest(
+                product=submission.product,
+                category=submission.category.value,
+                payload=submission_payload(submission),
+            )
+        )
+        links = adapter.generate_links(
+            GenerateLinksRequest(
+                application_no=application.application_no,
+                product=submission.product,
+                category=submission.category.value,
+            ),
+            category=submission.category,
+        )
+    return ApplicationLinkResult(
+        internalUrl=links.internal_url,
+        externalUrl=links.external_url,
+        generatedAt=timezone.now().isoformat(),
+        applicationNo=application.application_no,
+    )

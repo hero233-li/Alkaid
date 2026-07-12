@@ -1,15 +1,15 @@
 # Mock Product Integration
 
-This integration is organized for many external request payloads without using runtime templates.
+This integration follows the production-style raw-message workflow used by the project.
 
 Current roles:
 
-- `api/`: endpoint definitions, auth rules, token update rules, success codes.
-- `models/`: typed request inputs and response models.
-- `adapters/`: business-domain call methods.
-- `client.py`: shared HTTP client, token manager, executor, and Job audit wiring.
-- `builders/`: external request payload construction, grouped by business area.
-- `examples/`: original vendor payload examples for comparison only.
+- `api/`: endpoint suffixes, auth rules, token update rules and success codes.
+- `models/`: semantic inputs and typed response models.
+- `raw_messages/`: fixed vendor request messages grouped by business area.
+- `messages.py`: cached loading plus an isolated deep copy for each call.
+- `adapters/`: explicit per-operation field assignment and business-facing methods.
+- `client.py`: common `payload`/`req_message` form assembly, tokens and Job audit wiring.
 
 Current stage:
 
@@ -26,21 +26,21 @@ mock_product/
 ├── adapters/
 │   └── application.py
 ├── client.py
-├── builders/
-│   ├── common.py
-│   └── application.py
-└── examples/
-    └── application/
+├── messages.py
+├── mock_transport.py
+└── raw_messages/
+    └── application.json
 ```
 
-Builder scale rules:
+Message scale rules:
 
-- Add one `build_xxx_form()` function per external operation.
-- Keep related operations in the same domain file, such as `builders/application.py`.
-- Add new domain files when needed, for example `builders/customer.py`, `builders/loan.py`, or `builders/risk.py`.
-- Put only repeated envelope helpers in `builders/common.py`.
-- Do not add JSON templates for runtime payload construction.
-- Keep raw examples grouped under `examples/<domain>/`.
+- Keep fixed vendor messages in `raw_messages/<domain>.json`.
+- Give deployed messages stable versioned keys such as `product_apply_v1`.
+- Load with `new_message()` and assign changing fields explicitly in the domain adapter.
+- Never mutate the cached source object and never put private keys in raw message files.
+- Keep the outer `payload`/`req_message` assembly in `client.py`.
+- `compile_product_config.py --check` validates every JSON template, including messages not yet reached by
+  the current demo flow.
 
 As this external system grows, keep splitting by business boundary rather than by line count:
 
@@ -54,21 +54,20 @@ mock_product/
 │   ├── application.py
 │   ├── customer.py
 │   └── loan.py
-├── builders/
-│   ├── common.py
-│   ├── application.py
-│   ├── customer.py
-│   └── loan.py
 ├── adapters/
 │   ├── application.py
 │   ├── customer.py
 │   └── loan.py
-└── examples/
-    ├── application/
-    ├── customer/
-    └── loan/
+└── raw_messages/
+    ├── application.json
+    ├── customer.json
+    └── loan.json
 ```
 
-`client.py` should own the shared `HttpClient`, `TokenManager`, `EndpointExecutor`, and Job audit wiring. Domain adapters should only expose calls for their domain.
+`client.py` owns common transport behavior. Domain adapters own the unavoidable per-message assignments; no
+generic mapping DSL or processor registry is introduced.
+
+`mock_transport.py` owns mock external responses. It is intentionally not imported by the product business
+service, so switching to a real Base URL does not change product application logic.
 
 Do not split only because a file is long. Split when a business boundary becomes clear, when unrelated changes start touching the same file, or when finding the right operation becomes slow.

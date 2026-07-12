@@ -12,8 +12,10 @@ import {
   DEFAULT_OPEN_MENU_KEYS,
   appMenuItems,
   getMenuClosable,
+  getMenuKeyByRoute,
   getMenuLabel,
   getMenuParentKey,
+  getMenuRoute,
   isMenuLeaf,
   renderMenuPage,
 } from '../config/menuConfig';
@@ -24,6 +26,36 @@ interface OpenTab {
   key: string;
   menuKey: string;
   instanceNo?: number;
+}
+
+type RouteHistoryMode = 'push' | 'replace';
+
+function menuKeyFromLocation() {
+  try {
+    const route = decodeURIComponent(window.location.hash.replace(/^#/, '') || '/');
+    return getMenuKeyByRoute(route) || DEFAULT_MENU_KEY;
+  } catch {
+    return DEFAULT_MENU_KEY;
+  }
+}
+
+function updateMenuRoute(menuKey: string, mode: RouteHistoryMode = 'push') {
+  const nextHash = `#${getMenuRoute(menuKey)}`;
+  if (window.location.hash === nextHash) {
+    return;
+  }
+  const nextUrl = `${window.location.pathname}${window.location.search}${nextHash}`;
+  const state = { ...window.history.state, menuKey };
+  if (mode === 'replace') {
+    window.history.replaceState(state, '', nextUrl);
+  } else {
+    window.history.pushState(state, '', nextUrl);
+  }
+}
+
+function initialOpenTabs(menuKey: string): OpenTab[] {
+  const homeTab = { key: DEFAULT_MENU_KEY, menuKey: DEFAULT_MENU_KEY };
+  return menuKey === DEFAULT_MENU_KEY ? [homeTab] : [homeTab, { key: menuKey, menuKey }];
 }
 
 function matchingTabCacheKeys(tabKey: string) {
@@ -47,9 +79,10 @@ function migrateTabSessionCache(fromTabKey: string, toTabKey: string) {
 }
 
 export default function AppShell() {
+  const initialMenuKey = useRef(menuKeyFromLocation()).current;
   const tabSequence = useRef(0);
-  const [activeTabKey, setActiveTabKey] = useState(DEFAULT_MENU_KEY);
-  const [openTabs, setOpenTabs] = useState<OpenTab[]>([{ key: DEFAULT_MENU_KEY, menuKey: DEFAULT_MENU_KEY }]);
+  const [activeTabKey, setActiveTabKey] = useState(initialMenuKey);
+  const [openTabs, setOpenTabs] = useState<OpenTab[]>(() => initialOpenTabs(initialMenuKey));
   const [expandedMenuKeys, setExpandedMenuKeys] = useState<string[]>(DEFAULT_OPEN_MENU_KEYS);
   const [pageMultiOpenPreferences, setPageMultiOpenPreferences] = useState<PageMultiOpenPreferences>(
     readPageMultiOpenPreferences,
@@ -100,6 +133,10 @@ export default function AppShell() {
     return () => window.removeEventListener(PAGE_MULTI_OPEN_EVENT, handlePageMultiOpenChange);
   }, [activeTabKey, openTabs]);
 
+  useEffect(() => {
+    updateMenuRoute(initialMenuKey, 'replace');
+  }, [initialMenuKey]);
+
   const activeMenuKey = openTabs.find((tab) => tab.key === activeTabKey)?.menuKey || DEFAULT_MENU_KEY;
 
   const tabItems = openTabs.map((tab) => {
@@ -111,21 +148,30 @@ export default function AppShell() {
     };
   });
 
-  const activateTab = (tabKey: string, menuKey?: string) => {
+  const activateTab = (
+    tabKey: string,
+    menuKey?: string,
+    historyMode: RouteHistoryMode = 'push',
+  ) => {
     const targetMenuKey = menuKey || openTabs.find((tab) => tab.key === tabKey)?.menuKey || DEFAULT_MENU_KEY;
     setActiveTabKey(tabKey);
+    updateMenuRoute(targetMenuKey, historyMode);
     const parentKey = getMenuParentKey(targetMenuKey);
     if (parentKey) {
       setExpandedMenuKeys((keys) => (keys.includes(parentKey) ? keys : [...keys, parentKey]));
     }
   };
 
-  function selectMenu(menuKey: string) {
+  function openMenu(
+    menuKey: string,
+    allowNewInstance: boolean,
+    historyMode: RouteHistoryMode = 'push',
+  ) {
     if (!isMenuLeaf(menuKey)) {
       return;
     }
 
-    if (pageMultiOpenPreferences[menuKey] && getMenuClosable(menuKey)) {
+    if (allowNewInstance && pageMultiOpenPreferences[menuKey] && getMenuClosable(menuKey)) {
       const menuTabs = openTabs.filter((tab) => tab.menuKey === menuKey);
       const maxInstanceNo = menuTabs.reduce((max, tab) => Math.max(max, tab.instanceNo || 0), 0);
       const normalizedTabs =
@@ -140,19 +186,23 @@ export default function AppShell() {
         instanceNo,
       };
       setOpenTabs([...normalizedTabs, nextTab]);
-      activateTab(nextTab.key, menuKey);
+      activateTab(nextTab.key, menuKey, historyMode);
       return;
     }
 
     const existingTab = [...openTabs].reverse().find((tab) => tab.menuKey === menuKey);
     if (existingTab) {
-      activateTab(existingTab.key, menuKey);
+      activateTab(existingTab.key, menuKey, historyMode);
       return;
     }
 
     const nextTab: OpenTab = { key: menuKey, menuKey };
     setOpenTabs((tabs) => [...tabs, nextTab]);
-    activateTab(nextTab.key, menuKey);
+    activateTab(nextTab.key, menuKey, historyMode);
+  }
+
+  function selectMenu(menuKey: string) {
+    openMenu(menuKey, true);
   }
 
   const closeTab = (targetTabKey: string) => {
@@ -169,6 +219,18 @@ export default function AppShell() {
       activateTab(nextTab.key, nextTab.menuKey);
     }
   };
+
+  useEffect(() => {
+    const handleRouteChange = () => {
+      openMenu(menuKeyFromLocation(), false, 'replace');
+    };
+    window.addEventListener('popstate', handleRouteChange);
+    window.addEventListener('hashchange', handleRouteChange);
+    return () => {
+      window.removeEventListener('popstate', handleRouteChange);
+      window.removeEventListener('hashchange', handleRouteChange);
+    };
+  }, [openTabs, pageMultiOpenPreferences]);
 
   return (
     <Layout className="app-shell">

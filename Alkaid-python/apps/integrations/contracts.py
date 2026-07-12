@@ -12,6 +12,11 @@ class TokenSource(str, Enum):
     RESPONSE_HEADER = "response_header"
 
 
+class RetryMode(str, Enum):
+    NEVER = "never"
+    SAFE = "safe"
+
+
 class BusinessResponseError(RuntimeError):
     pass
 
@@ -40,6 +45,7 @@ class EndpointSpec(Generic[ResponseModel]):
     token_update: TokenUpdateSpec | None = None
     success_path: str | None = None
     success_values: tuple[Any, ...] = ()
+    retry_mode: RetryMode = RetryMode.NEVER
 
 
 @dataclass(frozen=True)
