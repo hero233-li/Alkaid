@@ -3,6 +3,8 @@ from enum import Enum
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 from pydantic.alias_generators import to_camel
 
+from apps.integrations.verification_approval.models import VerificationTask
+
 
 class VerificationPayload(BaseModel):
     model_config = ConfigDict(
@@ -25,6 +27,15 @@ class VerificationSearchSubmission(VerificationPayload):
 
 class VerificationItemUpdateSubmission(VerificationPayload):
     status: str = Field(pattern=r"^(pending|completed)$")
+    context: VerificationTask
+
+
+class VerificationTaskOperationSubmission(VerificationPayload):
+    context: VerificationTask
+
+
+class VerificationActionSubmission(VerificationTaskOperationSubmission):
+    action: str
 
 
 class VerificationAction(str, Enum):

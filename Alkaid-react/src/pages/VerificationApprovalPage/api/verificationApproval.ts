@@ -42,44 +42,44 @@ export async function searchVerificationTask(submission: VerificationSearchSubmi
   return unwrap(data, '查询核实审批任务失败');
 }
 
-export async function claimVerificationTask(taskId: string) {
+export async function claimVerificationTask(task: VerificationTask) {
   const { data } = await apiClient.post<ApiResponse<VerificationTask>>(
-    `/product-data/verification-approval/${encodeURIComponent(taskId)}/claim`,
-    undefined,
+    `/product-data/verification-approval/${encodeURIComponent(task.id)}/claim`,
+    { context: task },
     tracedRequestConfig(),
   );
   return unwrap(data, '领取核实审批任务失败');
 }
 
-export async function returnVerificationTask(taskId: string) {
+export async function returnVerificationTask(task: VerificationTask) {
   const { data } = await apiClient.post<ApiResponse<VerificationTask>>(
-    `/product-data/verification-approval/${encodeURIComponent(taskId)}/return`,
-    undefined,
+    `/product-data/verification-approval/${encodeURIComponent(task.id)}/return`,
+    { context: task },
     tracedRequestConfig(),
   );
   return unwrap(data, '退回核实审批任务失败');
 }
 
 export async function updateVerificationItem(
-  taskId: string,
+  task: VerificationTask,
   itemId: string,
   status: VerificationItemStatus,
 ) {
   const { data } = await apiClient.post<ApiResponse<VerificationTask>>(
-    `/product-data/verification-approval/${encodeURIComponent(taskId)}/items/${encodeURIComponent(itemId)}`,
-    { status },
+    `/product-data/verification-approval/${encodeURIComponent(task.id)}/items/${encodeURIComponent(itemId)}`,
+    { status, context: task },
     tracedRequestConfig(),
   );
   return unwrap(data, '更新核实项失败');
 }
 
 export async function submitVerificationAction(
-  taskId: string,
+  task: VerificationTask,
   action: VerificationQuickAction,
 ) {
   const { data } = await apiClient.post<ApiResponse<VerificationTask>>(
-    `/product-data/verification-approval/${encodeURIComponent(taskId)}/actions/${action}`,
-    undefined,
+    `/product-data/verification-approval/${encodeURIComponent(task.id)}/actions/${action}`,
+    { action, context: task },
     tracedRequestConfig(),
   );
   return unwrap(data, '提交核实审批操作失败');

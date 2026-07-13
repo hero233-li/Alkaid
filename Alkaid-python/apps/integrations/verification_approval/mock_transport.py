@@ -13,6 +13,7 @@ from apps.integrations.verification_approval.models import (
     VerificationItem,
     VerificationItemUpdateRequest,
     VerificationTask,
+    VerificationTaskOperationRequest,
 )
 
 TASK_ACTION_PATH = re.compile(r"^/verification/tasks/(?P<task_id>[^/]+)/(?P<action>claim|return)$")
@@ -175,7 +176,9 @@ def create_verification_approval_mock_transport() -> httpx.MockTransport:
 
             task_action = TASK_ACTION_PATH.match(request.url.path)
             if task_action:
+                operation = VerificationTaskOperationRequest.model_validate(payload)
                 task_id = task_action.group("task_id")
+                _require_matching_context(task_id, operation.context)
                 task = (
                     VERIFICATION_APPROVAL_MOCK_STORE.claim(task_id)
                     if task_action.group("action") == "claim"
@@ -186,6 +189,7 @@ def create_verification_approval_mock_transport() -> httpx.MockTransport:
             item_match = ITEM_PATH.match(request.url.path)
             if item_match:
                 update = VerificationItemUpdateRequest.model_validate(payload)
+                _require_matching_context(item_match.group("task_id"), update.context)
                 task = VERIFICATION_APPROVAL_MOCK_STORE.update_item(
                     item_match.group("task_id"),
                     item_match.group("item_id"),
@@ -198,6 +202,7 @@ def create_verification_approval_mock_transport() -> httpx.MockTransport:
                 action = VerificationActionRequest.model_validate(
                     {**payload, "action": action_match.group("action")}
                 )
+                _require_matching_context(action_match.group("task_id"), action.context)
                 task = VERIFICATION_APPROVAL_MOCK_STORE.apply_action(
                     action_match.group("task_id"),
                     action,
@@ -217,3 +222,8 @@ def create_verification_approval_mock_transport() -> httpx.MockTransport:
 def _ok(task: VerificationTask | None, message: str) -> httpx.Response:
     data = task.model_dump(mode="json", by_alias=True) if task is not None else None
     return httpx.Response(200, json={"code": "0000", "message": message, "data": data})
+
+
+def _require_matching_context(task_id: str, context: VerificationTask) -> None:
+    if context.id != task_id:
+        raise MockVerificationConflict("核实任务上下文与请求路径不一致")

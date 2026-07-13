@@ -14,8 +14,10 @@ from apps.integrations.http import ExternalServiceError
 from apps.jobs.services import resolve_job_identifiers
 from apps.product_data.verification_approval.schemas import (
     VerificationAction,
+    VerificationActionSubmission,
     VerificationItemUpdateSubmission,
     VerificationSearchSubmission,
+    VerificationTaskOperationSubmission,
 )
 from apps.product_data.verification_approval.services import (
     apply_verification_action,
@@ -50,16 +52,34 @@ def search_verification(request: HttpRequest) -> JsonResponse:
 @csrf_exempt
 @require_POST
 def claim_verification(request: HttpRequest, task_id: str) -> JsonResponse:
+    try:
+        submission = VerificationTaskOperationSubmission.model_validate_json(request.body)
+    except ValidationError as exc:
+        return api_error(f"核实任务上下文无效：{exc}", status=400)
     return _run_external(
-        request, lambda trace_id: claim_verification_task(task_id, trace_id=trace_id)
+        request,
+        lambda trace_id: claim_verification_task(
+            task_id,
+            submission.context,
+            trace_id=trace_id,
+        ),
     )
 
 
 @csrf_exempt
 @require_POST
 def return_verification(request: HttpRequest, task_id: str) -> JsonResponse:
+    try:
+        submission = VerificationTaskOperationSubmission.model_validate_json(request.body)
+    except ValidationError as exc:
+        return api_error(f"核实任务上下文无效：{exc}", status=400)
     return _run_external(
-        request, lambda trace_id: return_verification_task(task_id, trace_id=trace_id)
+        request,
+        lambda trace_id: return_verification_task(
+            task_id,
+            submission.context,
+            trace_id=trace_id,
+        ),
     )
 
 
@@ -80,6 +100,7 @@ def update_verification_item_status(
             task_id,
             item_id,
             submission.status,
+            submission.context,
             trace_id=trace_id,
         ),
     )
@@ -94,13 +115,19 @@ def submit_verification_action(
 ) -> JsonResponse:
     try:
         parsed_action = VerificationAction(action)
+        submission = VerificationActionSubmission.model_validate_json(request.body)
+    except ValidationError as exc:
+        return api_error(f"核实审批操作上下文无效：{exc}", status=400)
     except ValueError:
         return api_error("核实审批操作无效", status=400)
+    if submission.action != parsed_action.value:
+        return api_error("核实审批操作与请求路径不一致", status=400)
     return _run_external(
         request,
         lambda trace_id: apply_verification_action(
             task_id,
             parsed_action,
+            submission.context,
             trace_id=trace_id,
         ),
     )

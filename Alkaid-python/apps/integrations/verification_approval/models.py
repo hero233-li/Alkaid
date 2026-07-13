@@ -20,10 +20,12 @@ class SearchVerificationTaskRequest(WireModel):
 
 class VerificationItemUpdateRequest(WireModel):
     status: Literal["pending", "completed"]
+    context: "VerificationTask"
 
 
 class VerificationActionRequest(WireModel):
     action: Literal["complete", "supplement", "submit", "approval-submit"]
+    context: "VerificationTask"
 
 
 class VerificationItem(WireModel):
@@ -42,6 +44,10 @@ class VerificationTask(WireModel):
     organization_no: str
     product_name: str
     items: tuple[VerificationItem, ...]
+
+
+class VerificationTaskOperationRequest(WireModel):
+    context: VerificationTask
 
 
 class VerificationTaskResponse(WireModel):

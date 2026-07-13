@@ -154,6 +154,27 @@
 
 成功响应的 `data` 是 [Job 对象](#41-job-对象)。
 
+### 3.3 核实审批操作上下文
+
+`POST /api/product-data/verification-approval/search` 返回的完整任务对象是后续操作的上下文快照。
+领取、退回、核实项完成/取消和快捷操作必须直接携带该对象，不应再次调用查询接口补充字段。
+
+领取和退回请求体：
+
+```json
+{"context": {"id": "VERIFY-...", "contractNo": "...", "tellerNo": "T1027", "organizationNo": "510001", "productName": "...", "ownershipStatus": "unclaimed", "taskStatus": "待领取", "node": "核实审批", "items": []}}
+```
+
+核实项请求体在此基础上增加 `status`；快捷操作请求体增加与 URL 一致的 `action`：
+
+```json
+{"status": "completed", "context": {}}
+{"action": "submit", "context": {}}
+```
+
+示例中的空 `context` 仅表示省略重复字段，实际请求必须传入完整任务对象。后端会校验
+`context.id` 与 URL 中的 `taskId` 一致，并将上下文继续传递给外部系统。
+
 ## 4. Job 状态与对象
 
 产品申请创建后，其状态依次可能为：

@@ -107,32 +107,60 @@ def test_verification_approval_data_and_mutations_come_from_backend(client) -> N
 
     claim = client.post(
         f"/api/product-data/verification-approval/{task['id']}/claim",
+        data=json.dumps({"context": task}),
         content_type="application/json",
     )
     assert claim.status_code == 200
-    assert claim.json()["data"]["ownershipStatus"] == "claimed"
+    task = claim.json()["data"]
+    assert task["ownershipStatus"] == "claimed"
+    assert task["tellerNo"] == "T1027"
+    assert task["organizationNo"] == "510001"
 
     item = client.post(
         f"/api/product-data/verification-approval/{task['id']}/items/identity",
-        data=json.dumps({"status": "completed"}),
+        data=json.dumps({"status": "completed", "context": task}),
         content_type="application/json",
     )
     assert item.status_code == 200
-    assert item.json()["data"]["items"][0]["status"] == "completed"
+    task = item.json()["data"]
+    assert task["items"][0]["status"] == "completed"
 
     complete = client.post(
         f"/api/product-data/verification-approval/{task['id']}/actions/complete",
+        data=json.dumps({"action": "complete", "context": task}),
         content_type="application/json",
     )
     assert complete.status_code == 200
-    assert all(value["status"] == "completed" for value in complete.json()["data"]["items"])
+    task = complete.json()["data"]
+    assert all(value["status"] == "completed" for value in task["items"])
 
     submit = client.post(
         f"/api/product-data/verification-approval/{task['id']}/actions/submit",
+        data=json.dumps({"action": "submit", "context": task}),
         content_type="application/json",
     )
     assert submit.status_code == 200
-    assert submit.json()["data"]["taskStatus"] == "已提交"
+    task = submit.json()["data"]
+    assert task["taskStatus"] == "已提交"
+
+    returned = client.post(
+        f"/api/product-data/verification-approval/{task['id']}/return",
+        data=json.dumps({"context": task}),
+        content_type="application/json",
+    )
+    assert returned.status_code == 200
+    assert returned.json()["data"]["ownershipStatus"] == "unclaimed"
+
+
+@pytest.mark.django_db
+def test_verification_mutation_requires_search_result_context(client) -> None:
+    response = client.post(
+        "/api/product-data/verification-approval/VERIFY-MISSING/claim",
+        data=json.dumps({}),
+        content_type="application/json",
+    )
+    assert response.status_code == 400
+    assert "上下文无效" in response.json()["message"]
 
 
 @pytest.mark.django_db

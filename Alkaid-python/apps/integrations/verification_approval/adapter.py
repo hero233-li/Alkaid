@@ -21,6 +21,7 @@ from apps.integrations.verification_approval.models import (
     VerificationActionRequest,
     VerificationItemUpdateRequest,
     VerificationTask,
+    VerificationTaskOperationRequest,
 )
 
 
@@ -44,28 +45,36 @@ class VerificationApprovalAdapter:
     def search(self, request: SearchVerificationTaskRequest) -> VerificationTask | None:
         return self._execute(SEARCH_VERIFICATION_TASK, request).data
 
-    def claim(self, task_id: str) -> VerificationTask:
-        return self._required(self._execute(claim_endpoint(task_id), None).data)
+    def claim(self, task_id: str, context: VerificationTask) -> VerificationTask:
+        request = VerificationTaskOperationRequest(context=context)
+        return self._required(self._execute(claim_endpoint(task_id), request).data)
 
-    def return_to_pool(self, task_id: str) -> VerificationTask:
-        return self._required(self._execute(return_endpoint(task_id), None).data)
+    def return_to_pool(self, task_id: str, context: VerificationTask) -> VerificationTask:
+        request = VerificationTaskOperationRequest(context=context)
+        return self._required(self._execute(return_endpoint(task_id), request).data)
 
     def update_item(
         self,
         task_id: str,
         item_id: str,
         status: str,
+        context: VerificationTask,
     ) -> VerificationTask:
         response = self._execute(
             update_item_endpoint(task_id, item_id),
-            VerificationItemUpdateRequest(status=status),
+            VerificationItemUpdateRequest(status=status, context=context),
         )
         return self._required(response.data)
 
-    def apply_action(self, task_id: str, action: str) -> VerificationTask:
+    def apply_action(
+        self,
+        task_id: str,
+        action: str,
+        context: VerificationTask,
+    ) -> VerificationTask:
         response = self._execute(
             action_endpoint(task_id, action),
-            VerificationActionRequest(action=action),
+            VerificationActionRequest(action=action, context=context),
         )
         return self._required(response.data)
 

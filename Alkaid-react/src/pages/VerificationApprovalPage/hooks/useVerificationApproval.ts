@@ -38,18 +38,18 @@ export function useVerificationApproval() {
 
   const claim = async () => {
     if (!task || updating) return;
-    await updateTask(() => claimVerificationTask(task.id), '任务领取成功');
+    await updateTask(() => claimVerificationTask(task), '任务领取成功');
   };
 
   const returnToPool = async () => {
     if (!task || updating) return;
-    await updateTask(() => returnVerificationTask(task.id), '任务已退回任务池');
+    await updateTask(() => returnVerificationTask(task), '任务已退回任务池');
   };
 
   const setItemCompleted = async (itemId: string, completed: boolean) => {
     if (!task || updating) return;
     await updateTask(
-      () => updateVerificationItem(task.id, itemId, completed ? 'completed' : 'pending'),
+      () => updateVerificationItem(task, itemId, completed ? 'completed' : 'pending'),
       completed ? '核实项已完成' : '核实项已恢复为未完成',
     );
   };
@@ -63,7 +63,7 @@ export function useVerificationApproval() {
     if (!pendingAction || !task || updating) return;
     const action = pendingAction;
     const succeeded = await updateTask(
-      () => submitVerificationAction(task.id, action.key),
+      () => submitVerificationAction(task, action.key),
       `${action.label}操作已完成`,
     );
     if (succeeded) setPendingAction(null);
