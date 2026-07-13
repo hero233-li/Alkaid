@@ -1,4 +1,5 @@
 import json
+import logging
 
 import pytest
 from django.test import override_settings
@@ -147,9 +148,11 @@ def test_oversized_request_identifier_returns_400_before_job_creation(client) ->
 
 
 @pytest.mark.django_db
+@override_settings(DEBUG=True)
 def test_application_link_route_is_frozen_and_executes_shared_adapter(
-    client, django_capture_on_commit_callbacks
+    client, caplog, django_capture_on_commit_callbacks
 ) -> None:
+    caplog.set_level(logging.INFO)
     with django_capture_on_commit_callbacks(execute=True):
         response = client.post(
             "/api/product-data/tools/application-links/generate",
@@ -164,6 +167,25 @@ def test_application_link_route_is_frozen_and_executes_shared_adapter(
     assert job.execution_config_snapshot["category"] == "太阳码"
     assert job.result["links"]["applicationNo"].startswith("LINK-PRODUCT-B-")
     assert job.api_calls.count() == 2
+
+    records = {
+        record.message: record
+        for record in caplog.records
+        if record.message.startswith("application_link_")
+    }
+    request_record = records["application_link_request_body"]
+    config_record = records["application_link_product_config"]
+    locations_record = records["application_link_product_locations"]
+
+    assert request_record.request_body["product"] == "product-b"
+    assert request_record.request_body["payload"]["cooperationProject"] == "合作项目"
+    assert config_record.product_config["code"] == "product-b"
+    assert "fields" not in config_record.product_config
+    assert "locations" not in config_record.product_config
+    assert config_record.catalog_version >= 1
+    assert config_record.catalog_checksum.startswith("sha256:")
+    assert locations_record.locations[0]["value"] == "example-location"
+    assert locations_record.locations[0]["branches"][0]["value"] == "example-branch"
 
 
 @pytest.mark.django_db

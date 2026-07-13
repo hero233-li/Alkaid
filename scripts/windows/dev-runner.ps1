@@ -2,7 +2,6 @@ $ErrorActionPreference = "Stop"
 
 $ScriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
 $ProjectRoot = Resolve-Path (Join-Path $ScriptDir "..\..")
-$DefaultBase = Resolve-Path (Join-Path $ProjectRoot "..")
 
 function Get-EnvOrDefault($Name, $Default) {
     $value = [Environment]::GetEnvironmentVariable($Name)
@@ -39,7 +38,6 @@ function Stop-ProcessTree($Process, $Name) {
 
 $DevBackendPort = Get-EnvOrDefault "DEV_BACKEND_PORT" "8000"
 $DevFrontendPort = Get-EnvOrDefault "DEV_FRONTEND_PORT" "5174"
-$RuntimeDir = Get-EnvOrDefault "ALKAID_RUNTIME_DIR" (Join-Path $DefaultBase "Alkaid-runtime")
 $MysqlHost = Get-EnvOrDefault "MYSQL_HOST" "127.0.0.1"
 $MysqlPort = Get-EnvOrDefault "MYSQL_PORT" "3306"
 $MysqlDatabase = Get-EnvOrDefault "MYSQL_DATABASE" "alkaid_dev"
@@ -55,17 +53,10 @@ $DevStartWorker = Get-EnvOrDefault "DEV_START_WORKER" $StartWorkerDefault
 $BackendDir = Join-Path $ProjectRoot "Alkaid-python"
 $FrontendDir = Join-Path $ProjectRoot "Alkaid-react"
 $BackendPython = Join-Path $ProjectRoot ".venv\Scripts\python.exe"
-$BackendLog = Join-Path $RuntimeDir "dev-backend.log"
-$BackendErrLog = Join-Path $RuntimeDir "dev-backend.err.log"
-$WorkerLog = Join-Path $RuntimeDir "dev-worker.log"
-$WorkerErrLog = Join-Path $RuntimeDir "dev-worker.err.log"
 
 if (!(Test-Path $BackendPython)) {
     throw "Backend Python does not exist: $BackendPython"
 }
-
-New-Item -ItemType Directory -Force -Path $RuntimeDir | Out-Null
-Remove-Item -ErrorAction SilentlyContinue $BackendLog, $BackendErrLog, $WorkerLog, $WorkerErrLog
 
 Assert-PortFree $DevBackendPort "BACKEND"
 Assert-PortFree $DevFrontendPort "FRONTEND"
@@ -104,9 +95,6 @@ Pop-Location
 $worker = $null
 if ((Test-Truthy $DevStartWorker) -and -not (Test-Truthy $CeleryAlwaysEager)) {
     Write-Host "Starting Celery worker for queue $CeleryQueue"
-    Write-Host "Worker logs:"
-    Write-Host "  $WorkerLog"
-    Write-Host "  $WorkerErrLog"
     $workerArgs = @(
         "-m", "celery",
         "-A", "config",
@@ -119,16 +107,11 @@ if ((Test-Truthy $DevStartWorker) -and -not (Test-Truthy $CeleryAlwaysEager)) {
         -FilePath $BackendPython `
         -ArgumentList $workerArgs `
         -WorkingDirectory $BackendDir `
-        -RedirectStandardOutput $WorkerLog `
-        -RedirectStandardError $WorkerErrLog `
-        -WindowStyle Hidden `
+        -NoNewWindow `
         -PassThru
 }
 
 Write-Host "Starting backend on http://127.0.0.1:$DevBackendPort"
-Write-Host "Backend logs:"
-Write-Host "  $BackendLog"
-Write-Host "  $BackendErrLog"
 
 $backendArgs = @(
     "-m", "uvicorn",
@@ -142,9 +125,7 @@ $backend = Start-Process `
     -FilePath $BackendPython `
     -ArgumentList $backendArgs `
     -WorkingDirectory $BackendDir `
-    -RedirectStandardOutput $BackendLog `
-    -RedirectStandardError $BackendErrLog `
-    -WindowStyle Hidden `
+    -NoNewWindow `
     -PassThru
 
 try {

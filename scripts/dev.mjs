@@ -20,9 +20,7 @@ if (args.includes('--print-env')) {
   process.exit(0);
 }
 
-if (args[0] === '--logs') {
-  followLog(args[1] ?? 'backend', env);
-} else if (args.includes('--worker')) {
+if (args.includes('--worker')) {
   printStartupConfig(env, envFile, envFileValues);
   runWorker(env);
 } else {
@@ -46,52 +44,6 @@ if (args[0] === '--logs') {
       child.kill(signal);
     });
   }
-
-  child.on('exit', (code, signal) => {
-    if (signal) {
-      process.kill(process.pid, signal);
-      return;
-    }
-    process.exit(code ?? 0);
-  });
-}
-
-function followLog(target, envValues) {
-  if (!['backend', 'worker'].includes(target)) {
-    console.error(`Unknown log target: ${target}`);
-    process.exit(1);
-  }
-
-  const runtimeDir = envValues.ALKAID_RUNTIME_DIR || join(defaultBaseDir, 'Alkaid-runtime');
-  const logFile = join(runtimeDir, `dev-${target}.log`);
-  const errLogFile = join(runtimeDir, `dev-${target}.err.log`);
-  const logFiles = [logFile, errLogFile].filter((filePath) => existsSync(filePath));
-  if (logFiles.length === 0) {
-    console.error(`Log file not found: ${logFile}`);
-    console.error(`Error log file not found: ${errLogFile}`);
-    process.exit(1);
-  }
-
-  console.log(`Following ${target} logs:`);
-  console.log(`  ${logFile}`);
-  console.log(`  ${errLogFile}`);
-
-  const command = isWindows ? 'powershell' : 'tail';
-  const logArgs = isWindows
-    ? [
-        '-NoProfile',
-        '-Command',
-        `Get-Content -Path ${logFiles
-          .map((filePath) => `'${escapePowerShell(filePath)}'`)
-          .join(',')} -Tail 200 -Wait`,
-      ]
-    : ['-n', '200', '-f', ...logFiles];
-
-  const child = spawn(command, logArgs, {
-    cwd: rootDir,
-    env: envValues,
-    stdio: 'inherit',
-  });
 
   child.on('exit', (code, signal) => {
     if (signal) {
@@ -244,8 +196,4 @@ function maskUrl(value) {
 
 function isTruthy(value) {
   return ['1', 'true', 'yes', 'on'].includes(String(value).toLowerCase());
-}
-
-function escapePowerShell(value) {
-  return value.replaceAll("'", "''");
 }

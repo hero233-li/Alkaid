@@ -53,18 +53,8 @@ Windows -> scripts\windows\dev-start.bat
 macOS   -> scripts/macos/dev-start.command
 ```
 
-脚本会在缺少后端 `.venv` 或前端 `node_modules` 时自动安装依赖。默认只使用一个窗口：
-
-- 前端日志显示在当前窗口
-- 后端在后台运行，日志写到 `Alkaid-runtime/dev-backend.log`
-- Celery worker 在后台运行，日志写到 `Alkaid-runtime/dev-worker.log`
-
-单独查看日志：
-
-```bash
-npm run logs:backend
-npm run logs:worker
-```
+脚本会在缺少后端 `.venv` 或前端 `node_modules` 时自动安装依赖。默认只使用一个窗口，
+前端、后端和 Celery worker 的日志都会实时显示在当前终端，不再额外写入开发日志文件。
 
 单独启动 worker：
 

@@ -161,12 +161,6 @@ stop_tree() {
   fi
 }
 
-BACKEND_LOG="$ALKAID_RUNTIME_DIR/dev-backend.log"
-BACKEND_ERR_LOG="$ALKAID_RUNTIME_DIR/dev-backend.err.log"
-WORKER_LOG="$ALKAID_RUNTIME_DIR/dev-worker.log"
-WORKER_ERR_LOG="$ALKAID_RUNTIME_DIR/dev-worker.err.log"
-rm -f "$BACKEND_LOG" "$BACKEND_ERR_LOG" "$WORKER_LOG" "$WORKER_ERR_LOG"
-
 assert_port_free "$DEV_BACKEND_PORT" BACKEND
 assert_port_free "$DEV_FRONTEND_PORT" FRONTEND
 
@@ -206,22 +200,18 @@ if is_truthy "$DEV_START_WORKER" && ! is_truthy "$CELERY_TASK_ALWAYS_EAGER"; the
   (
     cd "$PROJECT_ROOT/Alkaid-python"
     exec "$BACKEND_PYTHON" -m celery -A config worker -l info -P solo -Q "$CELERY_QUEUE"
-  ) > "$WORKER_LOG" 2> "$WORKER_ERR_LOG" &
+  ) &
   WORKER_PID=$!
   echo "Starting Celery worker for queue $CELERY_QUEUE"
-  echo "Worker log: $WORKER_LOG"
-  echo "Worker error log: $WORKER_ERR_LOG"
 fi
 
 (
   cd "$PROJECT_ROOT/Alkaid-python"
   exec "$BACKEND_PYTHON" -m uvicorn config.asgi:application --host 127.0.0.1 --port "$DEV_BACKEND_PORT" --reload
-) > "$BACKEND_LOG" 2> "$BACKEND_ERR_LOG" &
+) &
 BACKEND_PID=$!
 
 echo "Starting dev backend on http://127.0.0.1:$DEV_BACKEND_PORT"
-echo "Backend log: $BACKEND_LOG"
-echo "Backend error log: $BACKEND_ERR_LOG"
 echo "Starting dev frontend on http://127.0.0.1:$DEV_FRONTEND_PORT"
 
 export ALIOTH_API_TARGET="http://127.0.0.1:$DEV_BACKEND_PORT"

@@ -36,9 +36,8 @@ npm run dev
 npm run dev:env
 ```
 
-默认只使用一个命令窗口：前端日志显示在当前窗口，后端日志写到
-`Alkaid-runtime\dev-backend.log` 和 `Alkaid-runtime\dev-backend.err.log`；Celery worker 日志写到
-`Alkaid-runtime\dev-worker.log` 和 `Alkaid-runtime\dev-worker.err.log`。
+默认只使用一个命令窗口：前端、后端和 Celery worker 的日志都会实时显示在当前窗口，
+不再额外写入开发日志文件。
 
 如果暂时没有 RabbitMQ，可以在 `.env.local` 设置：
 
@@ -53,13 +52,6 @@ DEV_START_WORKER=false
 CELERY_TASK_ALWAYS_EAGER=false
 DEV_START_WORKER=true
 CELERY_QUEUE=alkaid-local
-```
-
-查看日志：
-
-```bat
-npm run logs:backend
-npm run logs:worker
 ```
 
 开发虚拟环境固定在项目根目录 `.venv`，不要再使用 `Alkaid-python\.venv`。
