@@ -102,7 +102,7 @@ export function getInitialApplicationLinkValues(
     environment,
     product: product?.value,
     category,
-    cooperationProject: config.cooperationProjects[0],
+    cooperationProjectId: config.cooperationProjects[0]?.value,
     loanType: config.loanTypes[0],
     restoreStatus: restoreStatusValues[0],
   };
@@ -131,7 +131,7 @@ export function buildApplicationLinkFormModel(
     environmentOptions: config.environments,
     productOptions: products.map(({ label, value }) => ({ label, value })),
     categoryOptions: toOptions(categories),
-    cooperationProjectOptions: toOptions(config.cooperationProjects),
+    cooperationProjectOptions: config.cooperationProjects,
     loanTypeOptions: toOptions(config.loanTypes),
     restoreStatusOptions: toOptions(restoreStatusValues),
   };

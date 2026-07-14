@@ -13,6 +13,7 @@ import type { ApplicationLinkConfig, ApplicationLinkFormValues } from '../model/
 const emptyConfig: ApplicationLinkConfig = {
   environments: [],
   products: [],
+  cooperationProjects: [],
   ...applicationLinkLocalOptions,
 };
 

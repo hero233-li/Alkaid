@@ -1,14 +1,12 @@
 import json
+from urllib.parse import parse_qs
 
 import httpx
 import pytest
 
 import apps.integrations.application_link.adapter as adapter_module
 from apps.integrations.application_link.adapter import ApplicationLinkAdapter
-from apps.integrations.application_link.models import (
-    CreateApplicationRequest,
-    GenerateLinksRequest,
-)
+from apps.integrations.application_link.models import GenerateApplicationLinkRequest
 from apps.integrations.contracts import BusinessResponseError
 from apps.integrations.http import HttpClient, HttpClientConfig
 from apps.jobs.models import ApiCallStatus
@@ -27,100 +25,14 @@ def _job():
     ).job
 
 
-@pytest.mark.django_db
-def test_application_link_adapter_records_wire_contract_and_masks_secrets(
-    monkeypatch,
-) -> None:
-    captured: list[httpx.Request] = []
-
-    def handler(request: httpx.Request) -> httpx.Response:
-        captured.append(request)
-        return httpx.Response(
-            200,
-            json={"code": "0000", "data": {"application_no": "APP-001"}},
-        )
-
-    client = HttpClient(
-        HttpClientConfig(
-            base_url="https://application-link.example",
-            token="secret-token",
-            max_retries=0,
-        ),
-        transport=httpx.MockTransport(handler),
+def _request(category: str) -> GenerateApplicationLinkRequest:
+    return GenerateApplicationLinkRequest(
+        env="env-1",
+        product="product-b",
+        category=category,
+        cooperation_project_id="PROJECT-001",
+        payload={"loanType": "首贷", "customerPhone": "13800138000"},
     )
-    monkeypatch.setattr(adapter_module, "_create_client", lambda: client)
-
-    job = _job()
-    with ApplicationLinkAdapter(job) as adapter:
-        result = adapter.create_application(
-            CreateApplicationRequest(
-                product="product-b",
-                category="太阳码",
-                payload={"customerPhone": "13800138000"},
-            )
-        )
-
-    assert result.application_no == "APP-001"
-    assert captured[0].method == "POST"
-    assert captured[0].url.path == "/applications"
-    assert json.loads(captured[0].content)["product"] == "product-b"
-    assert captured[0].headers["authorization"] == "Bearer secret-token"
-
-    call = job.api_calls.get()
-    assert call.status == ApiCallStatus.SUCCESS
-    assert call.request_headers["authorization"] == "Be***en"
-    assert call.request_body["body"]["payload"]["customerPhone"] == "13***00"
-    assert call.response_body["data"]["application_no"] == "APP-001"
-
-
-@pytest.mark.django_db
-def test_application_link_adapter_records_business_error(monkeypatch) -> None:
-    def handler(request: httpx.Request) -> httpx.Response:
-        return httpx.Response(
-            200,
-            json={"code": "9999", "data": {"application_no": "REJECTED"}},
-        )
-
-    client = HttpClient(
-        HttpClientConfig(
-            base_url="https://application-link.example",
-            max_retries=0,
-        ),
-        transport=httpx.MockTransport(handler),
-    )
-    monkeypatch.setattr(adapter_module, "_create_client", lambda: client)
-
-    job = _job()
-    with pytest.raises(BusinessResponseError), ApplicationLinkAdapter(job) as adapter:
-        adapter.create_application(
-            CreateApplicationRequest(product="product-b", category="太阳码", payload={})
-        )
-
-    call = job.api_calls.get()
-    assert call.status == ApiCallStatus.FAILED
-    assert call.error_type == "BusinessResponseError"
-    assert call.response_body["code"] == "9999"
-
-
-@pytest.mark.django_db
-def test_application_link_adapter_rejects_unknown_category(monkeypatch) -> None:
-    client = HttpClient(
-        HttpClientConfig(base_url="https://application-link.example", max_retries=0),
-        transport=httpx.MockTransport(lambda request: httpx.Response(500)),
-    )
-    monkeypatch.setattr(adapter_module, "_create_client", lambda: client)
-
-    with pytest.raises(ValueError, match="未知申请链接类别"), ApplicationLinkAdapter(
-        _job()
-    ) as adapter:
-        adapter.generate_links(
-            GenerateLinksRequest(
-                application_no="APP-001",
-                product="product-b",
-                category="未知类别",
-            ),
-            category="未知类别",
-        )
 
 
 @pytest.mark.django_db
@@ -128,10 +40,8 @@ def test_application_link_adapter_rejects_unknown_category(monkeypatch) -> None:
     ("category", "expected_path"),
     [("太阳码", "/links/sun-code"), ("动态链接", "/links/dynamic")],
 )
-def test_application_link_generate_links_wire_contract(
-    monkeypatch,
-    category: str,
-    expected_path: str,
+def test_generate_link_uses_one_five_field_form_and_returns_two_urls(
+    monkeypatch, category: str, expected_path: str
 ) -> None:
     captured: list[httpx.Request] = []
 
@@ -149,27 +59,83 @@ def test_application_link_generate_links_wire_contract(
         )
 
     client = HttpClient(
-        HttpClientConfig(base_url="https://application-link.example", max_retries=0),
+        HttpClientConfig(
+            base_url="https://application-link.example",
+            token="secret-token",
+            max_retries=0,
+        ),
         transport=httpx.MockTransport(handler),
+    )
+    monkeypatch.setattr(adapter_module, "_create_client", lambda: client)
+    monkeypatch.setattr(adapter_module, "_configured_sign", lambda message: "test-sign")
+
+    job = _job()
+    with ApplicationLinkAdapter(job) as adapter:
+        result = adapter.generate_link(_request(category))
+
+    assert len(captured) == 1
+    assert captured[0].method == "POST"
+    assert captured[0].url.path == expected_path
+    assert captured[0].headers["content-type"].startswith(
+        "application/x-www-form-urlencoded"
+    )
+    form = parse_qs(captured[0].content.decode(), keep_blank_values=True)
+    assert set(form) == {"msg_id", "sign", "timestamp", "REQ_MESSAGE", "biz_content"}
+    assert form["msg_id"] == [job.trace_id]
+    assert form["sign"] == ["test-sign"]
+    assert form["REQ_MESSAGE"] == form["biz_content"]
+    message = json.loads(form["REQ_MESSAGE"][0])
+    assert message["REQ_BODY"]["request"] == {
+        "env": "env-1",
+        "product": "product-b",
+        "category": category,
+        "cooperationProjectId": "PROJECT-001",
+        "payload": {"loanType": "首贷", "customerPhone": "13800138000"},
+    }
+    assert result.internal_url == "https://internal.example/link"
+    assert result.external_url == "https://external.example/link"
+
+    call = job.api_calls.get()
+    assert call.status == ApiCallStatus.SUCCESS
+    assert call.request_body["form"]["sign"] == "te***gn"
+    assert call.request_body["form"]["REQ_MESSAGE"] != form["REQ_MESSAGE"][0]
+    assert call.request_headers["authorization"] == "Be***en"
+
+
+@pytest.mark.django_db
+def test_generate_link_records_business_error(monkeypatch) -> None:
+    client = HttpClient(
+        HttpClientConfig(base_url="https://application-link.example", max_retries=0),
+        transport=httpx.MockTransport(
+            lambda request: httpx.Response(
+                200,
+                json={
+                    "code": "9999",
+                    "data": {
+                        "internal_url": "https://internal.example/rejected",
+                        "external_url": "https://external.example/rejected",
+                    },
+                },
+            )
+        ),
     )
     monkeypatch.setattr(adapter_module, "_create_client", lambda: client)
 
     job = _job()
-    with ApplicationLinkAdapter(job) as adapter:
-        result = adapter.generate_links(
-            GenerateLinksRequest(
-                application_no="APP-001",
-                product="product-b",
-                category=category,
-            ),
-            category=category,
-        )
+    with pytest.raises(BusinessResponseError), ApplicationLinkAdapter(job) as adapter:
+        adapter.generate_link(_request("太阳码"))
 
-    assert captured[0].url.path == expected_path
-    assert json.loads(captured[0].content) == {
-        "application_no": "APP-001",
-        "product": "product-b",
-        "category": category,
-    }
-    assert result.internal_url == "https://internal.example/link"
-    assert result.external_url == "https://external.example/link"
+    call = job.api_calls.get()
+    assert call.status == ApiCallStatus.FAILED
+    assert call.error_type == "BusinessResponseError"
+
+
+@pytest.mark.django_db
+def test_generate_link_rejects_conflicting_payload_authority() -> None:
+    with pytest.raises(ValueError, match="payload.*env"):
+        GenerateApplicationLinkRequest(
+            env="env-1",
+            product="product-b",
+            category="太阳码",
+            payload={"env": "env-2"},
+        )

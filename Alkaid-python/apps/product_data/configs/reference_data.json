@@ -6,6 +6,11 @@
     {"label": "环境2", "value": "env-2"},
     {"label": "环境3", "value": "env-3"}
   ],
+  "cooperationProjects": [
+    {"label": "合作项目一", "value": "PROJECT-001"},
+    {"label": "合作项目二", "value": "PROJECT-002"},
+    {"label": "合作项目三", "value": "PROJECT-003"}
+  ],
   "cascadeResetMap": {
     "environment": ["product", "location", "branch", "outlet"],
     "product": ["location", "branch", "outlet"],

@@ -11,7 +11,7 @@ const config: ApplicationLinkConfig = {
     value: 'product-b',
     routes: [{ environment: 'env-internal', category: '太阳码', requiredFields: ['spcode'] }],
   }],
-  cooperationProjects: ['合作项目一'],
+  cooperationProjects: [{ label: '合作项目一', value: 'PROJECT-001' }],
   loanTypes: ['首贷'],
 };
 
@@ -24,10 +24,11 @@ describe('application link form model', () => {
     expect(model.productOptions).toEqual([{ label: '产品 B', value: 'product-b' }]);
     expect(model.showSpcode).toBe(true);
     expect(submission).toMatchObject({
-      environment: 'env-internal',
+      env: 'env-internal',
       product: 'product-b',
       category: '太阳码',
-      spcode: 'SP001',
+      cooperationProjectId: 'PROJECT-001',
+      payload: { loanType: '首贷', spcode: 'SP001' },
     });
   });
 });

@@ -31,22 +31,22 @@ def _product_b_submission() -> dict[str, object]:
 
 def _application_link_submission() -> dict[str, object]:
     return {
-        "environment": "环境1",
+        "env": "环境1",
         "product": "product-b",
         "category": "太阳码",
-        "cooperationProject": "合作项目",
-        "loanType": "经营贷",
+        "cooperationProjectId": "PROJECT-001",
+        "payload": {"loanType": "经营贷"},
     }
 
 
 def _dynamic_application_link_submission() -> dict[str, object]:
     return {
-        "environment": "环境1",
+        "env": "环境1",
         "product": "product-a",
         "category": "动态链接",
-        "cooperationProject": "合作项目",
-        "loanType": "首贷",
-        "requestJson": {
+        "cooperationProjectId": "PROJECT-001",
+        "payload": {
+            "loanType": "首贷",
             "customerName": "测试用户",
             "customerPhone": "13800138000",
             "customerCertificateNo": "330101199001011234",
@@ -166,16 +166,15 @@ def test_application_link_route_is_frozen_and_executes_shared_adapter(
     assert job.execution_config_snapshot["category"] == "太阳码"
     assert job.execution_config_snapshot["environment"] == "env-1"
     assert job.execution_config_snapshot["product"] == "product-b"
-    assert job.payload["environment"] == "env-1"
-    assert job.result["links"]["applicationNo"].startswith("LINK-PRODUCT-B-")
-    assert job.api_calls.count() == 2
+    assert job.payload["env"] == "env-1"
+    assert job.payload["cooperationProjectId"] == "PROJECT-001"
+    assert job.result["links"]["internalUrl"].startswith("https://internal.mock.local/")
+    assert job.result["links"]["externalUrl"].startswith("https://apply.mock.local/")
+    assert job.api_calls.count() == 1
     events = {record.message: record for record in caplog.records}
     assert events["application_link_execution_started"].job_id == job.id
     assert events["application_link_execution_started"].product == "product-b"
     assert events["application_link_execution_started"].environment == "env-1"
-    assert events["application_link_application_created"].application_no.startswith(
-        "LINK-PRODUCT-B-"
-    )
     assert events["application_link_links_generated"].category == "太阳码"
 
 
@@ -186,6 +185,10 @@ def test_application_link_config_uses_stable_catalog_codes(client) -> None:
     assert response.status_code == 200
     config = response.json()["data"]
     assert config["environments"][0] == {"label": "环境1", "value": "env-1"}
+    assert config["cooperationProjects"][0] == {
+        "label": "合作项目一",
+        "value": "PROJECT-001",
+    }
     product_b = next(item for item in config["products"] if item["value"] == "product-b")
     assert product_b["label"] == "产品B"
     assert product_b["routes"][0]["environment"] == "env-1"
@@ -207,4 +210,5 @@ def test_dynamic_application_link_validates_fields_inside_request_json(
     assert response.status_code == 202
     job = Job.objects.get(id=response.json()["data"]["id"])
     assert job.status == JobStatus.SUCCESS
-    assert job.result["links"]["applicationNo"].startswith("LINK-PRODUCT-A-")
+    assert job.api_calls.count() == 1
+    assert set(job.result["links"]) == {"internalUrl", "externalUrl", "generatedAt"}

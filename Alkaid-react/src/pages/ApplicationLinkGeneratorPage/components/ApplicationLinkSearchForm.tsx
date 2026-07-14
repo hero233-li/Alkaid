@@ -49,11 +49,13 @@ export default function ApplicationLinkSearchForm({
               <Select disabled={!formModel.category} options={formModel.productOptions} />
             </Form.Item>
           </Col>
-          <Col flex="1 1 0">
-            <Form.Item name="cooperationProject" label="合作项目" rules={[{ required: true }]}>
-              <Select options={formModel.cooperationProjectOptions} />
-            </Form.Item>
-          </Col>
+          {formModel.cooperationProjectOptions.length > 0 && (
+            <Col flex="1 1 0">
+              <Form.Item name="cooperationProjectId" label="合作项目" rules={[{ required: true }]}>
+                <Select options={formModel.cooperationProjectOptions} />
+              </Form.Item>
+            </Col>
+          )}
           <Col flex="1 1 0">
             <Form.Item name="loanType" label="首贷续贷" rules={[{ required: true }]}>
               <Select options={formModel.loanTypeOptions} />

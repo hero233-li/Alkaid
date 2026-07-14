@@ -39,6 +39,10 @@ npm run dev:env
 默认只使用一个命令窗口：前端、后端和 Celery worker 的日志都会实时显示在当前窗口，
 不再额外写入开发日志文件。
 
+默认启动前会清理 `DEV_BACKEND_PORT` 和 `DEV_FRONTEND_PORT` 上的遗留监听进程，退出时按
+进程树停止后端和 Worker 并等待端口释放。若只想检测端口占用而不自动清理，在 `.env.local`
+设置 `DEV_CLEAN_STALE_PORTS=false`。权限不足时请使用管理员终端或手工停止日志中显示的 PID。
+
 如果暂时没有 RabbitMQ，可以在 `.env.local` 设置：
 
 ```text
@@ -153,6 +157,8 @@ Alkaid-runtime\prod-start.bat
 
 启动前需要在任务计划或系统环境中提供 `DJANGO_SECRET_KEY`、`CELERY_BROKER_URL`、
 `MOCK_PRODUCT_BASE_URL`、`APPLICATION_LINK_BASE_URL`、`APPLICATION_LINK_API_TOKEN` 和
+`APPLICATION_LINK_FORM_SIGN`（内网协议要求签名时同时设置
+`APPLICATION_LINK_SIGN_REQUIRED=true`）、
 `BUSINESS_ACCESS_BASE_URL`、`BUSINESS_ACCESS_API_TOKEN`、`VERIFICATION_APPROVAL_BASE_URL`、
 `VERIFICATION_APPROVAL_API_TOKEN`、`MOCK_FIXED_SYSTEM_TOKEN`。生产固定使用
 `config.settings.server`、真实外系统模式和异步 Celery；

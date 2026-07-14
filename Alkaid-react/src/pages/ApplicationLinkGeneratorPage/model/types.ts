@@ -26,10 +26,10 @@ export interface ApplicationLinkRouteConfig {
 export interface ApplicationLinkBackendConfig {
   environments: ApplicationLinkOption[];
   products: ProductLinkConfig[];
+  cooperationProjects: ApplicationLinkOption[];
 }
 
 export interface ApplicationLinkConfig extends ApplicationLinkBackendConfig {
-  cooperationProjects: string[];
   loanTypes: string[];
 }
 
@@ -37,7 +37,7 @@ export interface ApplicationLinkFormValues {
   environment?: string;
   product?: string;
   category?: LinkCategory;
-  cooperationProject?: string;
+  cooperationProjectId?: string;
   requestJson?: string;
   loanType?: string;
   restoreStatus?: string;
@@ -45,16 +45,11 @@ export interface ApplicationLinkFormValues {
 }
 
 export interface ApplicationLinkSubmission {
-  environment: string;
+  env: string;
   product: string;
   category: LinkCategory;
-  cooperationProject: string;
-  loanType: string;
-  recommender?: string;
-  recommenderPhone?: string;
-  requestJson?: Record<string, unknown>;
-  restoreStatus?: string;
-  spcode?: string;
+  cooperationProjectId?: string;
+  payload: Record<string, unknown>;
 }
 
 export interface ApplicationLinkResult {

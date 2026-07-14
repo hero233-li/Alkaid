@@ -164,7 +164,28 @@
 
 成功响应的 `data` 是 [Job 对象](#41-job-对象)。
 
-### 3.3 核实审批异步操作与上下文
+### 3.3 申请链接生成
+
+`GET /api/product-data/tools/application-links/config` 返回环境、产品路由以及合作项目选项。
+合作项目使用 `{label, value}`；客户端展示 `label`，提交稳定的 `value`。
+
+`POST /api/product-data/tools/application-links/generate` 创建异步 Job。规范请求体为：
+
+```json
+{
+  "env": "env-1",
+  "product": "product-b",
+  "category": "太阳码",
+  "cooperationProjectId": "PROJECT-001",
+  "payload": {"loanType": "首贷"}
+}
+```
+
+外层路由字段是权威值，不能在 `payload` 中用不同值重复声明。成功 Job 的
+`result.links` 固定包含 `internalUrl`、`externalUrl`、`generatedAt`。后端 Python 会根据类别
+对外发起一次五字段表单请求，不再执行“创建申请 + 生成链接”的两段式流程。
+
+### 3.4 核实审批异步操作与上下文
 
 除配置 GET 外，核实审批接口均返回 HTTP `202 + Job`（相同幂等键返回已有 Job 时为 `200`），
 不再同步返回任务对象。客户端应轮询 `/api/jobs/{jobId}`，在 Job 成功后从 `result.task` 读取任务；

@@ -4,8 +4,7 @@ from django.utils import timezone
 
 from apps.integrations.application_link.adapter import ApplicationLinkAdapter
 from apps.integrations.application_link.models import (
-    CreateApplicationRequest,
-    GenerateLinksRequest,
+    GenerateApplicationLinkRequest,
 )
 from apps.jobs.models import Job
 from apps.product_data.application_links.schemas import (
@@ -16,7 +15,7 @@ from apps.product_data.application_links.schemas import (
     ApplicationLinkResult,
     ApplicationLinkRouteConfig,
     ApplicationLinkSubmission,
-    submission_payload,
+    business_payload,
 )
 from apps.product_data.catalog import ProductCatalog, ProductCatalogError, load_product_catalog
 
@@ -35,10 +34,17 @@ def normalize_submission(
         catalog = load_product_catalog()
         product = catalog.product(submission.product)
         environment = _environment_code(catalog, submission.environment)
+        cooperation_project_id = _cooperation_project_id(
+            catalog, submission.cooperationProjectId
+        )
     except ProductCatalogError as exc:
         raise ApplicationLinkConfigurationError("当前环境下没有该产品") from exc
     return submission.model_copy(
-        update={"product": product.code, "environment": environment}
+        update={
+            "product": product.code,
+            "environment": environment,
+            "cooperationProjectId": cooperation_project_id,
+        }
     )
 
 
@@ -67,6 +73,10 @@ def get_application_link_config() -> ApplicationLinkPageConfig:
             for option in catalog.reference.environments
         ),
         products=products,
+        cooperationProjects=tuple(
+            ApplicationLinkOption(label=option.label, value=option.value)
+            for option in catalog.reference.cooperationProjects
+        ),
     )
 
 
@@ -75,6 +85,18 @@ def _environment_code(catalog: ProductCatalog, environment_code_or_label: str) -
         if environment_code_or_label in {option.value, option.label}:
             return option.value
     raise ProductCatalogError(f"未知环境：{environment_code_or_label}")
+
+
+def _cooperation_project_id(
+    catalog: ProductCatalog, project_id_or_label: str | None
+) -> str | None:
+    options = catalog.reference.cooperationProjects
+    if not options:
+        return None
+    for option in options:
+        if project_id_or_label in {option.value, option.label}:
+            return option.value
+    raise ProductCatalogError("请选择有效的合作项目")
 
 
 def resolve_execution_snapshot(
@@ -134,6 +156,8 @@ def _has_submission_field(submission: ApplicationLinkSubmission, name: str) -> b
     """Accept fixed fields and fields supplied inside the dynamic JSON object."""
 
     value = getattr(submission, name, None)
+    if value is None and submission.payload:
+        value = submission.payload.get(name)
     if value is None and submission.requestJson:
         value = submission.requestJson.get(name)
     if value is None:
@@ -160,32 +184,21 @@ def generate_application_links(
     }
     logger.info("application_link_execution_started", extra=log_context)
     with ApplicationLinkAdapter(job) as adapter:
-        application = adapter.create_application(
-            CreateApplicationRequest(
+        links = adapter.generate_link(
+            GenerateApplicationLinkRequest(
+                env=submission.environment,
                 product=submission.product,
                 category=submission.category.value,
-                payload=submission_payload(submission),
+                cooperation_project_id=submission.cooperationProjectId,
+                payload=business_payload(submission),
             )
-        )
-        logger.info(
-            "application_link_application_created",
-            extra={**log_context, "application_no": application.application_no},
-        )
-        links = adapter.generate_links(
-            GenerateLinksRequest(
-                application_no=application.application_no,
-                product=submission.product,
-                category=submission.category.value,
-            ),
-            category=submission.category.value,
         )
     logger.info(
         "application_link_links_generated",
-        extra={**log_context, "application_no": application.application_no},
+        extra=log_context,
     )
     return ApplicationLinkResult(
         internalUrl=links.internal_url,
         externalUrl=links.external_url,
         generatedAt=timezone.now().isoformat(),
-        applicationNo=application.application_no,
     )

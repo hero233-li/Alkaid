@@ -26,6 +26,9 @@ SENSITIVE_KEYS = {
     "custnme",
     "phone",
     "idtyno",
+    "sign",
+    "req_message",
+    "biz_content",
 }
 
 

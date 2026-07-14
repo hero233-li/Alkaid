@@ -1,23 +1,21 @@
-"""All HTTP and external wire contracts for application-link generation."""
+"""External application-link wire contract: one five-field form request."""
 
 from __future__ import annotations
+
+import json
+from datetime import datetime, timezone
+from typing import Any
 
 from django.conf import settings
 from django.core.exceptions import ImproperlyConfigured
 
-from apps.integrations.application_link.api import (
-    CREATE_APPLICATION,
-    CREATE_DYNAMIC_LINKS,
-    CREATE_SUN_CODE_LINKS,
-)
+from apps.integrations.application_link.api import CREATE_DYNAMIC_LINK, CREATE_SUN_CODE_LINK
 from apps.integrations.application_link.mock_transport import (
     create_application_link_mock_transport,
 )
 from apps.integrations.application_link.models import (
     ApplicationLinks,
-    ApplicationReference,
-    CreateApplicationRequest,
-    GenerateLinksRequest,
+    GenerateApplicationLinkRequest,
 )
 from apps.integrations.auth import TokenManager
 from apps.integrations.executor import EndpointExecutor
@@ -27,7 +25,7 @@ from apps.jobs.models import Job
 
 
 class ApplicationLinkAdapter:
-    """Per-Job adapter that records every external call in ``JobApiCall``."""
+    """Per-Job adapter that records exactly one external call."""
 
     def __init__(self, job: Job) -> None:
         self.job = job
@@ -45,34 +43,60 @@ class ApplicationLinkAdapter:
         self._client = None
         self._executor = None
 
-    def create_application(self, request: CreateApplicationRequest) -> ApplicationReference:
-        response = self._execute("application_link.create_application", CREATE_APPLICATION, request)
-        return response.data
-
-    def generate_links(
-        self,
-        request: GenerateLinksRequest,
-        *,
-        category: str,
-    ) -> ApplicationLinks:
-        if category == "动态链接":
-            endpoint = CREATE_DYNAMIC_LINKS
-        elif category == "太阳码":
-            endpoint = CREATE_SUN_CODE_LINKS
+    def generate_link(self, request: GenerateApplicationLinkRequest) -> ApplicationLinks:
+        if request.category == "动态链接":
+            endpoint = CREATE_DYNAMIC_LINK
+        elif request.category == "太阳码":
+            endpoint = CREATE_SUN_CODE_LINK
         else:
-            raise ValueError(f"未知申请链接类别：{category}")
-        response = self._execute("application_link.generate_links", endpoint, request)
+            raise ValueError(f"未知申请链接类别：{request.category}")
+        message = _serialize_message(
+            {
+                "REQ_HEAD": {
+                    "traceno": self.job.trace_id,
+                    "starttime": self.job.created_at.isoformat(),
+                    "product": request.product,
+                },
+                "REQ_BODY": {"request": request.external_request()},
+            }
+        )
+        response = self._execute(
+            "application_link.generate_link",
+            endpoint,
+            form_data={
+                "msg_id": self.job.trace_id,
+                "sign": _configured_sign(message),
+                "timestamp": datetime.now(timezone.utc).strftime(
+                    settings.APPLICATION_LINK_TIMESTAMP_FORMAT
+                ),
+                "REQ_MESSAGE": message,
+                "biz_content": message,
+            },
+        )
         return response.data
 
-    def _execute(self, step: str, endpoint: object, body: object):
+    def _execute(self, step: str, endpoint: object, *, form_data: dict[str, str]):
         if self._executor is None:
             raise RuntimeError("ApplicationLinkAdapter 必须在 with 块中使用")
         return self._executor.execute(
             endpoint,  # type: ignore[arg-type]
-            body=body,  # type: ignore[arg-type]
+            form_data=form_data,
             trace_id=self.job.trace_id,
             observer=JobHttpCallObserver(self.job, step=step),
         )
+
+
+def _serialize_message(value: dict[str, Any]) -> str:
+    return json.dumps(value, ensure_ascii=False, separators=(",", ":"))
+
+
+def _configured_sign(message: str) -> str:
+    """Python owns the field; the real signing algorithm remains configurable."""
+    del message
+    sign = settings.APPLICATION_LINK_FORM_SIGN
+    if settings.APPLICATION_LINK_SIGN_REQUIRED and not sign:
+        raise ImproperlyConfigured("APPLICATION_LINK_FORM_SIGN 未配置")
+    return sign
 
 
 def _create_client() -> HttpClient:

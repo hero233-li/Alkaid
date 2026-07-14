@@ -62,25 +62,32 @@ export function buildApplicationLinkSubmission(
   }
 
   const submission: ApplicationLinkSubmission = {
-    environment,
+    env: environment,
     product: productCode,
     category,
-    cooperationProject: requiredText(values.cooperationProject, '请选择合作项目'),
-    loanType: requiredText(values.loanType, '请选择首贷续贷'),
+    payload: {
+      loanType: requiredText(values.loanType, '请选择首贷续贷'),
+    },
   };
 
+  const cooperationProjectId = trimOptional(values.cooperationProjectId);
+  if (config.cooperationProjects.length && !cooperationProjectId) {
+    throw new Error('请选择合作项目');
+  }
+  if (cooperationProjectId) submission.cooperationProjectId = cooperationProjectId;
+
   if (isDynamicApplicationLink(category)) {
-    submission.requestJson = parseDynamicLinkRequestJson(values.requestJson);
+    Object.assign(submission.payload, parseDynamicLinkRequestJson(values.requestJson));
   }
 
   const route = product.routes.find((item) => (
     item.environment === environment && item.category === category
   ));
   if (route?.requiredFields.includes('restoreStatus')) {
-    submission.restoreStatus = requiredText(values.restoreStatus, '请选择还原状况');
+    submission.payload.restoreStatus = requiredText(values.restoreStatus, '请选择还原状况');
   }
   if (route?.requiredFields.includes('spcode')) {
-    submission.spcode = requiredText(values.spcode, '请输入企业代码 spcode');
+    submission.payload.spcode = requiredText(values.spcode, '请输入企业代码 spcode');
   }
 
   return submission;

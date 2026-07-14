@@ -22,17 +22,49 @@ function Protect-UrlSecret($Value) {
     return $Value -replace "://([^:/@]+):([^@]+)@", '://$1:********@'
 }
 
-function Assert-PortFree($Port, $Name) {
+function Wait-PortReleased($Port, $TimeoutSeconds = 10) {
+    $deadline = (Get-Date).AddSeconds($TimeoutSeconds)
+    do {
+        $connections = Get-NetTCPConnection -LocalPort ([int]$Port) -State Listen -ErrorAction SilentlyContinue
+        if (!$connections) { return }
+        Start-Sleep -Milliseconds 250
+    } while ((Get-Date) -lt $deadline)
+    throw "Port $Port was not released within $TimeoutSeconds seconds. Try an elevated terminal."
+}
+
+function Clear-ListeningPort($Port, $Name) {
     $connections = Get-NetTCPConnection -LocalPort ([int]$Port) -State Listen -ErrorAction SilentlyContinue
-    if ($connections) {
-        throw "$Name port $Port is already in use. Stop the old service or set DEV_${Name}_PORT."
+    if (!$connections) { return }
+    $processIds = @($connections | Select-Object -ExpandProperty OwningProcess -Unique)
+    foreach ($processId in $processIds) {
+        $process = Get-Process -Id $processId -ErrorAction SilentlyContinue
+        $processName = if ($process) { $process.ProcessName } else { "unknown" }
+        Write-Host "Cleaning stale $Name listener: port=$Port pid=$processId process=$processName"
+        try {
+            & taskkill.exe /PID $processId /T /F | Out-Null
+            if ($LASTEXITCODE -ne 0 -and (Get-Process -Id $processId -ErrorAction SilentlyContinue)) {
+                throw "taskkill exited with code $LASTEXITCODE"
+            }
+        }
+        catch {
+            throw "Cannot stop pid $processId on $Name port $Port. Run this terminal as Administrator or stop it manually."
+        }
     }
+    Wait-PortReleased $Port
 }
 
 function Stop-ProcessTree($Process, $Name) {
     if ($Process -and -not $Process.HasExited) {
-        Write-Host "Stopping $Name..."
-        & taskkill.exe /PID $Process.Id /T /F | Out-Null
+        Write-Host "Stopping $Name (pid=$($Process.Id))..."
+        try {
+            & taskkill.exe /PID $Process.Id /T /F | Out-Null
+            if ($LASTEXITCODE -ne 0 -and -not $Process.HasExited) {
+                throw "taskkill exited with code $LASTEXITCODE"
+            }
+        }
+        catch {
+            Write-Warning "Failed to stop $Name pid=$($Process.Id): $($_.Exception.Message)"
+        }
     }
 }
 
@@ -49,6 +81,7 @@ $CeleryQueue = Get-EnvOrDefault "CELERY_QUEUE" "alkaid-local"
 $CeleryAlwaysEager = Get-EnvOrDefault "CELERY_TASK_ALWAYS_EAGER" "false"
 $StartWorkerDefault = if (Test-Truthy $CeleryAlwaysEager) { "false" } else { "true" }
 $DevStartWorker = Get-EnvOrDefault "DEV_START_WORKER" $StartWorkerDefault
+$DevCleanStalePorts = Get-EnvOrDefault "DEV_CLEAN_STALE_PORTS" "true"
 
 $BackendDir = Join-Path $ProjectRoot "Alkaid-python"
 $FrontendDir = Join-Path $ProjectRoot "Alkaid-react"
@@ -58,8 +91,18 @@ if (!(Test-Path $BackendPython)) {
     throw "Backend Python does not exist: $BackendPython"
 }
 
-Assert-PortFree $DevBackendPort "BACKEND"
-Assert-PortFree $DevFrontendPort "FRONTEND"
+if (Test-Truthy $DevCleanStalePorts) {
+    Clear-ListeningPort $DevBackendPort "BACKEND"
+    Clear-ListeningPort $DevFrontendPort "FRONTEND"
+}
+else {
+    if (Get-NetTCPConnection -LocalPort ([int]$DevBackendPort) -State Listen -ErrorAction SilentlyContinue) {
+        throw "BACKEND port $DevBackendPort is already in use."
+    }
+    if (Get-NetTCPConnection -LocalPort ([int]$DevFrontendPort) -State Listen -ErrorAction SilentlyContinue) {
+        throw "FRONTEND port $DevFrontendPort is already in use."
+    }
+}
 
 $env:DJANGO_SETTINGS_MODULE = Get-EnvOrDefault "DJANGO_SETTINGS_MODULE" "config.settings.local"
 $env:DB_ENGINE = "mysql"
@@ -82,6 +125,7 @@ Write-Host "  Celery broker: $(Protect-UrlSecret $CeleryBrokerUrl)"
 Write-Host "  Celery queue: $CeleryQueue"
 Write-Host "  Celery eager: $CeleryAlwaysEager"
 Write-Host "  Start worker: $DevStartWorker"
+Write-Host "  Clean stale ports: $DevCleanStalePorts"
 
 Write-Host "Migrating backend database..."
 Push-Location $BackendDir
@@ -109,6 +153,7 @@ if ((Test-Truthy $DevStartWorker) -and -not (Test-Truthy $CeleryAlwaysEager)) {
         -WorkingDirectory $BackendDir `
         -NoNewWindow `
         -PassThru
+    Write-Host "Celery worker started: pid=$($worker.Id)"
 }
 
 Write-Host "Starting backend on http://127.0.0.1:$DevBackendPort"
@@ -127,6 +172,7 @@ $backend = Start-Process `
     -WorkingDirectory $BackendDir `
     -NoNewWindow `
     -PassThru
+Write-Host "Backend started: pid=$($backend.Id)"
 
 try {
     $env:ALIOTH_API_TARGET = "http://127.0.0.1:$DevBackendPort"
@@ -143,4 +189,6 @@ finally {
     }
     Stop-ProcessTree $backend "backend"
     Stop-ProcessTree $worker "worker"
+    Wait-PortReleased $DevBackendPort
+    Wait-PortReleased $DevFrontendPort
 }

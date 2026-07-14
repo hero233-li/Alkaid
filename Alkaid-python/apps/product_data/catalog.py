@@ -155,6 +155,7 @@ class ProductReferenceData(BaseModel):
     id: str = Field(min_length=1, max_length=128)
     version: int = Field(ge=1)
     environments: tuple[ProductOption, ...] = Field(min_length=1)
+    cooperationProjects: tuple[ProductOption, ...] = ()
     cascadeResetMap: dict[str, tuple[str, ...]] = Field(default_factory=dict)
 
 
