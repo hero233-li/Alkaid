@@ -22,7 +22,7 @@ export function mergeJobDetail(result: ProductApplicationResult, detail: JobDeta
     status: detail.status,
     stage: detail.stage,
     progress: detail.progress,
-    payload: detail.payload,
+    payload: detail.payload ?? result.payload,
     errorMessage: detail.errorMessage,
     traceId: detail.traceId,
     idempotencyKey: detail.idempotencyKey,

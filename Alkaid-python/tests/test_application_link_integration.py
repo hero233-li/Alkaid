@@ -121,3 +121,55 @@ def test_application_link_adapter_rejects_unknown_category(monkeypatch) -> None:
             ),
             category="未知类别",
         )
+
+
+@pytest.mark.django_db
+@pytest.mark.parametrize(
+    ("category", "expected_path"),
+    [("太阳码", "/links/sun-code"), ("动态链接", "/links/dynamic")],
+)
+def test_application_link_generate_links_wire_contract(
+    monkeypatch,
+    category: str,
+    expected_path: str,
+) -> None:
+    captured: list[httpx.Request] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        captured.append(request)
+        return httpx.Response(
+            200,
+            json={
+                "code": "0000",
+                "data": {
+                    "internal_url": "https://internal.example/link",
+                    "external_url": "https://external.example/link",
+                },
+            },
+        )
+
+    client = HttpClient(
+        HttpClientConfig(base_url="https://application-link.example", max_retries=0),
+        transport=httpx.MockTransport(handler),
+    )
+    monkeypatch.setattr(adapter_module, "_create_client", lambda: client)
+
+    job = _job()
+    with ApplicationLinkAdapter(job) as adapter:
+        result = adapter.generate_links(
+            GenerateLinksRequest(
+                application_no="APP-001",
+                product="product-b",
+                category=category,
+            ),
+            category=category,
+        )
+
+    assert captured[0].url.path == expected_path
+    assert json.loads(captured[0].content) == {
+        "application_no": "APP-001",
+        "product": "product-b",
+        "category": category,
+    }
+    assert result.internal_url == "https://internal.example/link"
+    assert result.external_url == "https://external.example/link"

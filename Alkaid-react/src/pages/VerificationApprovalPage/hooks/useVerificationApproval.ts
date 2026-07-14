@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { message } from 'antd';
 import {
   claimVerificationTask,
@@ -40,7 +40,12 @@ export function useVerificationApproval() {
   const [activity, setActivity] = useState<VerificationWorkflowActivity | null>(null);
   const [pendingAction, setPendingAction] = useState<VerificationActionDefinition | null>(null);
   const runningRef = useRef(false);
+  const pollControllerRef = useRef<AbortController | null>(null);
   const allCompleted = useMemo(() => allVerificationItemsCompleted(task), [task]);
+
+  useEffect(() => () => {
+    pollControllerRef.current?.abort();
+  }, []);
 
   async function runWorkflow(
     operation: VerificationOperation,
@@ -51,6 +56,8 @@ export function useVerificationApproval() {
       throw new Error('已有核实审批任务正在执行，请稍候');
     }
     runningRef.current = true;
+    const controller = new AbortController();
+    pollControllerRef.current = controller;
     setActivity({ operation, label, status: 'submitting', progress: 0 });
     try {
       const submitted = await submit();
@@ -69,9 +76,10 @@ export function useVerificationApproval() {
           status: detail.status,
           progress: detail.progress,
         });
-      });
+      }, { signal: controller.signal });
     } finally {
       runningRef.current = false;
+      if (pollControllerRef.current === controller) pollControllerRef.current = null;
       setActivity(null);
     }
   }
@@ -87,7 +95,9 @@ export function useVerificationApproval() {
       setTask(extractTask(detail));
       setHasSearched(true);
     } catch (error) {
-      message.error(error instanceof Error ? error.message : '核实审批查询失败');
+      if (!isCancelled(error)) {
+        message.error(error instanceof Error ? error.message : '核实审批查询失败');
+      }
     } finally {
       setSearching(false);
     }
@@ -127,7 +137,9 @@ export function useVerificationApproval() {
       await refreshFromContext(task);
       message.success('核实审批状态已刷新');
     } catch (error) {
-      message.error(error instanceof Error ? error.message : '核实审批刷新失败');
+      if (!isCancelled(error)) {
+        message.error(error instanceof Error ? error.message : '核实审批刷新失败');
+      }
     } finally {
       setRefreshing(false);
     }
@@ -188,7 +200,9 @@ export function useVerificationApproval() {
       }
       return true;
     } catch (error) {
-      message.error(error instanceof Error ? error.message : '核实审批操作失败');
+      if (!isCancelled(error)) {
+        message.error(error instanceof Error ? error.message : '核实审批操作失败');
+      }
       return false;
     } finally {
       setUpdating(false);
@@ -217,4 +231,9 @@ export function useVerificationApproval() {
     closeAction: () => setPendingAction(null),
     confirmAction,
   };
+}
+
+function isCancelled(error: unknown) {
+  return error instanceof Error
+    && (error.name === 'AbortError' || error.name === 'CanceledError');
 }

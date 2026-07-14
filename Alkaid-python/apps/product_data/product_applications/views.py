@@ -76,4 +76,7 @@ def create_product_application(request: HttpRequest) -> JsonResponse:
         return api_error(str(exc), status=409)
     if created.created:
         transaction.on_commit(lambda: enqueue_job(created.job))
-    return api_response(serialize_job(created.job), status=202 if created.created else 200)
+    return api_response(
+        serialize_job(created.job, include_payload=True),
+        status=202 if created.created else 200,
+    )

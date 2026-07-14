@@ -38,7 +38,6 @@ REFRESH_VERIFICATION_TASK = EndpointSpec(
     response_model=VerificationTaskResponse,
     success_path="code",
     success_values=("0000",),
-    retry_mode=RetryMode.SAFE,
 )
 
 UPDATE_VERIFICATION_ITEM = EndpointSpec(

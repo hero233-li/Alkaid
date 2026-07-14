@@ -33,6 +33,7 @@
 | `GET` | `/health/ready/` | 数据库与静态运行配置就绪检查 |
 | `GET` | `/api/product-data/applications/config` | 获取产品申请表单配置 |
 | `POST` | `/api/product-data/applications` | 创建或幂等返回产品申请 Job |
+| `GET` | `/api/product-data/tools/application-links/config` | 获取申请链接环境、产品和路由配置 |
 | `POST` | `/api/product-data/tools/application-links/generate` | 创建申请链接生成 Job |
 | `GET` | `/api/product-data/business-access/config` | 获取业务准入环境配置 |
 | `POST` | `/api/product-data/business-access/search` | 创建业务准入查询 Job |
@@ -40,11 +41,20 @@
 | `POST` | `/api/product-data/business-access/{recordId}/notifications/query` | 创建通知查询 Job |
 | `POST` | `/api/product-data/business-access/{recordId}/notifications/{notificationId}/{push-new\|push-old}` | 创建通知推送 Job |
 | `GET` | `/api/product-data/verification-approval/config` | 获取核实审批搜索配置 |
-| `POST` | `/api/product-data/verification-approval/search` | 查询核实审批任务 |
-| `POST` | `/api/product-data/verification-approval/{taskId}/claim` | 领取核实任务 |
-| `POST` | `/api/product-data/verification-approval/{taskId}/return` | 退回核实任务 |
-| `POST` | `/api/product-data/verification-approval/{taskId}/items/{itemId}` | 更新核实项 |
-| `POST` | `/api/product-data/verification-approval/{taskId}/actions/{action}` | 执行核实审批快捷操作 |
+| `POST` | `/api/product-data/verification-approval/search` | 创建核实审批查询 Job |
+| `POST` | `/api/product-data/verification-approval/{taskId}/claim` | 创建领取核实任务 Job |
+| `POST` | `/api/product-data/verification-approval/{taskId}/return` | 创建退回核实任务 Job |
+| `POST` | `/api/product-data/verification-approval/{taskId}/refresh` | 创建刷新核实任务 Job |
+| `POST` | `/api/product-data/verification-approval/{taskId}/items/{itemId}` | 创建核实项更新 Job |
+| `POST` | `/api/product-data/verification-approval/{taskId}/actions/{action}` | 创建核实审批快捷操作 Job |
+| `GET` | `/api/product-data/tools/application-data/config` | 获取申请数据生成配置 |
+| `POST` | `/api/product-data/tools/application-data/generate` | 创建 Mock 申请数据生成 Job |
+| `GET` | `/api/product-data/tools/cards/config` | 获取卡状态配置 |
+| `POST` | `/api/product-data/tools/cards/search` | 创建客户卡片查询 Job |
+| `POST` | `/api/product-data/tools/cards/{cardNo}/actions/{action}` | 创建卡片操作 Job |
+| `GET` | `/api/product-data/tools/loans/config` | 获取贷款状态配置 |
+| `POST` | `/api/product-data/tools/loans/search` | 创建客户贷款查询 Job |
+| `POST` | `/api/product-data/tools/loans/{contractNo}/actions/{action}` | 创建贷款操作 Job |
 | `GET` | `/api/jobs/{jobId}` | 查询 Job 详情和已保存日志 |
 | `POST` | `/api/jobs/{jobId}/retry` | 重试失败、超时或已取消 Job |
 | `POST` | `/api/jobs/{jobId}/cancel` | 请求取消 Job |
@@ -154,9 +164,13 @@
 
 成功响应的 `data` 是 [Job 对象](#41-job-对象)。
 
-### 3.3 核实审批操作上下文
+### 3.3 核实审批异步操作与上下文
 
-`POST /api/product-data/verification-approval/search` 返回的完整任务对象是后续操作的上下文快照。
+除配置 GET 外，核实审批接口均返回 HTTP `202 + Job`（相同幂等键返回已有 Job 时为 `200`），
+不再同步返回任务对象。客户端应轮询 `/api/jobs/{jobId}`，在 Job 成功后从 `result.task` 读取任务；
+查询无结果时该字段为 `null`。这是一项响应协议变化，仓库外调用方必须同步适配。
+
+查询 Job 的 `result.task` 是后续操作的完整上下文快照。
 领取、退回、核实项完成/取消和快捷操作必须直接携带该对象，不应再次调用查询接口补充字段。
 
 领取和退回请求体：
@@ -175,7 +189,32 @@
 示例中的空 `context` 仅表示省略重复字段，实际请求必须传入完整任务对象。后端会校验
 `context.id` 与 URL 中的 `taskId` 一致，并将上下文继续传递给外部系统。
 
-## 4. Job 状态与对象
+刷新使用相同上下文结构：
+
+```json
+{"context": {"id": "VERIFY-...", "contractNo": "...", "items": []}}
+```
+
+真实外系统刷新路径当前按 `/verification/tasks/{taskId}/refresh` 对接；路径、完整 Context 要求、
+返回模型和无副作用语义必须在真实联调时确认。
+
+## 4. Mock 申请数据、卡状态和贷款状态
+
+三个工具均保持 `View → Job → RabbitMQ → Celery Task → Service → Mock Adapter` 的异步链路。
+申请数据生成支持单次 1–100000 条，返回姓名、身份证号、银行卡号、手机号、公司/个体名称、
+统一社会信用代码和组织机构代码。统一社会信用代码使用 17 位权重与 31 模校验字符算法。
+
+卡状态使用 `/tools/cards/*`，贷款状态使用独立的 `/tools/loans/*`，不再复用卡片 URL。
+查询结果分别位于 `result.cards`；mutation 的统一结果位于：
+
+```json
+{"actionResult": {"card": {}, "message": "处理成功"}}
+```
+
+当前 Adapter 只实现 Mock 模式；`EXTERNAL_SYSTEM_MODE=real` 时会明确报真实外系统尚未配置，
+不会静默返回 Mock 数据。卡/贷款 mutation 属于非幂等写操作，不能通过通用 Job retry 重放。
+
+## 5. Job 状态与对象
 
 产品申请创建后，其状态依次可能为：
 
@@ -186,7 +225,7 @@ pending / retrying → running → success | failed | cancelled | timed_out
 
 `success`、`failed`、`cancelled`、`timed_out` 为终态。`cancel_requested` 表示运行中的 worker 已收到取消意图，实际结束由 worker 处理。
 
-### 4.1 Job 对象
+### 5.1 Job 对象
 
 除外部调用明细外，创建、详情、重试、取消接口都返回下列对象：
 
@@ -198,7 +237,8 @@ pending / retrying → running → success | failed | cancelled | timed_out
 | `status` | string | Job 状态 |
 | `stage` | string | 当前执行阶段，例如 `created`、`validate`、`execute`、`completed` |
 | `progress` | integer | 进度，范围 0–100 |
-| `payload` / `result` | object | 原始提交内容（含服务端补充的申请方式）和执行结果 |
+| `result` | object | 执行结果 |
+| `payload` | object | 原始提交内容；普通 Job 轮询默认不返回，仅显式请求 `includePayload=true` 时返回 |
 | `executionConfigVersion` | integer | 创建该 Job 时冻结的产品执行配置版本 |
 | `errorMessage` | string or null | 失败或超时原因 |
 | `traceId` / `idempotencyKey` | string | 调用链与幂等标识 |
@@ -221,15 +261,20 @@ pending / retrying → running → success | failed | cancelled | timed_out
 }
 ```
 
-## 5. Job 接口
+## 6. Job 接口
 
 ### `GET /api/jobs/{jobId}`
 
-返回 Job 详情和所有当前保留的日志。Job 不存在时返回 `404`。
+返回 Job 详情和所有当前保留的日志，默认省略原始 `payload`。确需查看原始参数的受控详情页面可请求
+`GET /api/jobs/{jobId}?includePayload=true`。当前应用尚无细粒度鉴权，部署时必须由网关限制该参数。
+Job 不存在时返回 `404`。
 
 ### `POST /api/jobs/{jobId}/retry`
 
-只允许重试状态为 `failed`、`timed_out` 或 `cancelled` 的 Job。成功后 Job 状态变为 `retrying`、进度归零、执行次数加一，并重新投递任务。状态不允许重试时返回 `409`；Job 不存在时返回 `404`。
+只允许重试状态为 `failed`、`timed_out` 或 `cancelled` 且不包含未确认幂等外系统写操作的 Job。
+产品申请、申请链接、业务准入失效/推送、核实审批领取/退回/核实项更新/快捷操作禁止通用重试；
+查询和刷新等只读操作仍可重试。成功后 Job 状态变为 `retrying`、进度归零、执行次数加一，并重新投递任务。
+状态或重放策略不允许时返回 `409`；Job 不存在时返回 `404`。
 
 ### `POST /api/jobs/{jobId}/cancel`
 
@@ -283,10 +328,10 @@ data: {"status":"running","progress":40}
 - 连接空闲约 15 秒会发送 `: heartbeat` 注释。
 - 服务端不会因 Job 进入终态自动关闭连接。客户端收到终态状态后应主动断开，并在断线重连时使用最后一个 `log.id`。
 
-## 6. 客户端调用建议
+## 7. 客户端调用建议
 
 1. 先调用产品配置接口，再构建产品申请表单和选择项。
 2. 为每次“创建”操作生成并持久化幂等键；网络重试时复用同一键。
 3. 创建产品申请后保存返回的 `id`，优先订阅 SSE；不可用时用 `GET /api/jobs/{id}/logs?afterId=...` 增量轮询。
-4. 仅在 `failed`、`timed_out` 或 `cancelled` 后调用重试；取消 `running` Job 后持续观察直到进入终态。
+4. 仅对服务端允许重试的只读 Job 调用重试；外系统写 Job 失败后先核对外部结果。取消 `running` Job 后持续观察直到进入终态。
 5. 将 Job 详情和外部调用审计视为含敏感信息的运维数据，即使服务端已做遮蔽，也不要在不受控客户端中长期缓存。

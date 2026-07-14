@@ -58,14 +58,26 @@
 - 前端每次操作先获取 Job ID，再轮询 `/api/jobs/{id}`，最终从 `job.result.task` 更新页面。
 - 单项完成/取消后的自动刷新会创建第二个独立 refresh Job。
 
-### 2.4 明确未实施
+### 2.4 合并前审查整改
+
+- 核实审批 Task 已加入 `apps.product_data.tasks` 自动发现入口，并增加非 Eager 注册测试。
+- 四个功能统一使用带降级逻辑的请求 ID；内网 HTTP 环境没有 `crypto.randomUUID()` 时仍可提交。
+- 因真实外系统没有提供幂等契约，采用保守执行策略：四个外系统 Task 不在 Worker 丢失后自动重投；非幂等写 Job 禁止通用手动 retry。
+- 外系统刷新协议未确认前取消自动 HTTP 重试，仍完整回传 context。
+- 普通 Job 轮询默认隐藏 payload；只有显式 `includePayload=true` 才返回。
+- 核实审批轮询增加 150 秒客户端截止时间、`AbortSignal` 和组件卸载取消。
+- 删除核实审批 Service 中参数同源的恒真校验，保留 View 的路径/context 校验。
+- 增加前端 Vitest 运行时测试，以及 Celery 注册、外系统失败、mutation 审计、链接协议和重试限制测试。
+
+### 2.5 明确未实施
 
 - 未在外系统协议未确认前增加自定义幂等 Header。
 - 未新增申请步骤状态表或其他业务数据库表。
 - 未建设通用 token 登录/刷新框架。
 - 未删除申请链接顶层客户字段与 requestJson 的历史兼容。
-- 未修改共享 Job 查询的 payload 返回策略。
+- 未新增带独立权限控制的 Job 原始 payload 详情接口。
 - 未抽象新的 BaseTask、BaseService、Workflow 或 Handler 框架。
+- 未在本机启动真实 RabbitMQ + 独立 Worker 做进程强杀/重投验证。
 
 ## 三、修改文件
 
@@ -123,6 +135,20 @@
 - `docs/ai-reviews/application-link-review.md`：评审原文、逐条判断和申请链接实施记录。
 - `docs/ai-handoff/final-implementation-report.md`：本最终实施报告。
 
+### 3.5 合并前审查整改文件
+
+- `Alkaid-python/apps/product_data/tasks.py`：注册核实审批 Task 自动发现入口。
+- 四个 `apps/product_data/*/tasks.py`：关闭 Worker 丢失后的 Broker 自动重投。
+- `Alkaid-python/apps/jobs/services.py`：非幂等写 Job 禁止 retry，轮询序列化默认隐藏 payload。
+- `Alkaid-python/apps/jobs/views.py`：增加显式 `includePayload` 查询开关。
+- `Alkaid-python/apps/integrations/verification_approval/api.py`：刷新协议确认前取消自动 HTTP 重试。
+- `Alkaid-react/src/utils/requestId.ts`：共享请求 ID 兼容实现。
+- 四个前端业务 API 文件：统一使用共享工作流 Header。
+- 核实审批 API/Hook：增加轮询截止时间、取消和卸载清理。
+- `Alkaid-react/package.json`、`package-lock.json`、`vitest.config.ts`：引入前端运行时测试能力。
+- `docs/API.md`：同步异步响应、刷新、payload 和 retry 协议。
+- `docs/ai-reviews/final-implementation-review.md`：保留审查原文并记录逐条处置结论。
+
 ## 四、最终调用链
 
 ### 4.1 申请链接配置
@@ -177,6 +203,7 @@ ApplicationLinkGeneratorPage
 → JobHttpCallObserver → JobApiCall / JobLog
 → mark_job_success(result={task: ...}) 或 mark_job_failed
 → 前端轮询 GET /api/jobs/{jobId}
+→ 普通轮询不返回 payload
 → 读取 result.task
 → 更新页面
 ```
@@ -203,9 +230,9 @@ item-update Job 成功
 
 ## 六、测试结果
 
-- 申请链接定向测试：通过。
-- 核实审批/业务功能定向测试：`4 passed`。
-- 后端完整测试：`29 passed`。
+- 后端相关定向测试：`24 passed`。
+- 后端完整测试：`39 passed`。
+- 前端运行时测试：`4 files / 8 tests passed`。
 - Python Ruff：通过。
 - 架构依赖检查：通过。
 - 前端 TypeScript + Vite 生产构建：通过。
@@ -215,42 +242,29 @@ item-update Job 成功
 ## 七、已知风险
 
 1. 真实外系统刷新接口按 `/verification/tasks/{taskId}/refresh` 实现，路径、请求字段和返回 schema 仍需以真实接口文档或联调结果确认。
-2. 外系统两个申请链接写接口是否支持幂等尚未确认；当前只有入口 Job 级幂等，Worker 在第一步成功后异常仍可能造成外部重复创建。
+2. 外系统写接口是否支持幂等尚未确认。本次已禁止 Worker 丢失自动重投和非幂等 Job 手动 retry，避免不受控重复写；代价是外系统成功而本地尚未落成功状态时需要人工核对，申请链接两阶段调用不能安全自动续跑。
 3. 申请链接和核实审批真实 token 当前来自静态环境变量；登录、过期、刷新及响应更新 token 的契约尚未提供。
-4. 通用 Job 详情仍可能返回完整 payload；真实客户数据上线前需确认鉴权，以及列表、轮询、详情的最小字段策略。
+4. 普通 Job 轮询已默认隐藏 payload，但 `includePayload=true` 仍可获取；真实客户数据上线前需确认该显式详情能力的鉴权，必要时拆成独立权限接口。
 5. 顶层客户字段与 requestJson 仍是双来源兼容模型，需在真实外部请求 schema 和旧任务保留期明确后收敛。
 6. 合作项目和首贷续贷仍由申请链接前端本地维护，权威数据源尚未确定。
-7. 生产/内网部署需要 RabbitMQ 可用，并在发布后重启 Celery Worker 以注册 `execute_verification_approval`；真实模式不会使用本地同步兜底。
-8. 当前无法完成 GitHub 发布前置校验：本机未安装 `gh`，且当前沙箱内访问 `github.com` 的 DNS 检查失败。
+7. 生产/内网部署需要 RabbitMQ 可用，并在发布后重启 Celery Worker 以加载新增 Task；自动发现注册已有非 Eager 测试，但真实 Broker 消费和 Worker 强杀场景尚未在本机验证。
 
 ## 八、Git diff 摘要
 
-生成报告前的工作区统计：
+本轮合并前审查整改的工作区统计（未跟踪新增文件不计入 `git diff --stat`）：
 
 ```text
 当前分支：agent/job-and-application-link-refactor
-跟踪文件：38 files changed
-跟踪文件增删：849 insertions(+), 371 deletions(-)
-新增实现/测试/评审文件：3 个
-  - verification_approval/tasks.py：67 行
-  - test_application_link_integration.py：123 行
-  - application-link-review.md：854 行
-本报告：新增文件
+跟踪文件：`26 files changed, 1405 insertions(+), 100 deletions(-)`（统计时不含未跟踪新增文件）。
+未跟踪新增文件：8 个，包括请求 ID 工具、5 个前端/后端测试文件、Vitest 配置和审查报告。
 ```
 
-按实现域拆分的跟踪文件统计：
-
-```text
-申请链接：19 files changed, 331 insertions(+), 164 deletions(-)
-核实审批及公共配置：19 files changed, 518 insertions(+), 207 deletions(-)
-```
-
-本次差异没有 migration，没有依赖锁文件变化，也没有生成文件进入 Git 状态。
+本次差异没有 migration；新增前端测试依赖，因此 `package.json` 与 `package-lock.json` 均有变化。生产构建产物未进入 Git 状态。
 
 ## 九、GitHub 发布状态
 
 - 远端：`git@github.com:hero233-li/Alkaid.git`
 - 分支：`agent/job-and-application-link-refactor`
-- 当前状态：尚未提交、尚未推送。
-- 阻塞原因：GitHub 发布流程要求的 `gh` CLI 未安装；同时当前受限网络环境无法解析 `github.com`。
-- 后续动作：安装并登录 `gh` 后，复核本报告和完整 diff，显式暂存本报告列出的文件，提交、推送当前分支并创建草稿 PR。
+- 基线状态：当前 `HEAD`（`0674ad9`）已与 `origin/agent/job-and-application-link-refactor` 对齐。
+- 本轮审查整改状态：仍为本地未提交、未推送差异。
+- 后续动作：复核本报告和完整 diff 后，显式暂存本轮文件、提交并推送当前分支。

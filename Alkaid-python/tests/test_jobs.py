@@ -6,6 +6,7 @@ from django.utils import timezone
 from apps.jobs.http import sanitize
 from apps.jobs.models import JobStatus
 from apps.jobs.services import (
+    InvalidJobTransition,
     JobConflict,
     create_job,
     mark_job_failed,
@@ -13,13 +14,14 @@ from apps.jobs.services import (
     mark_job_timed_out,
     reconcile_expired_jobs,
     request_job_cancel,
+    request_job_retry,
     resolve_job_identifiers,
 )
 
 
-def _create_job(*, key: str = "key-1"):
+def _create_job(*, key: str = "key-1", kind: str = "test"):
     return create_job(
-        kind="test",
+        kind=kind,
         name="测试任务",
         product="product-a",
         payload={"value": 1},
@@ -102,6 +104,63 @@ def test_late_worker_result_does_not_overwrite_terminal_timeout() -> None:
 
     job.refresh_from_db()
     assert job.status == JobStatus.TIMED_OUT
+
+
+@pytest.mark.django_db
+def test_non_idempotent_external_write_job_cannot_be_retried() -> None:
+    job = _create_job(key="write", kind="verification_approval.action")
+    mark_job_failed(job.id, "外系统结果未知")
+
+    with pytest.raises(InvalidJobTransition, match="禁止重试"):
+        request_job_retry(job.id)
+
+
+@pytest.mark.django_db
+def test_safe_query_job_can_still_be_retried() -> None:
+    job = _create_job(key="query", kind="verification_approval.search")
+    mark_job_failed(job.id, "查询失败")
+
+    retried = request_job_retry(job.id)
+
+    assert retried.status == JobStatus.RETRYING
+    assert retried.attempt_count == 2
+
+
+def test_external_operation_tasks_do_not_redeliver_after_worker_loss() -> None:
+    from apps.product_data.application_data.tasks import execute_application_data_task
+    from apps.product_data.application_links.tasks import execute_application_link
+    from apps.product_data.business_access.tasks import execute_business_access_task
+    from apps.product_data.card_status.tasks import execute_card_status_task
+    from apps.product_data.loan_status.tasks import execute_loan_status_task
+    from apps.product_data.product_applications.tasks import execute_product_application
+    from apps.product_data.verification_approval.tasks import (
+        execute_verification_approval_task,
+    )
+
+    tasks = (
+        execute_product_application,
+        execute_application_link,
+        execute_business_access_task,
+        execute_verification_approval_task,
+        execute_application_data_task,
+        execute_card_status_task,
+        execute_loan_status_task,
+    )
+    assert all(task.acks_late is False for task in tasks)
+    assert all(task.reject_on_worker_lost is False for task in tasks)
+
+
+@pytest.mark.django_db
+def test_job_polling_omits_payload_unless_explicitly_requested(client) -> None:
+    job = _create_job(key="payload-visibility")
+
+    polling = client.get(f"/api/jobs/{job.id}")
+    detail = client.get(f"/api/jobs/{job.id}?includePayload=true")
+
+    assert polling.status_code == 200
+    assert "payload" not in polling.json()["data"]
+    assert detail.status_code == 200
+    assert detail.json()["data"]["payload"] == {"value": 1}
 
 
 def test_http_audit_sanitizer_masks_nested_sensitive_values() -> None:

@@ -1,6 +1,7 @@
 import type { ApiResponse } from '../../../types';
 import { apiClient } from '../../../api/client';
 import { terminalBusinessAccessJobStatuses } from '../model/jobModel';
+import { createWorkflowHeaders } from '../../../utils/requestId';
 import type {
   BusinessAccessJobDetail,
   BusinessAccessJobSubmission,
@@ -30,12 +31,8 @@ export async function getBusinessAccessConfig() {
 }
 
 function workflowRequestConfig() {
-  const requestId = crypto.randomUUID();
   return {
-    headers: {
-      'X-Idempotency-Key': requestId,
-      'X-Trace-ID': requestId.split('-').join(''),
-    },
+    headers: createWorkflowHeaders(),
     showGlobalProgress: false,
     useResponseDelay: false,
   };

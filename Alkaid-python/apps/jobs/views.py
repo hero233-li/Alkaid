@@ -31,7 +31,8 @@ def job_detail(request: HttpRequest, job_id: int) -> JsonResponse:
     job = _get_job(job_id)
     if job is None:
         return api_error("Job 不存在", status=404)
-    return api_response(serialize_job(job))
+    include_payload = request.GET.get("includePayload", "").lower() in {"1", "true", "yes"}
+    return api_response(serialize_job(job, include_payload=include_payload))
 
 
 @csrf_exempt
@@ -44,7 +45,7 @@ def retry_job(request: HttpRequest, job_id: int) -> JsonResponse:
     except InvalidJobTransition as exc:
         return api_error(str(exc), status=409)
     transaction.on_commit(lambda: enqueue_job(job))
-    return api_response(serialize_job(job))
+    return api_response(serialize_job(job, include_payload=True))
 
 
 @csrf_exempt
@@ -65,7 +66,7 @@ def cancel_job(request: HttpRequest, job_id: int) -> JsonResponse:
                 step="cancel_requested",
                 celery_task_id=job.celery_task_id,
             )
-    return api_response(serialize_job(job))
+    return api_response(serialize_job(job, include_payload=True))
 
 
 @require_GET

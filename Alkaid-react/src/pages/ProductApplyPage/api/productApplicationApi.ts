@@ -1,5 +1,6 @@
 import type { ApiResponse } from '../../../types';
 import { apiClient } from '../../../api/client';
+import { createWorkflowHeaders } from '../../../utils/requestId';
 import type { ProductApplicationResult, ProductApplicationSubmission } from '../model/types';
 
 export async function getProductApplicationConfigDto(): Promise<unknown> {
@@ -11,15 +12,11 @@ export async function getProductApplicationConfigDto(): Promise<unknown> {
 }
 
 export async function executeProductApplication(payload: ProductApplicationSubmission) {
-  const requestId = crypto.randomUUID();
   const { data } = await apiClient.post<ApiResponse<ProductApplicationResult>>(
     '/product-data/applications',
     payload,
     {
-      headers: {
-        'X-Idempotency-Key': requestId,
-        'X-Trace-ID': requestId.split('-').join(''),
-      },
+      headers: createWorkflowHeaders(),
     },
   );
   if (!data.ok) {

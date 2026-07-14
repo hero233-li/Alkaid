@@ -22,8 +22,9 @@ VERIFICATION_APPROVAL_KIND_PREFIX = "verification_approval."
 @shared_task(
     bind=True,
     name="apps.product_data.verification_approval.tasks.execute_verification_approval",
-    acks_late=True,
-    reject_on_worker_lost=True,
+    # 领取、退回和提交等写操作没有外系统幂等契约，禁止 Worker 丢失重放。
+    acks_late=False,
+    reject_on_worker_lost=False,
     soft_time_limit=settings.VERIFICATION_APPROVAL_TIMEOUT_SECONDS,
     time_limit=settings.VERIFICATION_APPROVAL_TIMEOUT_SECONDS + 10,
 )

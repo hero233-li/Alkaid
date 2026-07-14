@@ -25,6 +25,18 @@ class CreatedJob:
 
 
 MAX_REQUEST_IDENTIFIER_LENGTH = 128
+NON_RETRYABLE_JOB_KINDS = {
+    "product_application",
+    "application_link_generation",
+    "business_access.invalidate",
+    "business_access.push",
+    "verification_approval.claim",
+    "verification_approval.return",
+    "verification_approval.item-update",
+    "verification_approval.action",
+    "card_status.action",
+    "loan_status.action",
+}
 
 
 def resolve_job_identifiers(
@@ -283,6 +295,10 @@ def request_job_retry(job_id: int) -> Job:
         job = Job.objects.select_for_update().get(id=job_id)
         if job.status not in {JobStatus.FAILED, JobStatus.TIMED_OUT, JobStatus.CANCELLED}:
             raise InvalidJobTransition("当前状态不允许重试")
+        if job.kind in NON_RETRYABLE_JOB_KINDS:
+            raise InvalidJobTransition(
+                "该任务包含未确认幂等能力的外系统写操作，禁止重试；请先核对外系统结果"
+            )
         job.status = JobStatus.RETRYING
         job.stage = "queued"
         job.progress = 0
@@ -421,7 +437,12 @@ def serialize_log(log: JobLog) -> dict[str, Any]:
     }
 
 
-def serialize_job(job: Job, *, include_logs: bool = True) -> dict[str, Any]:
+def serialize_job(
+    job: Job,
+    *,
+    include_logs: bool = True,
+    include_payload: bool = False,
+) -> dict[str, Any]:
     data: dict[str, Any] = {
         "id": job.id,
         "name": job.name,
@@ -430,7 +451,6 @@ def serialize_job(job: Job, *, include_logs: bool = True) -> dict[str, Any]:
         "status": job.status,
         "stage": job.stage,
         "progress": job.progress,
-        "payload": job.payload,
         "result": job.result,
         "executionConfigVersion": job.execution_config_version,
         "errorMessage": job.error_message or None,
@@ -443,4 +463,6 @@ def serialize_job(job: Job, *, include_logs: bool = True) -> dict[str, Any]:
     }
     if include_logs:
         data["logs"] = [serialize_log(log) for log in job.logs.all()]
+    if include_payload:
+        data["payload"] = job.payload
     return data

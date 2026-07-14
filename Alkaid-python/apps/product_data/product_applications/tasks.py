@@ -25,8 +25,9 @@ from apps.product_data.product_applications.services import (
     bind=True,
     # 保持旧名称，避免发布时遗留在消息队列中的产品申请任务无法消费。
     name="apps.product_data.tasks.execute_product_application",
-    acks_late=True,
-    reject_on_worker_lost=True,
+    # 外系统写操作未确认幂等能力：消息领取即确认，Worker 丢失时禁止自动重放。
+    acks_late=False,
+    reject_on_worker_lost=False,
     soft_time_limit=settings.PRODUCT_APPLICATION_TIMEOUT_SECONDS,
     time_limit=settings.PRODUCT_APPLICATION_TIMEOUT_SECONDS + 10,
 )

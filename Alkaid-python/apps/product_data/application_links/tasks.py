@@ -32,8 +32,9 @@ logger = logging.getLogger(__name__)
 @shared_task(
     bind=True,
     name="apps.product_data.application_links.tasks.execute_application_link",
-    acks_late=True,
-    reject_on_worker_lost=True,
+    # 两步外系统写操作无法安全重放，避免 Worker 丢失后重复创建申请。
+    acks_late=False,
+    reject_on_worker_lost=False,
     soft_time_limit=settings.APPLICATION_LINK_TIMEOUT_SECONDS,
     time_limit=settings.APPLICATION_LINK_TIMEOUT_SECONDS + 10,
 )

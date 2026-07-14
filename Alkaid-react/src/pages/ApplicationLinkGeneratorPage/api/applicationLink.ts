@@ -1,5 +1,6 @@
 import { applicationLinkClient } from './client';
 import { terminalApplicationLinkJobStatuses } from '../model/jobModel';
+import { createWorkflowHeaders } from '../../../utils/requestId';
 import type {
   ApplicationLinkApiResponse,
   ApplicationLinkBackendConfig,
@@ -24,10 +25,9 @@ export async function getApplicationLinkConfig() {
 }
 
 function workflowConfig() {
-  const id = crypto.randomUUID();
   return {
     ...requestConfig,
-    headers: { 'X-Idempotency-Key': id, 'X-Trace-ID': id.split('-').join('') },
+    headers: createWorkflowHeaders(),
   };
 }
 

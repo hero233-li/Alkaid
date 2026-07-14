@@ -1,5 +1,6 @@
 import type { ApiResponse } from '../../../types';
 import { apiClient } from '../../../api/client';
+import { createWorkflowHeaders } from '../../../utils/requestId';
 import type {
   VerificationApprovalConfig,
   VerificationItemStatus,
@@ -23,13 +24,9 @@ function unwrap<T>(response: ApiResponse<T>, fallback: string) {
 }
 
 function workflowRequestConfig() {
-  const requestId = crypto.randomUUID();
   return {
     ...requestConfig,
-    headers: {
-      'X-Idempotency-Key': requestId,
-      'X-Trace-ID': requestId.split('-').join(''),
-    },
+    headers: createWorkflowHeaders(),
   };
 }
 
@@ -102,10 +99,10 @@ export async function submitVerificationAction(
   return unwrap(data, '提交核实审批操作失败');
 }
 
-export async function getVerificationJob(id: number) {
+export async function getVerificationJob(id: number, signal?: AbortSignal) {
   const { data } = await apiClient.get<ApiResponse<VerificationJobDetail>>(
     `/jobs/${id}`,
-    requestConfig,
+    { ...requestConfig, signal },
   );
   return unwrap(data, '获取核实审批 Job 进度失败');
 }
@@ -115,14 +112,42 @@ const terminalStatuses = new Set(['success', 'failed', 'cancelled', 'timed_out']
 export async function pollVerificationJob(
   id: number,
   onProgress: (detail: VerificationJobDetail) => void,
+  options: { signal?: AbortSignal; timeoutMs?: number } = {},
 ) {
+  const deadline = Date.now() + (options.timeoutMs ?? 150_000);
   while (true) {
-    const detail = await getVerificationJob(id);
+    if (options.signal?.aborted) throw abortError();
+    if (Date.now() >= deadline) throw new Error('核实审批 Job 轮询超时，请稍后查询任务状态');
+    const detail = await getVerificationJob(id, options.signal);
     onProgress(detail);
     if (detail.status === 'success') return detail;
     if (terminalStatuses.has(detail.status)) {
       throw new Error(detail.errorMessage || `核实审批 Job 执行失败：${detail.status}`);
     }
-    await new Promise((resolve) => window.setTimeout(resolve, 500));
+    await waitForNextPoll(500, options.signal);
   }
+}
+
+function abortError() {
+  const error = new Error('核实审批 Job 轮询已取消');
+  error.name = 'AbortError';
+  return error;
+}
+
+function waitForNextPoll(delayMs: number, signal?: AbortSignal) {
+  return new Promise<void>((resolve, reject) => {
+    if (signal?.aborted) {
+      reject(abortError());
+      return;
+    }
+    const onAbort = () => {
+      window.clearTimeout(timer);
+      reject(abortError());
+    };
+    const timer = window.setTimeout(() => {
+      signal?.removeEventListener('abort', onAbort);
+      resolve();
+    }, delayMs);
+    signal?.addEventListener('abort', onAbort, { once: true });
+  });
 }

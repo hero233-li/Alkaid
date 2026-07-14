@@ -22,8 +22,9 @@ BUSINESS_ACCESS_KIND_PREFIX = "business_access."
 @shared_task(
     bind=True,
     name="apps.product_data.business_access.tasks.execute_business_access",
-    acks_late=True,
-    reject_on_worker_lost=True,
+    # 同一 Task 同时承载查询和写操作，按最保守的写操作语义禁止自动重放。
+    acks_late=False,
+    reject_on_worker_lost=False,
     soft_time_limit=settings.BUSINESS_ACCESS_TIMEOUT_SECONDS,
     time_limit=settings.BUSINESS_ACCESS_TIMEOUT_SECONDS + 10,
 )

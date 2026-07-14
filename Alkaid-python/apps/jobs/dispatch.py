@@ -73,4 +73,16 @@ def _task_for_kind(kind: str) -> Any:
         )
 
         return execute_verification_approval_task
+    if kind == "application_data.generate":
+        from apps.product_data.application_data.tasks import execute_application_data_task
+
+        return execute_application_data_task
+    if kind.startswith("card_status."):
+        from apps.product_data.card_status.tasks import execute_card_status_task
+
+        return execute_card_status_task
+    if kind.startswith("loan_status."):
+        from apps.product_data.loan_status.tasks import execute_loan_status_task
+
+        return execute_loan_status_task
     raise ValueError(f"不支持的任务类型：{kind}")

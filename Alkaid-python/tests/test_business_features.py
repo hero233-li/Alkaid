@@ -1,3 +1,4 @@
+import copy
 import json
 
 import pytest
@@ -120,7 +121,6 @@ def test_verification_approval_data_and_mutations_run_as_jobs(
     assert task["tellerNo"] == "T1027"
     assert task["organizationNo"] == "510001"
 
-    refresh_context = task
     item_job = _execute_job_request(
         client,
         django_capture_on_commit_callbacks,
@@ -130,6 +130,27 @@ def test_verification_approval_data_and_mutations_run_as_jobs(
     )
     task = item_job.result["task"]
     assert task["items"][0]["status"] == "completed"
+    refresh_context = copy.deepcopy(task)
+
+    cancel_item_job = _execute_job_request(
+        client,
+        django_capture_on_commit_callbacks,
+        f"/api/product-data/verification-approval/{task['id']}/items/identity",
+        key="verify-item-cancel",
+        body={"status": "pending", "context": task},
+    )
+    task = cancel_item_job.result["task"]
+    assert task["items"][0]["status"] == "pending"
+
+    supplement_job = _execute_job_request(
+        client,
+        django_capture_on_commit_callbacks,
+        f"/api/product-data/verification-approval/{task['id']}/actions/supplement",
+        key="verify-supplement",
+        body={"action": "supplement", "context": task},
+    )
+    task = supplement_job.result["task"]
+    assert task["taskStatus"] == "待补件"
 
     refresh_job = _execute_job_request(
         client,
@@ -140,7 +161,8 @@ def test_verification_approval_data_and_mutations_run_as_jobs(
     )
     task = refresh_job.result["task"]
     assert task["ownershipStatus"] == "claimed"
-    assert task["items"][0]["status"] == "completed"
+    assert refresh_job.payload["context"]["items"][0]["status"] == "completed"
+    assert task["items"][0]["status"] == "pending"
 
     complete_job = _execute_job_request(
         client,
@@ -151,6 +173,16 @@ def test_verification_approval_data_and_mutations_run_as_jobs(
     )
     task = complete_job.result["task"]
     assert all(value["status"] == "completed" for value in task["items"])
+
+    approval_submit_job = _execute_job_request(
+        client,
+        django_capture_on_commit_callbacks,
+        f"/api/product-data/verification-approval/{task['id']}/actions/approval-submit",
+        key="verify-approval-submit",
+        body={"action": "approval-submit", "context": task},
+    )
+    task = approval_submit_job.result["task"]
+    assert task["taskStatus"] == "审批已提交"
 
     submit_job = _execute_job_request(
         client,
