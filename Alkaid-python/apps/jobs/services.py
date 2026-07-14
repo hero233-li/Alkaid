@@ -37,6 +37,7 @@ NON_RETRYABLE_JOB_KINDS = {
     "card_status.action",
     "loan_status.action",
 }
+NON_CANCELLABLE_RUNNING_JOB_KINDS = NON_RETRYABLE_JOB_KINDS
 
 
 def resolve_job_identifiers(
@@ -329,6 +330,13 @@ def request_job_cancel(job_id: int) -> Job:
         job = Job.objects.select_for_update().get(id=job_id)
         if job.status in TERMINAL_JOB_STATUSES:
             return job
+        if (
+            job.status == JobStatus.RUNNING
+            and job.kind in NON_CANCELLABLE_RUNNING_JOB_KINDS
+        ):
+            raise InvalidJobTransition(
+                "该任务已进入未确认幂等能力的外系统写阶段，不能取消；请等待结果并核对外系统状态"
+            )
         if job.status in {JobStatus.PENDING, JobStatus.RETRYING}:
             job.status = JobStatus.CANCELLED
             job.stage = "cancelled"

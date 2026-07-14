@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { apiClient } from '../../../api/client';
-import { submitCardAction, submitCardSearch } from './cardStatus';
+import { pollCardJob, submitCardAction, submitCardSearch } from './cardStatus';
 
 describe('card status API', () => {
   afterEach(() => vi.restoreAllMocks());
@@ -22,5 +22,14 @@ describe('card status API', () => {
 
     expect(post.mock.calls[0][0]).toBe('/product-data/tools/cards/search');
     expect(post.mock.calls[1][0]).toBe('/product-data/tools/cards/6222%2001/actions/deposit');
+  });
+
+  it('stops polling when the page aborts', async () => {
+    const get = vi.spyOn(apiClient, 'get');
+    const controller = new AbortController();
+    controller.abort();
+    await expect(pollCardJob(1, vi.fn(), { signal: controller.signal }))
+      .rejects.toMatchObject({ name: 'AbortError' });
+    expect(get).not.toHaveBeenCalled();
   });
 });

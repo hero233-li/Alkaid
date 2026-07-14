@@ -48,4 +48,6 @@ class CardActionSubmission(CardPayload):
                 raise ValueError("资金操作需要金额和柜员号")
         if self.action == CardAction.TRANSFER and not self.target_card:
             raise ValueError("转账需要目标卡号")
+        if self.action == CardAction.TRANSFER and self.target_card == self.card_no:
+            raise ValueError("源卡与目标卡不能相同")
         return self

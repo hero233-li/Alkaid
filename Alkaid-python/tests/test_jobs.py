@@ -11,6 +11,7 @@ from apps.jobs.services import (
     create_job,
     mark_job_failed,
     mark_job_running,
+    mark_job_success,
     mark_job_timed_out,
     reconcile_expired_jobs,
     request_job_cancel,
@@ -116,6 +117,51 @@ def test_non_idempotent_external_write_job_cannot_be_retried() -> None:
 
 
 @pytest.mark.django_db
+def test_running_non_idempotent_write_rejects_cancel_and_keeps_external_success(client) -> None:
+    job = _create_job(key="write-cancel", kind="verification_approval.action")
+    mark_job_running(job.id, "external-call-in-flight")
+
+    response = client.post(f"/api/jobs/{job.id}/cancel")
+    assert response.status_code == 409
+    with pytest.raises(InvalidJobTransition, match="不能取消"):
+        request_job_cancel(job.id)
+
+    mark_job_success(job.id, {"externalWrite": "completed"})
+    job.refresh_from_db()
+    assert job.status == JobStatus.SUCCESS
+    assert job.result == {"externalWrite": "completed"}
+
+
+@pytest.mark.django_db
+def test_external_write_task_rejects_cancel_during_call_and_finishes_success(
+    client, monkeypatch
+) -> None:
+    from apps.product_data.verification_approval import tasks as verification_tasks
+
+    job = _create_job(key="write-cancel-task", kind="verification_approval.action")
+
+    def external_call(completing_job, operation):
+        del operation
+        response = client.post(f"/api/jobs/{completing_job.id}/cancel")
+        assert response.status_code == 409
+        return {"externalWrite": "completed"}
+
+    monkeypatch.setattr(
+        verification_tasks,
+        "execute_verification_approval",
+        external_call,
+    )
+    verification_tasks.execute_verification_approval_task.apply(
+        args=(job.id,),
+        throw=True,
+    )
+
+    job.refresh_from_db()
+    assert job.status == JobStatus.SUCCESS
+    assert job.result == {"externalWrite": "completed"}
+
+
+@pytest.mark.django_db
 def test_safe_query_job_can_still_be_retried() -> None:
     job = _create_job(key="query", kind="verification_approval.search")
     mark_job_failed(job.id, "查询失败")
@@ -151,16 +197,25 @@ def test_external_operation_tasks_do_not_redeliver_after_worker_loss() -> None:
 
 
 @pytest.mark.django_db
-def test_job_polling_omits_payload_unless_explicitly_requested(client) -> None:
+def test_job_payload_requires_staff_detail_endpoint(client, django_user_model) -> None:
     job = _create_job(key="payload-visibility")
 
     polling = client.get(f"/api/jobs/{job.id}")
     detail = client.get(f"/api/jobs/{job.id}?includePayload=true")
+    forbidden = client.get(f"/api/jobs/{job.id}/payload")
 
     assert polling.status_code == 200
     assert "payload" not in polling.json()["data"]
     assert detail.status_code == 200
-    assert detail.json()["data"]["payload"] == {"value": 1}
+    assert "payload" not in detail.json()["data"]
+    assert forbidden.status_code == 403
+
+    staff = django_user_model.objects.create_user(
+        username="job-auditor", password="test", is_staff=True
+    )
+    client.force_login(staff)
+    allowed = client.get(f"/api/jobs/{job.id}/payload")
+    assert allowed.json()["data"]["payload"] == {"value": 1}
 
 
 def test_http_audit_sanitizer_masks_nested_sensitive_values() -> None:

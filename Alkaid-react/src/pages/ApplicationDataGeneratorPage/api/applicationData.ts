@@ -1,7 +1,9 @@
 import { apiClient } from '../../../api/client';
 import { createWorkflowHeaders } from '../../../utils/requestId';
+import { pollJobUntilTerminal } from '../../../utils/jobPolling';
 import type {
   ApplicationDataApiResponse,
+  ApplicationDataConfig,
   ApplicationDataFormValues,
   ApplicationDataJob,
   ApplicationDataJobStatus,
@@ -23,6 +25,14 @@ function unwrap<T>(value: ApplicationDataApiResponse<T>, fallback: string) {
   return value.data;
 }
 
+export async function getApplicationDataConfig() {
+  const { data } = await apiClient.get<ApplicationDataApiResponse<ApplicationDataConfig>>(
+    '/product-data/tools/application-data/config',
+    requestConfig,
+  );
+  return unwrap(data, '获取申请数据配置失败');
+}
+
 export async function submitApplicationData(values: ApplicationDataFormValues) {
   const { data } = await apiClient.post<ApplicationDataApiResponse<Submission>>(
     '/product-data/tools/application-data/generate',
@@ -35,18 +45,21 @@ export async function submitApplicationData(values: ApplicationDataFormValues) {
 export async function pollApplicationData(
   id: number,
   onProgress: (job: ApplicationDataJob) => void,
+  options: { signal?: AbortSignal; timeoutMs?: number } = {},
 ) {
-  while (true) {
-    const { data } = await apiClient.get<ApplicationDataApiResponse<ApplicationDataJob>>(
-      `/jobs/${id}`,
-      requestConfig,
-    );
-    const job = unwrap(data, '获取申请数据 Job 失败');
-    onProgress(job);
-    if (job.status === 'success') return job;
-    if (terminal.has(job.status)) {
-      throw new Error(job.errorMessage || `生成失败：${job.status}`);
-    }
-    await new Promise((resolve) => window.setTimeout(resolve, 400));
-  }
+  return pollJobUntilTerminal({
+    fetchJob: async (signal) => {
+      const { data } = await apiClient.get<ApplicationDataApiResponse<ApplicationDataJob>>(
+        `/jobs/${id}`, { ...requestConfig, signal },
+      );
+      return unwrap(data, '获取申请数据 Job 失败');
+    },
+    onProgress,
+    terminalStatuses: terminal,
+    timeoutMessage: '申请数据 Job 轮询超时，请稍后查询任务状态',
+    cancelledMessage: '申请数据 Job 轮询已取消',
+    failureMessage: (job) => `生成失败：${job.status}`,
+    intervalMs: 400,
+    ...options,
+  });
 }

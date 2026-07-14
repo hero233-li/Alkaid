@@ -1,30 +1,40 @@
 from __future__ import annotations
 
 import copy
-import threading
 from datetime import date, timedelta
 from typing import Any
 
-from apps.integrations.application_data.generator import generate_application_record
+from django.db import transaction
+
+from apps.jobs.models import MockToolState
+from apps.mock_data.application_generator import (
+    birth_date_for_age,
+    generate_application_record,
+)
+
+NAMESPACE = "loan_status"
 
 
 class LoanMockStore:
-    def __init__(self) -> None:
-        self._lock = threading.RLock()
-        self._cards: dict[str, dict[str, Any]] = {}
-
     def reset(self) -> None:
-        with self._lock:
-            self._cards.clear()
+        MockToolState.objects.filter(namespace=NAMESPACE).delete()
 
     def search(self, environment: str, customer_no: str) -> list[dict[str, Any]]:
         sequence = _customer_sequence(customer_no)
-        with self._lock:
-            card = self._cards.get(customer_no)
-            if card is None:
+        with transaction.atomic():
+            state = (
+                MockToolState.objects.select_for_update()
+                .filter(namespace=NAMESPACE, key=customer_no)
+                .first()
+            )
+            if state is None:
                 card = _build_card(sequence, environment, customer_no)
-                self._cards[customer_no] = card
-            return [copy.deepcopy(card)]
+                state = MockToolState.objects.create(
+                    namespace=NAMESPACE,
+                    key=customer_no,
+                    payload=card,
+                )
+            return [copy.deepcopy(state.payload)]
 
     def apply_action(
         self,
@@ -32,8 +42,8 @@ class LoanMockStore:
         action: str,
         payload: dict[str, Any],
     ) -> dict[str, Any]:
-        with self._lock:
-            card, loan = self._find_loan(contract_no)
+        with transaction.atomic():
+            state, card, loan = self._find_loan(contract_no)
             amount = float(payload.get("amount") or 0)
             if action == "freeze":
                 loan["freezeStatus"] = "是"
@@ -58,7 +68,8 @@ class LoanMockStore:
                 self._repay(card, loan, payload.get("voucherNo"), amount)
             else:
                 raise ValueError("不支持的贷款状态操作")
-            self._cards[card["customerNo"]] = card
+            state.payload = card
+            state.save(update_fields=["payload", "updated_at"])
             labels = {
                 "freeze": "冻结",
                 "unfreeze": "解冻",
@@ -70,11 +81,19 @@ class LoanMockStore:
             }
             return {"card": copy.deepcopy(card), "message": f"{labels[action]}成功"}
 
-    def _find_loan(self, contract_no: str) -> tuple[dict[str, Any], dict[str, Any]]:
-        for card in self._cards.values():
+    def _find_loan(
+        self, contract_no: str
+    ) -> tuple[MockToolState, dict[str, Any], dict[str, Any]]:
+        states = list(
+            MockToolState.objects.select_for_update()
+            .filter(namespace=NAMESPACE)
+            .order_by("key")
+        )
+        for state in states:
+            card = copy.deepcopy(state.payload)
             for loan in card["loans"]:
                 if loan["contractNo"] == contract_no:
-                    return card, loan
+                    return state, card, loan
         raise ValueError("贷款合同不存在，请先查询")
 
     @staticmethod
@@ -106,8 +125,7 @@ def _build_card(sequence: int, environment: str, customer_no: str) -> dict[str, 
     generated = generate_application_record(
         sequence,
         environment=environment,
-        current_date=date.today(),
-        age=40,
+        birth_date=birth_date_for_age(date.today(), 40),
         gender="男" if sequence % 2 else "女",
         company_type="91",
     )

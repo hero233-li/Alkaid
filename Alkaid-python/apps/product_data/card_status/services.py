@@ -21,6 +21,7 @@ def execute_card_status(job: Job, operation: CardStatusOperation) -> dict[str, A
             submission.card_no,
             submission.action.value,
             amount=submission.amount,
+            target_card=submission.target_card,
         )
         return {"actionResult": result.model_dump(mode="json", by_alias=True, exclude_none=True)}
     raise ValueError(f"不支持的卡状态操作：{operation}")

@@ -17,7 +17,6 @@ export interface JobLogStreamResult {
 export async function getJobDetail(id: number) {
   const { data } = await apiClient.get<ApiResponse<JobDetail>>(
     `/jobs/${id}`,
-    { params: { includePayload: true } },
   );
   if (!data.ok) {
     throw new Error(data.message || '获取 Job 详情失败');

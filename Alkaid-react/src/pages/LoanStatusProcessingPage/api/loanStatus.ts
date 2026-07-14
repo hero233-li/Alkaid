@@ -1,5 +1,6 @@
 import { apiClient } from '../../../api/client';
 import { createWorkflowHeaders } from '../../../utils/requestId';
+import { pollJobUntilTerminal } from '../../../utils/jobPolling';
 import type {
   LoanAction,
   LoanActionValues,
@@ -48,15 +49,25 @@ export class LoanJobError extends Error {
   }
 }
 
-export async function pollLoanJob(id: number, onProgress: (job: LoanJob) => void) {
-  while (true) {
-    const { data } = await apiClient.get<LoanApiResponse<LoanJob>>(`/jobs/${id}`, requestConfig);
-    const job = unwrap(data, '获取 Job 失败');
-    onProgress(job);
-    if (job.status === 'success') return job;
-    if (terminal.has(job.status)) {
-      throw new LoanJobError(job.errorMessage || `Job ${job.status}`, job);
-    }
-    await new Promise((resolve) => window.setTimeout(resolve, 400));
-  }
+export async function pollLoanJob(
+  id: number,
+  onProgress: (job: LoanJob) => void,
+  options: { signal?: AbortSignal; timeoutMs?: number } = {},
+) {
+  return pollJobUntilTerminal({
+    fetchJob: async (signal) => {
+      const { data } = await apiClient.get<LoanApiResponse<LoanJob>>(
+        `/jobs/${id}`, { ...requestConfig, signal },
+      );
+      return unwrap(data, '获取 Job 失败');
+    },
+    onProgress,
+    terminalStatuses: terminal,
+    timeoutMessage: '贷款状态 Job 轮询超时，请稍后查询任务状态',
+    cancelledMessage: '贷款状态 Job 轮询已取消',
+    failureMessage: (job) => `Job ${job.status}`,
+    failureError: (job, message) => new LoanJobError(message, job),
+    intervalMs: 400,
+    ...options,
+  });
 }

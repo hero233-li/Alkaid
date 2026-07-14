@@ -8,6 +8,7 @@ from typing import Any
 
 from django.conf import settings
 from django.core.exceptions import ImproperlyConfigured
+from django.utils.module_loading import import_string
 
 from apps.integrations.application_link.api import CREATE_DYNAMIC_LINK, CREATE_SUN_CODE_LINK
 from apps.integrations.application_link.mock_transport import (
@@ -91,8 +92,15 @@ def _serialize_message(value: dict[str, Any]) -> str:
 
 
 def _configured_sign(message: str) -> str:
-    """Python owns the field; the real signing algorithm remains configurable."""
-    del message
+    """Resolve the configured signer without inventing an unconfirmed algorithm."""
+    if settings.EXTERNAL_SYSTEM_MODE == "real":
+        if not settings.APPLICATION_LINK_SIGNER:
+            raise ImproperlyConfigured("APPLICATION_LINK_SIGNER 未配置")
+        signer = import_string(settings.APPLICATION_LINK_SIGNER)
+        sign = signer(message)
+        if not isinstance(sign, str) or not sign:
+            raise ImproperlyConfigured("APPLICATION_LINK_SIGNER 必须返回非空字符串")
+        return sign
     sign = settings.APPLICATION_LINK_FORM_SIGN
     if settings.APPLICATION_LINK_SIGN_REQUIRED and not sign:
         raise ImproperlyConfigured("APPLICATION_LINK_FORM_SIGN 未配置")
@@ -102,6 +110,11 @@ def _configured_sign(message: str) -> str:
 def _create_client() -> HttpClient:
     if settings.EXTERNAL_SYSTEM_MODE == "mock":
         return _create_mock_client()
+    if not settings.APPLICATION_LINK_PROTOCOL_CONFIRMED:
+        raise ImproperlyConfigured(
+            "申请链接真实协议尚未确认；请完成签名、时间戳、路径和响应字段联调后设置 "
+            "APPLICATION_LINK_PROTOCOL_CONFIRMED=true"
+        )
     if settings.APPLICATION_LINK_BASE_URL:
         return HttpClient(
             HttpClientConfig(

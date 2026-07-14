@@ -26,13 +26,25 @@ class CardStatusAdapter:
         )
         return CARD_MOCK_STORE.search(environment, customer_no)
 
-    def apply_action(self, card_no: str, action: str, *, amount: float | None) -> CardActionResult:
+    def apply_action(
+        self,
+        card_no: str,
+        action: str,
+        *,
+        amount: float | None,
+        target_card: str | None = None,
+    ) -> CardActionResult:
         self._require_mock_mode()
         logger.info(
             "card_status_mock_action",
             extra={"job_id": self.job.id, "trace_id": self.job.trace_id, "action": action},
         )
-        return CARD_MOCK_STORE.apply_action(card_no, action, amount=amount)
+        return CARD_MOCK_STORE.apply_action(
+            card_no,
+            action,
+            amount=amount,
+            target_card=target_card,
+        )
 
     @staticmethod
     def _require_mock_mode() -> None:

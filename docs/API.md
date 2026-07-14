@@ -222,8 +222,10 @@
 ## 4. Mock 申请数据、卡状态和贷款状态
 
 三个工具均保持 `View → Job → RabbitMQ → Celery Task → Service → Mock Adapter` 的异步链路。
-申请数据生成支持单次 1–100000 条，返回姓名、身份证号、银行卡号、手机号、公司/个体名称、
-统一社会信用代码和组织机构代码。统一社会信用代码使用 17 位权重与 31 模校验字符算法。
+申请数据生成支持单次 1–1000 条，并受 `APPLICATION_DATA_MAX_RESULT_BYTES` 结果大小保护；
+`birthDate` 是身份证号生日段的权威值，后端会校验它与 `age/currentDate` 一致。接口返回姓名、
+身份证号、银行卡号、手机号、开卡柜员、公司/个体名称、统一社会信用代码和组织机构代码。
+统一社会信用代码使用 17 位权重与 31 模校验字符算法。
 
 卡状态使用 `/tools/cards/*`，贷款状态使用独立的 `/tools/loans/*`，不再复用卡片 URL。
 查询结果分别位于 `result.cards`；mutation 的统一结果位于：
@@ -233,7 +235,8 @@
 ```
 
 当前 Adapter 只实现 Mock 模式；`EXTERNAL_SYSTEM_MODE=real` 时会明确报真实外系统尚未配置，
-不会静默返回 Mock 数据。卡/贷款 mutation 属于非幂等写操作，不能通过通用 Job retry 重放。
+不会静默返回 Mock 数据。卡/贷款 Mock 状态保存在数据库共享表中，可跨 Celery Worker 读取。
+卡/贷款 mutation 属于非幂等写操作，不能通过通用 Job retry 重放。
 
 ## 5. Job 状态与对象
 
@@ -259,7 +262,7 @@ pending / retrying → running → success | failed | cancelled | timed_out
 | `stage` | string | 当前执行阶段，例如 `created`、`validate`、`execute`、`completed` |
 | `progress` | integer | 进度，范围 0–100 |
 | `result` | object | 执行结果 |
-| `payload` | object | 原始提交内容；普通 Job 轮询默认不返回，仅显式请求 `includePayload=true` 时返回 |
+| `payload` | object | 原始提交内容；普通 Job 对象不返回，仅 staff 权限详情接口返回 |
 | `executionConfigVersion` | integer | 创建该 Job 时冻结的产品执行配置版本 |
 | `errorMessage` | string or null | 失败或超时原因 |
 | `traceId` / `idempotencyKey` | string | 调用链与幂等标识 |
@@ -286,9 +289,14 @@ pending / retrying → running → success | failed | cancelled | timed_out
 
 ### `GET /api/jobs/{jobId}`
 
-返回 Job 详情和所有当前保留的日志，默认省略原始 `payload`。确需查看原始参数的受控详情页面可请求
-`GET /api/jobs/{jobId}?includePayload=true`。当前应用尚无细粒度鉴权，部署时必须由网关限制该参数。
+返回 Job 详情和所有当前保留的日志，始终省略原始 `payload`；`includePayload` 查询参数不再生效。
+重试和取消响应同样不返回 payload。
 Job 不存在时返回 `404`。
+
+### `GET /api/jobs/{jobId}/payload`
+
+返回 `{id, payload}`。只允许已认证且 `is_staff=true` 的用户访问；未认证或普通用户返回 `403`，
+Job 不存在返回 `404`。真实环境如需更细权限，应在该独立入口继续增加业务权限，而不是恢复公开查询参数。
 
 ### `POST /api/jobs/{jobId}/retry`
 
@@ -300,7 +308,8 @@ Job 不存在时返回 `404`。
 ### `POST /api/jobs/{jobId}/cancel`
 
 - `pending` 或 `retrying` 的 Job 会立即变为 `cancelled`；
-- `running` 的 Job 会变为 `cancel_requested`，worker 在安全检查点结束它；
+- `running` 的只读/可安全取消 Job 会变为 `cancel_requested`，worker 在安全检查点结束它；
+- `running` 的非幂等外系统写 Job 拒绝取消并返回 `409`，避免外系统已成功而本地误报取消；
 - 已终态的 Job 保持原状态，并仍返回 `200`。
 
 Job 不存在时返回 `404`。

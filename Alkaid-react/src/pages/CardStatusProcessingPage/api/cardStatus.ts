@@ -1,5 +1,6 @@
 import { apiClient } from '../../../api/client';
 import { createWorkflowHeaders } from '../../../utils/requestId';
+import { pollJobUntilTerminal } from '../../../utils/jobPolling';
 import type {
   CardAction,
   CardActionValues,
@@ -42,13 +43,24 @@ export async function submitCardAction(
   return unwrap(data, '提交卡操作失败');
 }
 
-export async function pollCardJob(id: number, onProgress: (job: CardJob) => void) {
-  while (true) {
-    const { data } = await apiClient.get<CardApiResponse<CardJob>>(`/jobs/${id}`, requestConfig);
-    const job = unwrap(data, '获取卡处理 Job 失败');
-    onProgress(job);
-    if (job.status === 'success') return job;
-    if (terminal.has(job.status)) throw new Error(job.errorMessage || `Job ${job.status}`);
-    await new Promise((resolve) => window.setTimeout(resolve, 400));
-  }
+export async function pollCardJob(
+  id: number,
+  onProgress: (job: CardJob) => void,
+  options: { signal?: AbortSignal; timeoutMs?: number } = {},
+) {
+  return pollJobUntilTerminal({
+    fetchJob: async (signal) => {
+      const { data } = await apiClient.get<CardApiResponse<CardJob>>(
+        `/jobs/${id}`, { ...requestConfig, signal },
+      );
+      return unwrap(data, '获取卡处理 Job 失败');
+    },
+    onProgress,
+    terminalStatuses: terminal,
+    timeoutMessage: '卡处理 Job 轮询超时，请稍后查询任务状态',
+    cancelledMessage: '卡处理 Job 轮询已取消',
+    failureMessage: (job) => `Job ${job.status}`,
+    intervalMs: 400,
+    ...options,
+  });
 }

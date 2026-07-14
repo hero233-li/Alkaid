@@ -1,6 +1,7 @@
 import type { ApiResponse } from '../../../types';
 import { apiClient } from '../../../api/client';
 import { createWorkflowHeaders } from '../../../utils/requestId';
+import { pollJobUntilTerminal } from '../../../utils/jobPolling';
 import type {
   VerificationApprovalConfig,
   VerificationItemStatus,
@@ -114,40 +115,13 @@ export async function pollVerificationJob(
   onProgress: (detail: VerificationJobDetail) => void,
   options: { signal?: AbortSignal; timeoutMs?: number } = {},
 ) {
-  const deadline = Date.now() + (options.timeoutMs ?? 150_000);
-  while (true) {
-    if (options.signal?.aborted) throw abortError();
-    if (Date.now() >= deadline) throw new Error('核实审批 Job 轮询超时，请稍后查询任务状态');
-    const detail = await getVerificationJob(id, options.signal);
-    onProgress(detail);
-    if (detail.status === 'success') return detail;
-    if (terminalStatuses.has(detail.status)) {
-      throw new Error(detail.errorMessage || `核实审批 Job 执行失败：${detail.status}`);
-    }
-    await waitForNextPoll(500, options.signal);
-  }
-}
-
-function abortError() {
-  const error = new Error('核实审批 Job 轮询已取消');
-  error.name = 'AbortError';
-  return error;
-}
-
-function waitForNextPoll(delayMs: number, signal?: AbortSignal) {
-  return new Promise<void>((resolve, reject) => {
-    if (signal?.aborted) {
-      reject(abortError());
-      return;
-    }
-    const onAbort = () => {
-      window.clearTimeout(timer);
-      reject(abortError());
-    };
-    const timer = window.setTimeout(() => {
-      signal?.removeEventListener('abort', onAbort);
-      resolve();
-    }, delayMs);
-    signal?.addEventListener('abort', onAbort, { once: true });
+  return pollJobUntilTerminal({
+    fetchJob: (signal) => getVerificationJob(id, signal),
+    onProgress,
+    terminalStatuses,
+    timeoutMessage: '核实审批 Job 轮询超时，请稍后查询任务状态',
+    cancelledMessage: '核实审批 Job 轮询已取消',
+    failureMessage: (detail) => `核实审批 Job 执行失败：${detail.status}`,
+    ...options,
   });
 }

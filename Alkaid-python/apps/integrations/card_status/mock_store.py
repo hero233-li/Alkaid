@@ -1,35 +1,40 @@
 from __future__ import annotations
 
 import hashlib
-import threading
 from datetime import date
 
-from apps.integrations.application_data.generator import generate_application_record
+from django.db import transaction
+
 from apps.integrations.card_status.models import CardActionResult, CardRecord
+from apps.jobs.models import MockToolState
+from apps.mock_data.application_generator import (
+    birth_date_for_age,
+    generate_application_record,
+)
+
+NAMESPACE = "card_status"
 
 
 class CardMockStore:
-    def __init__(self) -> None:
-        self._lock = threading.RLock()
-        self._cards: dict[str, CardRecord] = {}
-
     def reset(self) -> None:
-        with self._lock:
-            self._cards.clear()
+        MockToolState.objects.filter(namespace=NAMESPACE).delete()
 
     def search(self, environment: str, customer_no: str) -> tuple[CardRecord, ...]:
         sequence = _customer_sequence(customer_no)
         generated = generate_application_record(
             sequence,
             environment=environment,
-            current_date=date.today(),
-            age=40,
+            birth_date=birth_date_for_age(date.today(), 40),
             gender="男" if sequence % 2 else "女",
             company_type="91",
         )
-        with self._lock:
-            card = self._cards.get(generated.card_no)
-            if card is None:
+        with transaction.atomic():
+            state = (
+                MockToolState.objects.select_for_update()
+                .filter(namespace=NAMESPACE, key=generated.card_no)
+                .first()
+            )
+            if state is None:
                 card = CardRecord(
                     environment=environment,
                     customer_no=customer_no,
@@ -38,8 +43,12 @@ class CardMockStore:
                     balance=10_000.0,
                     status="正常",
                 )
-                self._cards[card.card_no] = card
-            return (card.model_copy(deep=True),)
+                state = MockToolState.objects.create(
+                    namespace=NAMESPACE,
+                    key=card.card_no,
+                    payload=card.model_dump(mode="json", by_alias=True),
+                )
+            return (CardRecord.model_validate(state.payload),)
 
     def apply_action(
         self,
@@ -47,28 +56,61 @@ class CardMockStore:
         action: str,
         *,
         amount: float | None,
+        target_card: str | None = None,
     ) -> CardActionResult:
-        with self._lock:
-            card = self._cards.get(card_no)
-            if card is None:
+        keys = [card_no]
+        if action == "transfer":
+            if not target_card:
+                raise ValueError("转账需要目标卡号")
+            if target_card == card_no:
+                raise ValueError("源卡与目标卡不能相同")
+            keys.append(target_card)
+
+        with transaction.atomic():
+            states = {
+                state.key: state
+                for state in MockToolState.objects.select_for_update()
+                .filter(namespace=NAMESPACE, key__in=sorted(keys))
+                .order_by("key")
+            }
+            source_state = states.get(card_no)
+            if source_state is None:
                 raise ValueError("卡号不存在，请先查询客户卡片")
-            balance = card.balance
+            source = CardRecord.model_validate(source_state.payload)
+            source_balance = source.balance
+            target_state = None
+
             if action == "deposit":
-                balance += _positive_amount(amount)
-            elif action in {"withdraw", "transfer"}:
+                source_balance += _positive_amount(amount)
+            elif action == "withdraw":
                 value = _positive_amount(amount)
-                if value > balance:
+                if value > source_balance:
                     raise ValueError("卡余额不足")
-                balance -= value
+                source_balance -= value
+            elif action == "transfer":
+                value = _positive_amount(amount)
+                if value > source_balance:
+                    raise ValueError("卡余额不足")
+                target_state = states.get(target_card or "")
+                if target_state is None:
+                    raise ValueError("目标卡不存在，请先查询目标客户卡片")
+                target = CardRecord.model_validate(target_state.payload)
+                source_balance -= value
+                target = target.model_copy(update={"balance": round(target.balance + value, 2)})
+                target_state.payload = target.model_dump(mode="json", by_alias=True)
+                target_state.save(update_fields=["payload", "updated_at"])
             elif action not in {"card-pin-reset", "login-password-reset"}:
                 raise ValueError("不支持的卡片操作")
-            updated = card.model_copy(update={"balance": round(balance, 2)})
-            self._cards[card_no] = updated
+
+            updated = source.model_copy(update={"balance": round(source_balance, 2)})
+            source_state.payload = updated.model_dump(mode="json", by_alias=True)
+            source_state.save(update_fields=["payload", "updated_at"])
+
             password = None
             if action in {"card-pin-reset", "login-password-reset"}:
-                password = str(int(hashlib.sha256(f"{card_no}:{action}".encode()).hexdigest(), 16))[
-                    -6:
-                ]
+                password = str(
+                    int(hashlib.sha256(f"{card_no}:{action}".encode()).hexdigest(), 16)
+                )[-6:]
             labels = {
                 "deposit": "存钱",
                 "withdraw": "取现",
@@ -77,7 +119,9 @@ class CardMockStore:
                 "login-password-reset": "登录密码重置",
             }
             return CardActionResult(
-                card=updated, message=f"{labels[action]}成功", password=password
+                card=updated,
+                message=f"{labels[action]}成功",
+                password=password,
             )
 
 

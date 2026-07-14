@@ -33,12 +33,15 @@ def normalize_submission(
     try:
         catalog = load_product_catalog()
         product = catalog.product(submission.product)
+    except ProductCatalogError as exc:
+        raise ApplicationLinkConfigurationError(str(exc)) from exc
+    try:
         environment = _environment_code(catalog, submission.environment)
         cooperation_project_id = _cooperation_project_id(
             catalog, submission.cooperationProjectId
         )
     except ProductCatalogError as exc:
-        raise ApplicationLinkConfigurationError("当前环境下没有该产品") from exc
+        raise ApplicationLinkConfigurationError(str(exc)) from exc
     return submission.model_copy(
         update={
             "product": product.code,

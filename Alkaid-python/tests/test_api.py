@@ -196,6 +196,22 @@ def test_application_link_config_uses_stable_catalog_codes(client) -> None:
 
 
 @pytest.mark.django_db
+def test_application_link_preserves_invalid_cooperation_project_error(client) -> None:
+    submission = _application_link_submission()
+    submission["cooperationProjectId"] = "UNKNOWN-PROJECT"
+
+    response = client.post(
+        "/api/product-data/tools/application-links/generate",
+        data=json.dumps(submission),
+        content_type="application/json",
+    )
+
+    assert response.status_code == 400
+    assert "请选择有效的合作项目" in response.json()["message"]
+    assert "没有该产品" not in response.json()["message"]
+
+
+@pytest.mark.django_db
 def test_dynamic_application_link_validates_fields_inside_request_json(
     client, django_capture_on_commit_callbacks
 ) -> None:
