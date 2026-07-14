@@ -1,270 +1,324 @@
-# 产品数据重构最终实施报告
+# `0674ad9` 到当前版本审查实施报告
 
-生成日期：2026-07-14  
-实施分支：`agent/job-and-application-link-refactor`
+生成日期：2026-07-15
 
-## 一、原需求
+基线版本：`0674ad999ecc6ae102a036ebd09510d0405df018`
 
-本阶段需求覆盖四个产品数据功能的调用链审查，并对确认合理的方案进行有限实施：
+当前版本：`4b6f698610fe7174621081fd5e0339664f843e58`
 
-1. 产品申请；
-2. 申请链接获取；
-3. 业务准入；
-4. 核实审批。
+当前分支：`agent/job-and-application-link-refactor`
 
-实际实施重点为申请链接和核实审批：
+原审查报告：`docs/ai-reviews/final-implementation-review.md`
 
-- 调查前端、View、Serializer/Schema、Task、Service、数据库模型、外系统调用和测试的真实链路；
-- 申请链接调用时能够观察真实接口链路，但不在普通终端日志中打印客户原始正文、完整产品配置或 token；
-- 移除 ApplicationLinkAdapter 对 ProductCatalog 的反向依赖；
-- 统一产品、环境稳定代码，兼容旧中文名称请求；
-- 将申请链接环境、产品、类别路由和额外必填字段改为后端单一来源；
-- 未知申请链接类别不得默认进入太阳码接口；
-- 增加外部协议、脱敏和架构依赖测试；
-- 核实审批查询结果提供手动刷新，刷新时整体提交后端返回的 context；
-- 单项“完成/取消”后自动刷新；
-- 最终将核实审批从同步外系统调用迁移为与另外三个功能一致的 Job + RabbitMQ + Celery 异步链路；
-- 保持现有 URL 和请求 Body 尽可能兼容，不进行无关抽象或数据库扩展。
+## 一、审查结论
 
-## 二、最终方案
-
-### 2.1 申请链接
-
-- 新增 `GET /api/product-data/tools/application-links/config`，从 ProductCatalog 返回环境 label/value、产品 label/value、routes 和 requiredFields。
-- 前端不再重复维护产品、环境及类别路由；合作项目和首贷续贷因缺少权威后端来源，暂时保留本地配置。
-- HTTP 边界将旧的“产品A”“环境1”等显示名称归一化为 `product-a`、`env-1` 等稳定代码。
-- 新 Job 的 product、payload 和 execution snapshot 均保存稳定代码。
-- Adapter 仅负责外部协议，不再导入 `apps.product_data`。
-- 类别路由显式匹配“太阳码”和“动态链接”，未知类别立即失败。
-- 保留 HttpClient 结构化日志、JobLog 和 JobApiCall 脱敏审计；新增不含客户正文和 token 的业务阶段日志。
-
-### 2.2 核实审批刷新
-
-- 新增内部刷新接口：`POST /api/product-data/verification-approval/{taskId}/refresh`。
-- 请求继续使用兼容结构：`{"context": 完整任务上下文}`。
-- 外系统适配路径暂定为 `POST /verification/tasks/{taskId}/refresh`。
-- 页面查询出任务后显示刷新按钮。
-- 单项完成或取消成功后，使用操作返回的最新 context 自动再提交 refresh Job。
-- 操作成功但自动刷新失败时保留操作结果，只提示刷新失败，不把原操作误报为失败。
-
-### 2.3 核实审批异步化
-
-- 配置 GET 保持同步，所有会访问外系统的业务操作改为异步 Job：search、claim、return、refresh、item-update、action。
-- View 完成参数校验、路径与 context 一致性校验、幂等键/trace ID 解析和 Job 创建。
-- Job kind 使用 `verification_approval.<operation>`。
-- 新增专属 Celery Task，支持排队超时、取消检查、进度、成功、失败和超时状态。
-- Job dispatcher 注册 `verification_approval.*`。
-- VerificationApprovalAdapter 改为接收 Job，并通过 JobHttpCallObserver 记录每次外系统调用。
-- 前端每次操作先获取 Job ID，再轮询 `/api/jobs/{id}`，最终从 `job.result.task` 更新页面。
-- 单项完成/取消后的自动刷新会创建第二个独立 refresh Job。
-
-### 2.4 合并前审查整改
-
-- 核实审批 Task 已加入 `apps.product_data.tasks` 自动发现入口，并增加非 Eager 注册测试。
-- 四个功能统一使用带降级逻辑的请求 ID；内网 HTTP 环境没有 `crypto.randomUUID()` 时仍可提交。
-- 因真实外系统没有提供幂等契约，采用保守执行策略：四个外系统 Task 不在 Worker 丢失后自动重投；非幂等写 Job 禁止通用手动 retry。
-- 外系统刷新协议未确认前取消自动 HTTP 重试，仍完整回传 context。
-- 普通 Job 轮询默认隐藏 payload；只有显式 `includePayload=true` 才返回。
-- 核实审批轮询增加 150 秒客户端截止时间、`AbortSignal` 和组件卸载取消。
-- 删除核实审批 Service 中参数同源的恒真校验，保留 View 的路径/context 校验。
-- 增加前端 Vitest 运行时测试，以及 Celery 注册、外系统失败、mutation 审计、链接协议和重试限制测试。
-
-### 2.5 明确未实施
-
-- 未在外系统协议未确认前增加自定义幂等 Header。
-- 未新增申请步骤状态表或其他业务数据库表。
-- 未建设通用 token 登录/刷新框架。
-- 未删除申请链接顶层客户字段与 requestJson 的历史兼容。
-- 未新增带独立权限控制的 Job 原始 payload 详情接口。
-- 未抽象新的 BaseTask、BaseService、Workflow 或 Handler 框架。
-- 未在本机启动真实 RabbitMQ + 独立 Worker 做进程强杀/重投验证。
-
-## 三、修改文件
-
-### 3.1 申请链接后端与目录
-
-- `Alkaid-python/apps/integrations/application_link/adapter.py`：删除业务目录依赖和原始大对象日志；显式类别路由。
-- `Alkaid-python/apps/product_data/application_links/schemas.py`：增加页面配置响应模型。
-- `Alkaid-python/apps/product_data/application_links/services.py`：稳定代码归一化、配置生成、路由解析和安全阶段日志。
-- `Alkaid-python/apps/product_data/application_links/tasks.py`：旧 Job 兼容归一化及失败日志。
-- `Alkaid-python/apps/product_data/application_links/urls.py`：注册配置接口。
-- `Alkaid-python/apps/product_data/application_links/views.py`：配置 View 和 Job 前归一化。
-- `Alkaid-python/apps/product_data/catalog.py`：校验产品及申请链接环境 code 引用。
-- `Alkaid-python/apps/product_data/configs/products/product_a.json`：申请链接环境改为稳定 code。
-- `Alkaid-python/apps/product_data/configs/products/product_b.json`：申请链接环境改为稳定 code。
-- `Alkaid-python/apps/product_data/configs/products/product_c.json`：申请链接环境改为稳定 code。
-
-### 3.2 核实审批后端与集成
-
-- `Alkaid-python/apps/product_data/verification_approval/tasks.py`：新增核实审批 Celery Task。
-- `Alkaid-python/apps/product_data/verification_approval/views.py`：业务接口改为创建异步 Job。
-- `Alkaid-python/apps/product_data/verification_approval/services.py`：按 Job operation 执行外系统操作。
-- `Alkaid-python/apps/product_data/verification_approval/schemas.py`：增加 operation 和 Job 执行载荷。
-- `Alkaid-python/apps/product_data/verification_approval/urls.py`：注册刷新接口。
-- `Alkaid-python/apps/integrations/verification_approval/adapter.py`：接入 Job 和 JobHttpCallObserver。
-- `Alkaid-python/apps/integrations/verification_approval/api.py`：定义外系统刷新 Endpoint。
-- `Alkaid-python/apps/integrations/verification_approval/mock_transport.py`：支持刷新协议和外部状态查询。
-- `Alkaid-python/apps/jobs/dispatch.py`：注册 `verification_approval.*` 任务分发。
-- `Alkaid-python/config/settings/base.py`：增加核实审批任务超时配置。
-- `Alkaid-python/.env.example`：增加 `VERIFICATION_APPROVAL_TIMEOUT_SECONDS` 示例。
-- `Alkaid-python/.env.server.example`：增加服务端超时配置示例。
-- `Alkaid-python/apps/product_data/README.md`：将核实审批执行方式更新为异步 Job。
-
-### 3.3 前端
-
-- `Alkaid-react/src/pages/ApplicationLinkGeneratorPage/api/applicationLink.ts`：获取后端申请链接配置。
-- `Alkaid-react/src/pages/ApplicationLinkGeneratorPage/config/applicationLinkConfig.ts`：删除重复路由配置。
-- `Alkaid-react/src/pages/ApplicationLinkGeneratorPage/hooks/useApplicationLinkForm.ts`：加载后端配置。
-- `Alkaid-react/src/pages/ApplicationLinkGeneratorPage/index.tsx`：配置加载和错误状态。
-- `Alkaid-react/src/pages/ApplicationLinkGeneratorPage/model/formModel.ts`：基于 routes 生成级联表单。
-- `Alkaid-react/src/pages/ApplicationLinkGeneratorPage/model/submission.ts`：提交稳定 code。
-- `Alkaid-react/src/pages/ApplicationLinkGeneratorPage/model/types.ts`：同步配置类型。
-- `Alkaid-react/src/pages/VerificationApprovalPage/api/verificationApproval.ts`：业务请求返回 Job，并增加 Job 轮询。
-- `Alkaid-react/src/pages/VerificationApprovalPage/hooks/useVerificationApproval.ts`：统一异步工作流、手动刷新和自动刷新。
-- `Alkaid-react/src/pages/VerificationApprovalPage/components/VerificationTaskPanel.tsx`：增加刷新按钮。
-- `Alkaid-react/src/pages/VerificationApprovalPage/components/VerificationWorkflowModal.tsx`：展示 Celery Job 真实进度。
-- `Alkaid-react/src/pages/VerificationApprovalPage/index.tsx`：接入异步活动状态。
-- `Alkaid-react/src/pages/VerificationApprovalPage/types.ts`：增加 Job、operation 和 activity 类型。
-
-### 3.4 测试、架构与文档
-
-- `Alkaid-python/scripts/check_architecture.py`：禁止 integrations 反向导入 product_data。
-- `Alkaid-python/tests/test_api.py`：验证申请链接配置、稳定代码、Job 快照和安全日志。
-- `Alkaid-python/tests/test_application_link_integration.py`：验证 URL、Header、Body、响应、业务错误和脱敏。
-- `Alkaid-python/tests/test_business_features.py`：验证核实审批全部操作通过 Job/Celery 执行及外部调用审计。
-- `docs/ai-reviews/application-link-review.md`：评审原文、逐条判断和申请链接实施记录。
-- `docs/ai-handoff/final-implementation-report.md`：本最终实施报告。
-
-### 3.5 合并前审查整改文件
-
-- `Alkaid-python/apps/product_data/tasks.py`：注册核实审批 Task 自动发现入口。
-- 四个 `apps/product_data/*/tasks.py`：关闭 Worker 丢失后的 Broker 自动重投。
-- `Alkaid-python/apps/jobs/services.py`：非幂等写 Job 禁止 retry，轮询序列化默认隐藏 payload。
-- `Alkaid-python/apps/jobs/views.py`：增加显式 `includePayload` 查询开关。
-- `Alkaid-python/apps/integrations/verification_approval/api.py`：刷新协议确认前取消自动 HTTP 重试。
-- `Alkaid-react/src/utils/requestId.ts`：共享请求 ID 兼容实现。
-- 四个前端业务 API 文件：统一使用共享工作流 Header。
-- 核实审批 API/Hook：增加轮询截止时间、取消和卸载清理。
-- `Alkaid-react/package.json`、`package-lock.json`、`vitest.config.ts`：引入前端运行时测试能力。
-- `docs/API.md`：同步异步响应、刷新、payload 和 retry 协议。
-- `docs/ai-reviews/final-implementation-review.md`：保留审查原文并记录逐条处置结论。
-
-## 四、最终调用链
-
-### 4.1 申请链接配置
+从指定基线到当前版本共有 2 个提交：
 
 ```text
-ApplicationLinkGeneratorPage
-→ GET /api/product-data/tools/application-links/config
-→ View
-→ ApplicationLink Service
-→ ProductCatalog
-→ reference_data.json + product_*.json
-→ label/value/routes/requiredFields
-→ 前端级联表单
+b1387a6 feat: add async mock data and status tools
+4b6f698 refactor: use one-call application link contract
 ```
 
-### 4.2 申请链接生成
+差异规模为：
 
 ```text
-前端提交稳定 product/environment code
-→ POST /api/product-data/tools/application-links/generate
-→ View + Schema
-→ 兼容旧 label/name 并归一化为 code
-→ 冻结 execution snapshot
-→ create_job
-→ RabbitMQ
-→ ApplicationLink Celery Task
-→ Service
-→ ApplicationLinkAdapter.create_application
-→ EndpointExecutor → HttpClient → 外系统 /applications
-→ ApplicationLinkAdapter.generate_links
-→ 外系统 /links/sun-code 或 /links/dynamic
-→ JobApiCall / JobLog 脱敏审计
-→ Job success
-→ 前端轮询并展示链接
+102 files changed, 4396 insertions(+), 871 deletions(-)
 ```
 
-### 4.3 核实审批
+原审查报告中的主要合并前问题已经完成整改或采取了保守风险缓解策略。当前验证全部通过，且本地 HEAD 与远端跟踪分支一致。
+
+但本次增量审查发现 4 个 P1 和 2 个 P2 新问题，主要集中在新增 Mock 数据/状态工具，而不是原核实审批整改本身。基于这些发现，建议：
+
+- 原审查整改代码可以保留；
+- 当前版本可以进入测试环境；
+- 新增 Mock 工具应先处理 P1 项，再作为稳定的多 Worker 联调工具使用；
+- 申请链接和核实审批接入真实外系统前，仍必须完成外部协议确认。
+
+## 二、新增审查发现
+
+### P1-1：10 万条申请数据一次性驻留内存、写入数据库并通过 Job 详情返回
+
+涉及文件：
+
+- `Alkaid-python/apps/product_data/application_data/schemas.py:22`
+- `Alkaid-python/apps/product_data/application_data/services.py:23-38`
+- `Alkaid-react/src/pages/ApplicationDataGeneratorPage/api/applicationData.ts:39-46`
+
+接口允许单个 Job 生成 100,000 条记录。Worker 先在 Python list 中构造全部记录，再把完整数组写入 `Job.result`；前端轮询到成功时又通过普通 Job 详情一次性下载完整结果。
+
+风险包括：
+
+- Worker 峰值内存明显上升；
+- 数据库 JSON 字段和事务写入体积过大；
+- Job 详情序列化、网络响应和浏览器状态再次复制大对象；
+- 接口没有批次、分页或导出文件边界，重复提交可形成资源耗尽。
+
+建议把大批量结果改为分批生成并写入文件或专用存储，Job.result 只保存摘要、计数和下载标识；在完成改造前下调单次上限，并增加后端总大小限制。
+
+### P1-2：卡/贷款 Mock 状态是进程内全局变量，与 Celery 多进程执行模型不兼容
+
+涉及文件：
+
+- `Alkaid-python/apps/integrations/card_status/mock_store.py:11-18`
+- `Alkaid-python/apps/integrations/loan_status/mock_store.py:11-18`
+
+卡和贷款状态保存在模块级 `CARD_MOCK_STORE` / `LOAN_MOCK_STORE` 的内存字典中。查询 Job 与操作 Job 是两次独立 Celery 投递，可能由不同 Worker 或不同 prefork 子进程执行。
+
+结果可能是：
 
 ```text
-前端查询/领取/退回/刷新/完成/取消/快捷操作
-→ 原业务 URL（Body 保持 context 结构）
-→ View 校验 Schema、路径、context、幂等键和 trace ID
-→ create_job(kind=verification_approval.<operation>)
-→ transaction.on_commit
-→ jobs.dispatch.enqueue_job
-→ RabbitMQ
-→ execute_verification_approval_task
-→ Job 状态与取消/超时检查
-→ Verification Service
-→ VerificationApprovalAdapter(Job)
-→ EndpointExecutor → HttpClient → 真实外系统
-→ JobHttpCallObserver → JobApiCall / JobLog
-→ mark_job_success(result={task: ...}) 或 mark_job_failed
-→ 前端轮询 GET /api/jobs/{jobId}
-→ 普通轮询不返回 payload
-→ 读取 result.task
-→ 更新页面
+查询 Job 在 Worker A 创建 Mock 状态
+→ 操作 Job 被 Worker B 消费
+→ Worker B 内存中没有该卡或合同
+→ 返回“请先查询”或“合同不存在”
 ```
 
-完成/取消后的自动刷新：
+当前测试使用 Eager/同进程执行，因此不能暴露该问题。建议 Mock 状态至少落入共享数据库或 Redis；如果明确只支持单进程开发模式，应在启动配置中强制单 Worker 并在文档和运行时校验中明确限制。
 
-```text
-item-update Job 成功
-→ 前端采用操作返回 task
-→ 自动创建 refresh Job
-→ 再次轮询
-→ 使用外系统最终 task 覆盖页面状态
-```
+### P1-3：卡转账校验了目标卡号，但执行时完全忽略目标卡
 
-## 五、数据库变化
+涉及文件：
 
-- 没有新增或修改 Django Model。
-- 没有新增 migration。
-- 申请链接和核实审批继续复用现有表：
-  - `Job`：持久化 payload、result、状态、进度、trace ID、幂等键和 execution snapshot；
-  - `JobLog`：任务阶段和失败记录；
-  - `JobApiCall`：外系统 URL、脱敏 Header/Body、响应、耗时及错误。
-- 核实审批从同步改为异步后会新增上述表中的运行数据，但不改变表结构。
+- `Alkaid-python/apps/product_data/card_status/schemas.py`
+- `Alkaid-python/apps/product_data/card_status/services.py:18-24`
+- `Alkaid-python/apps/integrations/card_status/mock_store.py:56-66`
 
-## 六、测试结果
+`CardActionSubmission` 要求转账时提供 `targetCard`，但 Service 调用 Adapter 时只传源卡、action 和 amount；Mock Store 将 transfer 与 withdraw 作为同一逻辑，仅扣减源卡余额，没有校验、创建或增加目标卡余额。
 
-- 后端相关定向测试：`24 passed`。
-- 后端完整测试：`39 passed`。
-- 前端运行时测试：`4 files / 8 tests passed`。
-- Python Ruff：通过。
-- 架构依赖检查：通过。
-- 前端 TypeScript + Vite 生产构建：通过。
-- `git diff --check`：通过。
-- 前端构建仍有既有 bundle 超过 500 kB 的提示，不影响构建成功。
+因此接口会返回“转账成功”，实际行为只是取现。建议把 `target_card` 贯穿 Service、Adapter 和 Store，并增加源卡/目标卡余额双向断言及目标卡不存在测试。
 
-## 七、已知风险
+### P1-4：三个新增异步页面重新引入无限轮询
 
-1. 真实外系统刷新接口按 `/verification/tasks/{taskId}/refresh` 实现，路径、请求字段和返回 schema 仍需以真实接口文档或联调结果确认。
-2. 外系统写接口是否支持幂等尚未确认。本次已禁止 Worker 丢失自动重投和非幂等 Job 手动 retry，避免不受控重复写；代价是外系统成功而本地尚未落成功状态时需要人工核对，申请链接两阶段调用不能安全自动续跑。
-3. 申请链接和核实审批真实 token 当前来自静态环境变量；登录、过期、刷新及响应更新 token 的契约尚未提供。
-4. 普通 Job 轮询已默认隐藏 payload，但 `includePayload=true` 仍可获取；真实客户数据上线前需确认该显式详情能力的鉴权，必要时拆成独立权限接口。
-5. 顶层客户字段与 requestJson 仍是双来源兼容模型，需在真实外部请求 schema 和旧任务保留期明确后收敛。
-6. 合作项目和首贷续贷仍由申请链接前端本地维护，权威数据源尚未确定。
-7. 生产/内网部署需要 RabbitMQ 可用，并在发布后重启 Celery Worker 以加载新增 Task；自动发现注册已有非 Eager 测试，但真实 Broker 消费和 Worker 强杀场景尚未在本机验证。
+涉及文件：
 
-## 八、Git diff 摘要
+- `Alkaid-react/src/pages/ApplicationDataGeneratorPage/api/applicationData.ts:35-51`
+- `Alkaid-react/src/pages/CardStatusProcessingPage/api/cardStatus.ts:45-53`
+- `Alkaid-react/src/pages/LoanStatusProcessingPage/api/loanStatus.ts:51-61`
 
-本轮合并前审查整改的工作区统计（未跟踪新增文件不计入 `git diff --stat`）：
+原审查对核实审批提出的 `while (true)` 风险已经通过 150 秒截止时间和 `AbortSignal` 解决，但本次新增的申请数据、卡状态、贷款状态轮询仍无限执行，页面卸载后也没有主动取消。
 
-```text
-当前分支：agent/job-and-application-link-refactor
-跟踪文件：`26 files changed, 1405 insertions(+), 100 deletions(-)`（统计时不含未跟踪新增文件）。
-未跟踪新增文件：8 个，包括请求 ID 工具、5 个前端/后端测试文件、Vitest 配置和审查报告。
-```
+如果 Job 长时间无法进入终态或组件已经卸载，浏览器仍会持续请求并尝试更新状态。建议复用已经验证的截止时间和取消模式；不必先抽象完整 Job Client，但至少保持行为一致。
 
-本次差异没有 migration；新增前端测试依赖，因此 `package.json` 与 `package-lock.json` 均有变化。生产构建产物未进入 Git 状态。
+### P2-1：`birthDate` 被接口接受并保存，但生成逻辑完全忽略
 
-## 九、GitHub 发布状态
+涉及文件：
 
-- 远端：`git@github.com:hero233-li/Alkaid.git`
-- 分支：`agent/job-and-application-link-refactor`
-- 基线状态：当前 `HEAD`（`0674ad9`）已与 `origin/agent/job-and-application-link-refactor` 对齐。
-- 本轮审查整改状态：仍为本地未提交、未推送差异。
-- 后续动作：复核本报告和完整 diff 后，显式暂存本轮文件、提交并推送当前分支。
+- `Alkaid-python/apps/product_data/application_data/schemas.py:16-20`
+- `Alkaid-python/apps/product_data/application_data/services.py:25-31`
+
+请求模型接受 `birthDate`，但身份证生日只由 `currentDate + age + sequence` 计算。调用方传入与 age 不一致的出生日期时不会报错，也不会影响结果。
+
+建议确定唯一权威字段：若 `birthDate` 是用户意图，应直接使用并校验 age；若只需要 age，应从协议和前端表单删除 `birthDate`，避免产生虚假的可配置项。
+
+### P2-2：申请数据配置新增了后端接口，但前端仍维护独立常量
+
+涉及文件：
+
+- `Alkaid-python/apps/product_data/application_data/services.py:41-49`
+- `Alkaid-react/src/pages/ApplicationDataGeneratorPage/config/applicationDataConfig.ts:1-10`
+
+后端已提供 environments、companyTypes 和 maxCount，前端仍硬编码同一组值，且 label 已出现差异：后端为“公司/个体”，前端为“91类型/92类型”。
+
+建议前端加载后端配置，仅保留页面默认值，避免以后环境、主体类型或数量上限再次漂移。
+
+## 三、原审查项实施状态
+
+### 3.1 总体统计
+
+| 优先级 | 已实施 | 部分实施/风险缓解 | 按建议不实施 | 合计 |
+| --- | ---: | ---: | ---: | ---: |
+| P0 | 2 | 1 | 0 | 3 |
+| P1 | 3 | 3 | 0 | 6 |
+| P2 | 2 | 0 | 2 | 4 |
+| 合计 | 7 | 4 | 2 | 13 |
+
+### 3.2 P0 实施情况
+
+#### P0-1：核实审批 Celery Task 自动发现
+
+状态：**已实施**。
+
+- `apps/product_data/tasks.py` 已导入并导出 `execute_verification_approval_task`。
+- `tests/test_runtime_mode.py` 增加非 Eager 的默认模块加载和任务注册验证。
+- 当前入口还注册了本次新增的申请数据、卡状态和贷款状态 Task。
+
+未完成项：尚未连接真实 RabbitMQ 启动独立 Worker 做端到端消费验证。
+
+#### P0-2：前端直接调用 `crypto.randomUUID()`
+
+状态：**已实施**。
+
+- 新增共享 `createRequestId()` / `createWorkflowHeaders()`。
+- 原生 `randomUUID` 不可用时降级到 `getRandomValues`，再降级到时间戳和伪随机值。
+- 产品申请、申请链接、业务准入、核实审批以及本次新增页面均改用共享实现。
+- 已有无 `crypto.randomUUID()` 环境的运行时测试。
+
+#### P0-3：外系统写操作重复执行
+
+状态：**部分实施，采用保守策略**。
+
+- 外系统 Task 已使用 `acks_late=False`、`reject_on_worker_lost=False`，Worker 丢失时不由 Broker 自动重放。
+- 产品申请、申请链接、业务准入 mutation、核实审批 mutation、卡状态和贷款状态 mutation 被列入通用 Job 禁止重试集合。
+- 核实审批 refresh 已取消 `RetryMode.SAFE`。
+- 申请链接从原来的“创建申请 + 生成链接”两次外部调用收敛为一次 link 调用，原两阶段部分成功问题已消除。
+
+仍未解决：外系统没有确认幂等协议。外部写成功但本地尚未保存成功状态时，系统只能人工核对，不能自动恢复，也不能保证 exactly-once。
+
+### 3.3 P1 实施情况
+
+#### P1-1：API 文档同步
+
+状态：**已实施**。
+
+`docs/API.md` 已补充核实审批异步 Job、刷新接口、申请链接配置、payload 策略、重试限制和当前一次调用的申请链接表单协议。
+
+仓库外调用方是否仍依赖旧同步响应无法通过本仓库确认。
+
+#### P1-2：核实审批刷新真实协议未确认
+
+状态：**部分实施**。
+
+- 完整 context 回传保留；
+- 外部刷新请求自动重试已取消；
+- 路径仍暂定为 `/verification/tasks/{taskId}/refresh`。
+
+真实路径、请求字段、响应 Schema 和无副作用属性仍待接口文档或联调确认。
+
+#### P1-3：危险失败链测试不足
+
+状态：**部分实施，自动化覆盖已补强**。
+
+新增覆盖包括：
+
+- Celery 自动发现；
+- 外系统 HTTP 和业务码失败；
+- mutation 失败审计；
+- 非幂等 Job retry 拒绝；
+- Job 轮询 payload 默认隐藏；
+- supplement、approval-submit 和核实项取消；
+- 核实审批外系统协议；
+- 申请链接太阳码/动态链接的一次调用 URL、五字段表单、响应映射、业务失败和字段冲突。
+
+仍缺真实 RabbitMQ、Worker 未注册、Worker 强杀、跨进程 Mock 状态和外系统成功后进程丢失测试。
+
+#### P1-4：前端运行时行为测试
+
+状态：**已实施原审查要求，但新增页面覆盖仍有限**。
+
+已引入 Vitest、Testing Library 和 jsdom。当前 7 个测试文件、11 个测试通过，覆盖原审查要求的关键行为。新增申请数据、卡状态和贷款状态 API 有基础测试，但未覆盖本报告第二节列出的跨进程状态、大结果和无限轮询风险。
+
+#### P1-5：Job 轮询暴露完整 payload
+
+状态：**部分实施**。
+
+- `GET /api/jobs/{id}` 默认不返回 payload。
+- 显式 `includePayload=true` 仍可返回。
+
+当前应用没有细粒度鉴权，真实客户数据上线前应把原始参数查看能力迁移到受权限控制的详情接口，不能只依赖查询参数和网关约定。
+
+#### P1-6：核实审批轮询无截止时间/取消
+
+状态：**已实施**。
+
+核实审批轮询已有 150 秒默认截止时间、`AbortSignal` 和组件卸载取消，取消不会误报为业务失败。新增页面没有沿用该行为，已单列为本报告 P1-4。
+
+### 3.4 P2 实施情况
+
+#### P2-1：抽取共享 Job Client/Hook
+
+状态：**按审查建议不实施**。当前仍保留各功能显式工作流。
+
+#### P2-2：Service 恒真 Context 校验
+
+状态：**已实施**。同源恒真校验已删除，URL 与 context 一致性继续由 View 校验。
+
+#### P2-3：抽取 BaseTask
+
+状态：**按审查建议不实施**。当前业务行为仍在变化，保留显式 Task 更容易审计。
+
+#### P2-4：GitHub 状态过期
+
+状态：**已修正**。当前本地 HEAD 与 `origin/agent/job-and-application-link-refactor` 均为 `4b6f698`，ahead/behind 为 `0/0`。
+
+## 四、两个提交的主要实施差异
+
+### 4.1 `b1387a6`：整改与异步 Mock/状态工具
+
+该提交主要完成：
+
+- 原最终审查报告的 Celery 注册、请求 ID、非幂等重试、payload 最小化、核实审批轮询取消和测试整改；
+- 新增申请数据生成 Job；
+- 新增卡状态查询与操作 Job；
+- 新增贷款状态查询与操作 Job；
+- 将新增 Task 接入 dispatcher、自动发现、超时配置和统一前端 API Client；
+- 增加后端协议/失败测试和前端运行时测试；
+- 更新 API 文档和实施记录。
+
+### 4.2 `4b6f698`：申请链接一次调用协议
+
+该提交主要完成：
+
+- 删除“先创建申请、再生成链接”的两阶段外部调用；
+- 每个申请链接 Job 只调用一次 `/links/sun-code` 或 `/links/dynamic`；
+- Python 组装并提交 `msg_id`、`sign`、`timestamp`、`REQ_MESSAGE`、`biz_content` 五字段表单；
+- `REQ_MESSAGE` 与 `biz_content` 使用同一序列化内容；
+- 外层 env/product/category/cooperationProjectId 成为权威路由字段，payload 冲突时拒绝执行；
+- 合作项目进入后端 reference data 并下发前端；
+- 增加两类请求契约样例、协议测试和 Windows 生命周期脚本改进。
+
+尚未闭环的申请链接真实协议：
+
+1. `sign` 当前只支持静态配置，真实算法或 Java/Jar SDK 尚未接入；
+2. timestamp 格式仍需真实接口确认；
+3. 两个真实路径、成功码和响应字段仍需联调确认；
+4. 内网 Java/Python SDK 或 Jar 不在当前仓库中，无法在本次审查中验证。
+
+## 五、版本与工作区状态
+
+生成报告前：
+
+- 本地 HEAD：`4b6f698`
+- 远端跟踪分支 HEAD：`4b6f698`
+- ahead/behind：`0/0`
+- 工作区：干净
+
+本报告写入后，本地只修改了本报告文件；业务代码仍与当前远端提交一致。
+
+## 六、验证结果
+
+在当前版本上实际执行：
+
+| 验证项 | 结果 |
+| --- | --- |
+| 后端完整测试 | `42 passed in 9.25s` |
+| Python Ruff | 通过 |
+| 架构依赖检查 | 通过 |
+| 前端 Vitest | `7 files / 11 tests passed` |
+| TypeScript + Vite 生产构建 | 通过 |
+| `git diff --check 0674ad9..HEAD` | 通过 |
+
+前端构建仍有单个 bundle 超过 500 kB 的告警，不影响构建成功。
+
+## 七、处置建议
+
+### 合并前建议处理
+
+1. 修复卡转账目标卡未参与执行的问题，并补完整行为测试。
+2. 为申请数据 100,000 条结果增加分批/文件化方案或先下调上限。
+3. 明确卡/贷款 Mock 的单进程限制，或迁移到共享持久化 Store。
+4. 为申请数据、卡状态和贷款状态轮询增加截止时间与卸载取消。
+
+### 真实外系统上线前必须处理
+
+1. 确认核实审批 refresh 的真实协议。
+2. 确认外系统写操作幂等契约和人工补偿规程。
+3. 确认申请链接签名算法、时间戳、真实路径和响应字段。
+4. 在 RabbitMQ + 独立 Celery Worker 环境完成注册、消费、超时、取消和 Worker 强杀验证。
+5. 为 Job 原始 payload 查看能力增加应用内权限控制。
+
+## 八、最终判定
+
+- 原审查整改实施：**基本完成，P0-3 仍为保守风险缓解而非根治**。
+- `0674ad9` 到 `4b6f698` 增量：**功能扩展明显，自动化验证通过，但存在 4 个建议在合并前处理的 P1 问题**。
+- 测试环境：**可进入，需知晓 Mock 多进程限制**。
+- 真实外系统生产上线：**暂不建议，需先完成外部协议、幂等和 Worker 故障演练**。
