@@ -10,6 +10,7 @@ from apps.integrations.verification_approval.api import (
     SEARCH_VERIFICATION_TASK,
     action_endpoint,
     claim_endpoint,
+    refresh_endpoint,
     return_endpoint,
     update_item_endpoint,
 )
@@ -23,11 +24,13 @@ from apps.integrations.verification_approval.models import (
     VerificationTask,
     VerificationTaskOperationRequest,
 )
+from apps.jobs.http import JobHttpCallObserver
+from apps.jobs.models import Job
 
 
 class VerificationApprovalAdapter:
-    def __init__(self, trace_id: str) -> None:
-        self.trace_id = trace_id
+    def __init__(self, job: Job) -> None:
+        self.job = job
         self._client: HttpClient | None = None
         self._executor: EndpointExecutor | None = None
 
@@ -52,6 +55,10 @@ class VerificationApprovalAdapter:
     def return_to_pool(self, task_id: str, context: VerificationTask) -> VerificationTask:
         request = VerificationTaskOperationRequest(context=context)
         return self._required(self._execute(return_endpoint(task_id), request).data)
+
+    def refresh(self, task_id: str, context: VerificationTask) -> VerificationTask:
+        request = VerificationTaskOperationRequest(context=context)
+        return self._required(self._execute(refresh_endpoint(task_id), request).data)
 
     def update_item(
         self,
@@ -88,7 +95,8 @@ class VerificationApprovalAdapter:
         return self._executor.execute(
             endpoint,
             body=body,
-            trace_id=self.trace_id,
+            trace_id=self.job.trace_id,
+            observer=JobHttpCallObserver(self.job, step=endpoint.operation_id),
         )
 
     @staticmethod

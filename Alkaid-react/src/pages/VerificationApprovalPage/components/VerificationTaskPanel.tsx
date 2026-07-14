@@ -5,6 +5,7 @@ import {
   CornerDownLeft,
   FileUp,
   PackageCheck,
+  RefreshCw,
   Send,
   UserCheck,
 } from 'lucide-react';
@@ -21,6 +22,7 @@ interface VerificationTaskPanelProps {
   busy: boolean;
   onClaim: () => void;
   onReturn: () => void;
+  onRefresh: () => void;
   onItemChange: (itemId: string, completed: boolean) => void;
   onAction: (action: VerificationQuickAction) => void;
 }
@@ -32,6 +34,7 @@ export default function VerificationTaskPanel({
   busy,
   onClaim,
   onReturn,
+  onRefresh,
   onItemChange,
   onAction,
 }: VerificationTaskPanelProps) {
@@ -52,10 +55,17 @@ export default function VerificationTaskPanel({
     <div className="verification-task-stack">
       <Card
         title={<span className="verification-task-title"><ClipboardCheck size={18} />合同号：{task.contractNo}</span>}
-        extra={claimed ? (
-          <Button danger icon={<CornerDownLeft size={15} />} loading={busy} onClick={onReturn}>退回任务池</Button>
-        ) : (
-          <Button type="primary" icon={<UserCheck size={15} />} loading={busy} onClick={onClaim}>领取</Button>
+        extra={(
+          <Space>
+            <Button icon={<RefreshCw size={15} />} disabled={busy} onClick={onRefresh}>
+              刷新
+            </Button>
+            {claimed ? (
+              <Button danger icon={<CornerDownLeft size={15} />} loading={busy} onClick={onReturn}>退回任务池</Button>
+            ) : (
+              <Button type="primary" icon={<UserCheck size={15} />} loading={busy} onClick={onClaim}>领取</Button>
+            )}
+          </Space>
         )}
       >
         <div className="verification-task-toolbar">

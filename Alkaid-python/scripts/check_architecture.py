@@ -11,9 +11,19 @@ errors: list[str] = []
 
 for path in APPS_ROOT.rglob("*.py"):
     relative = path.relative_to(APPS_ROOT)
-    if relative.parts[0] == "integrations":
-        continue
     tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
+    if relative.parts[0] == "integrations":
+        for node in ast.walk(tree):
+            if (
+                isinstance(node, ast.ImportFrom)
+                and node.module
+                and node.module.startswith("apps.product_data")
+            ):
+                location = f"{path.relative_to(ROOT)}:{node.lineno}"
+                errors.append(
+                    f"{location}: integration adapter imports product-data business code"
+                )
+        continue
     for node in ast.walk(tree):
         imported: set[str] = set()
         if isinstance(node, ast.Import):

@@ -1,3 +1,5 @@
+import logging
+
 from celery import shared_task
 from celery.exceptions import SoftTimeLimitExceeded
 from django.conf import settings
@@ -19,9 +21,12 @@ from apps.product_data.application_links.schemas import (
 )
 from apps.product_data.application_links.services import (
     generate_application_links,
+    normalize_submission,
     resolve_execution_snapshot,
     validate_submission,
 )
+
+logger = logging.getLogger(__name__)
 
 
 @shared_task(
@@ -42,11 +47,13 @@ def execute_application_link(self, job_id: int) -> None:
             mark_job_timed_out(job.id, "申请链接任务在队列中等待超时")
             return
         submission = ApplicationLinkSubmission.model_validate(job.payload)
-        snapshot = (
-            ApplicationLinkExecutionSnapshot.model_validate(job.execution_config_snapshot)
-            if job.execution_config_snapshot
-            else resolve_execution_snapshot(submission)
-        )
+        if job.execution_config_snapshot:
+            snapshot = ApplicationLinkExecutionSnapshot.model_validate(
+                job.execution_config_snapshot
+            )
+        else:
+            submission = normalize_submission(submission)
+            snapshot = resolve_execution_snapshot(submission)
         validate_submission(submission, snapshot)
         update_job_progress(
             job.id,
@@ -72,5 +79,14 @@ def execute_application_link(self, job_id: int) -> None:
         mark_job_timed_out(job.id)
         raise
     except Exception as exc:
+        logger.exception(
+            "application_link_execution_failed",
+            extra={
+                "job_id": job.id,
+                "workflow_id": str(job.workflow_id),
+                "trace_id": job.trace_id,
+                "product": job.product,
+            },
+        )
         mark_job_failed(job.id, f"{type(exc).__name__}: {exc}")
         raise

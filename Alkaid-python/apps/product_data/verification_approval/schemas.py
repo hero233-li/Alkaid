@@ -25,9 +25,22 @@ class VerificationSearchSubmission(VerificationPayload):
         return value.strip()
 
 
+class VerificationOperation(str, Enum):
+    SEARCH = "search"
+    CLAIM = "claim"
+    RETURN = "return"
+    REFRESH = "refresh"
+    ITEM_UPDATE = "item-update"
+    ACTION = "action"
+
+
 class VerificationItemUpdateSubmission(VerificationPayload):
     status: str = Field(pattern=r"^(pending|completed)$")
     context: VerificationTask
+
+
+class VerificationItemJobSubmission(VerificationItemUpdateSubmission):
+    item_id: str = Field(min_length=1, max_length=128)
 
 
 class VerificationTaskOperationSubmission(VerificationPayload):

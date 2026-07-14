@@ -31,6 +31,16 @@ RETURN_VERIFICATION_TASK = EndpointSpec(
     success_values=("0000",),
 )
 
+REFRESH_VERIFICATION_TASK = EndpointSpec(
+    operation_id="verification_approval.refresh",
+    method="POST",
+    path="/verification/tasks/{task_id}/refresh",
+    response_model=VerificationTaskResponse,
+    success_path="code",
+    success_values=("0000",),
+    retry_mode=RetryMode.SAFE,
+)
+
 UPDATE_VERIFICATION_ITEM = EndpointSpec(
     operation_id="verification_approval.item.update",
     method="POST",
@@ -60,6 +70,13 @@ def return_endpoint(task_id: str):
     return replace(
         RETURN_VERIFICATION_TASK,
         path=RETURN_VERIFICATION_TASK.path.format(task_id=task_id),
+    )
+
+
+def refresh_endpoint(task_id: str):
+    return replace(
+        REFRESH_VERIFICATION_TASK,
+        path=REFRESH_VERIFICATION_TASK.path.format(task_id=task_id),
     )
 
 

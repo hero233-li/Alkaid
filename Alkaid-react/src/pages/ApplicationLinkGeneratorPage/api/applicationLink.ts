@@ -2,6 +2,7 @@ import { applicationLinkClient } from './client';
 import { terminalApplicationLinkJobStatuses } from '../model/jobModel';
 import type {
   ApplicationLinkApiResponse,
+  ApplicationLinkBackendConfig,
   ApplicationLinkJob,
   ApplicationLinkJobStatus,
   ApplicationLinkSubmission,
@@ -13,6 +14,13 @@ const requestConfig = { showGlobalProgress: false, useResponseDelay: false };
 function unwrap<T>(response: ApplicationLinkApiResponse<T>, fallback: string) {
   if (!response.ok) throw new Error(response.message || fallback);
   return response.data;
+}
+
+export async function getApplicationLinkConfig() {
+  const { data } = await applicationLinkClient.get<
+    ApplicationLinkApiResponse<ApplicationLinkBackendConfig>
+  >('/product-data/tools/application-links/config', requestConfig);
+  return unwrap(data, '获取申请链接配置失败');
 }
 
 function workflowConfig() {

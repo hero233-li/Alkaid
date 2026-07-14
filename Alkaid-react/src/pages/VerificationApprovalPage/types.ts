@@ -1,6 +1,17 @@
 export type VerificationOwnershipStatus = 'unclaimed' | 'claimed';
 export type VerificationItemStatus = 'pending' | 'completed';
 export type VerificationQuickAction = 'complete' | 'supplement' | 'submit' | 'approval-submit';
+export type VerificationOperation = 'search' | 'claim' | 'return' | 'refresh' | 'item-update' | 'action';
+export type VerificationJobStatus =
+  | 'submitting'
+  | 'pending'
+  | 'running'
+  | 'retrying'
+  | 'success'
+  | 'failed'
+  | 'cancel_requested'
+  | 'cancelled'
+  | 'timed_out';
 
 export interface VerificationSearchValues {
   environment?: string;
@@ -42,4 +53,24 @@ export interface VerificationActionDefinition {
   label: string;
   title: string;
   description: string;
+}
+
+export interface VerificationJobSubmission {
+  id: number;
+  status: VerificationJobStatus;
+  stage: string;
+  progress: number;
+}
+
+export interface VerificationJobDetail extends VerificationJobSubmission {
+  result: Record<string, unknown>;
+  errorMessage?: string;
+}
+
+export interface VerificationWorkflowActivity {
+  jobId?: number;
+  operation: VerificationOperation;
+  label: string;
+  status: VerificationJobStatus;
+  progress: number;
 }

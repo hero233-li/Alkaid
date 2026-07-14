@@ -7,17 +7,30 @@ export interface ApplicationLinkApiResponse<T> {
 }
 
 export interface ProductLinkConfig {
-  name: string;
-  environments: string[];
-  categoriesByEnvironment: Record<string, LinkCategory[]>;
-  extraFields?: Array<'restoreStatus' | 'spcode'>;
+  label: string;
+  value: string;
+  routes: ApplicationLinkRouteConfig[];
 }
 
-export interface ApplicationLinkConfig {
-  environments: string[];
+export interface ApplicationLinkOption {
+  label: string;
+  value: string;
+}
+
+export interface ApplicationLinkRouteConfig {
+  environment: string;
+  category: LinkCategory;
+  requiredFields: string[];
+}
+
+export interface ApplicationLinkBackendConfig {
+  environments: ApplicationLinkOption[];
+  products: ProductLinkConfig[];
+}
+
+export interface ApplicationLinkConfig extends ApplicationLinkBackendConfig {
   cooperationProjects: string[];
   loanTypes: string[];
-  products: ProductLinkConfig[];
 }
 
 export interface ApplicationLinkFormValues {

@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-import logging
-
 from django.conf import settings
 from django.core.exceptions import ImproperlyConfigured
 
@@ -26,9 +24,6 @@ from apps.integrations.executor import EndpointExecutor
 from apps.integrations.http import HttpClient, HttpClientConfig
 from apps.jobs.http import JobHttpCallObserver
 from apps.jobs.models import Job
-from apps.product_data.catalog import load_product_catalog
-
-logger = logging.getLogger(__name__)
 
 
 class ApplicationLinkAdapter:
@@ -51,43 +46,6 @@ class ApplicationLinkAdapter:
         self._executor = None
 
     def create_application(self, request: CreateApplicationRequest) -> ApplicationReference:
-        if settings.DEBUG:
-            catalog = load_product_catalog()
-            product = catalog.product(request.product)
-            logger.info(
-                "application_link_request_body",
-                extra={"request_body": request.model_dump(mode="json")},
-            )
-            logger.info(
-                "application_link_product_config",
-                extra={
-                    "product_config": product.model_dump(
-                        mode="json",
-                        exclude={"fields", "locations"},
-                    ),
-                    "catalog_version": catalog.reference.version,
-                    "catalog_checksum": catalog.checksum,
-                },
-            )
-            logger.info(
-                "application_link_product_locations",
-                extra={
-                    "locations": [
-                        location.model_dump(mode="json") for location in product.locations
-                    ]
-                },
-            )
-            # 如需临时在一条日志里查看全部信息，取消下面这段注释：
-            # full_debug_payload = {
-            #     "request_body": request.model_dump(mode="json"),
-            #     "product_config": product.model_dump(mode="json"),
-            #     "catalog_version": catalog.reference.version,
-            #     "catalog_checksum": catalog.checksum,
-            # }
-            # logger.info(
-            #     "application_link_create_application_full",
-            #     extra=full_debug_payload,
-            # )
         response = self._execute("application_link.create_application", CREATE_APPLICATION, request)
         return response.data
 
@@ -95,10 +53,14 @@ class ApplicationLinkAdapter:
         self,
         request: GenerateLinksRequest,
         *,
-        category: object,
+        category: str,
     ) -> ApplicationLinks:
-        category_value = getattr(category, "value", category)
-        endpoint = CREATE_DYNAMIC_LINKS if category_value == "动态链接" else CREATE_SUN_CODE_LINKS
+        if category == "动态链接":
+            endpoint = CREATE_DYNAMIC_LINKS
+        elif category == "太阳码":
+            endpoint = CREATE_SUN_CODE_LINKS
+        else:
+            raise ValueError(f"未知申请链接类别：{category}")
         response = self._execute("application_link.generate_links", endpoint, request)
         return response.data
 

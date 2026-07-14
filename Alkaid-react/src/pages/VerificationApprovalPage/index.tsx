@@ -34,7 +34,7 @@ export default function VerificationApprovalPage() {
         <VerificationSearchForm
           form={approvalForm.form}
           initialValues={approvalForm.initialValues}
-          searching={approval.searching || approval.updating}
+          searching={approval.searching || approval.refreshing || approval.updating}
           configLoading={approvalForm.configLoading}
           environmentOptions={approvalForm.options.environmentOptions}
           categoryOptions={approvalForm.options.categoryOptions}
@@ -45,9 +45,10 @@ export default function VerificationApprovalPage() {
           task={approval.task}
           hasSearched={approval.hasSearched}
           allCompleted={approval.allCompleted}
-          busy={approval.updating}
+          busy={approval.refreshing || approval.updating}
           onClaim={approval.claim}
           onReturn={approval.returnToPool}
+          onRefresh={approval.refresh}
           onItemChange={approval.setItemCompleted}
           onAction={approval.openAction}
         />
@@ -59,12 +60,11 @@ export default function VerificationApprovalPage() {
         onCancel={approval.closeAction}
       />
       <VerificationWorkflowModal
-        active={approvalForm.configLoading || approval.searching || approval.updating}
+        active={approvalForm.configLoading || approval.searching || approval.refreshing || approval.updating}
         label={approvalForm.configLoading
           ? '正在加载核实审批配置'
-          : approval.searching
-            ? '正在查询核实审批任务'
-            : '正在提交核实审批操作'}
+          : approval.activity?.label ?? '正在处理核实审批任务'}
+        progress={approvalForm.configLoading ? 5 : approval.activity?.progress ?? 5}
       />
     </div>
   );

@@ -16,7 +16,9 @@ from apps.integrations.verification_approval.models import (
     VerificationTaskOperationRequest,
 )
 
-TASK_ACTION_PATH = re.compile(r"^/verification/tasks/(?P<task_id>[^/]+)/(?P<action>claim|return)$")
+TASK_ACTION_PATH = re.compile(
+    r"^/verification/tasks/(?P<task_id>[^/]+)/(?P<action>claim|return|refresh)$"
+)
 ITEM_PATH = re.compile(r"^/verification/tasks/(?P<task_id>[^/]+)/items/(?P<item_id>[^/]+)$")
 QUICK_ACTION_PATH = re.compile(
     r"^/verification/tasks/(?P<task_id>[^/]+)/actions/(?P<action>[^/]+)$"
@@ -97,6 +99,10 @@ class MockVerificationStore:
                 }
             ),
         )
+
+    def refresh(self, task_id: str) -> VerificationTask:
+        with self._lock:
+            return copy.deepcopy(self._tasks[task_id])
 
     def update_item(
         self,
@@ -179,11 +185,13 @@ def create_verification_approval_mock_transport() -> httpx.MockTransport:
                 operation = VerificationTaskOperationRequest.model_validate(payload)
                 task_id = task_action.group("task_id")
                 _require_matching_context(task_id, operation.context)
-                task = (
-                    VERIFICATION_APPROVAL_MOCK_STORE.claim(task_id)
-                    if task_action.group("action") == "claim"
-                    else VERIFICATION_APPROVAL_MOCK_STORE.return_to_pool(task_id)
-                )
+                action = task_action.group("action")
+                if action == "claim":
+                    task = VERIFICATION_APPROVAL_MOCK_STORE.claim(task_id)
+                elif action == "return":
+                    task = VERIFICATION_APPROVAL_MOCK_STORE.return_to_pool(task_id)
+                else:
+                    task = VERIFICATION_APPROVAL_MOCK_STORE.refresh(task_id)
                 return _ok(task, "核实任务状态更新成功")
 
             item_match = ITEM_PATH.match(request.url.path)

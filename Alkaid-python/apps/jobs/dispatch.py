@@ -67,4 +67,10 @@ def _task_for_kind(kind: str) -> Any:
         from apps.product_data.business_access.tasks import execute_business_access_task
 
         return execute_business_access_task
+    if kind.startswith("verification_approval."):
+        from apps.product_data.verification_approval.tasks import (
+            execute_verification_approval_task,
+        )
+
+        return execute_verification_approval_task
     raise ValueError(f"不支持的任务类型：{kind}")

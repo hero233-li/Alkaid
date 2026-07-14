@@ -1,4 +1,4 @@
-import { message } from 'antd';
+import { Alert, message } from 'antd';
 import { useState } from 'react';
 import ApplicationLinkQrModal from './components/ApplicationLinkQrModal';
 import ApplicationLinkResultList from './components/ApplicationLinkResultList';
@@ -24,11 +24,14 @@ export default function ApplicationLinkGeneratorPage() {
 
   return (
     <div className="application-link-page">
+      {applicationForm.configError && (
+        <Alert type="error" showIcon message={applicationForm.configError} />
+      )}
       <ApplicationLinkSearchForm
         form={applicationForm.form}
         formModel={applicationForm.formModel}
         initialValues={applicationForm.initialValues}
-        busy={generator.busy}
+        busy={generator.busy || applicationForm.configLoading}
         onValuesChange={applicationForm.handleValuesChange}
         onSubmit={submit}
       />

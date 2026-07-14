@@ -2,7 +2,7 @@ from django.conf import settings
 from django.db import transaction
 from django.http import HttpRequest, JsonResponse
 from django.views.decorators.csrf import csrf_exempt
-from django.views.decorators.http import require_POST
+from django.views.decorators.http import require_GET, require_POST
 from pydantic import ValidationError
 
 from apps.core.responses import api_error, api_response
@@ -14,15 +14,30 @@ from apps.product_data.application_links.schemas import (
 )
 from apps.product_data.application_links.services import (
     ApplicationLinkConfigurationError,
+    get_application_link_config,
+    normalize_submission,
     resolve_execution_snapshot,
 )
+from apps.product_data.catalog import ProductCatalogError
+
+
+@require_GET
+def application_link_config(request: HttpRequest) -> JsonResponse:
+    del request
+    try:
+        config = get_application_link_config()
+    except ProductCatalogError as exc:
+        return api_error(f"申请链接配置无效：{exc}", status=500)
+    return api_response(config.model_dump(mode="json"))
 
 
 @csrf_exempt
 @require_POST
 def generate_application_link(request: HttpRequest) -> JsonResponse:
     try:
-        submission = ApplicationLinkSubmission.model_validate_json(request.body)
+        submission = normalize_submission(
+            ApplicationLinkSubmission.model_validate_json(request.body)
+        )
         execution_snapshot = resolve_execution_snapshot(submission)
         idempotency_key, trace_id = resolve_job_identifiers(
             request.headers.get("X-Idempotency-Key"),

@@ -2,6 +2,7 @@ from django.urls import path
 
 from apps.product_data.verification_approval.views import (
     claim_verification,
+    refresh_verification,
     return_verification,
     search_verification,
     submit_verification_action,
@@ -29,6 +30,11 @@ urlpatterns = [
         "verification-approval/<str:task_id>/return",
         return_verification,
         name="verification-approval-return",
+    ),
+    path(
+        "verification-approval/<str:task_id>/refresh",
+        refresh_verification,
+        name="verification-approval-refresh",
     ),
     path(
         "verification-approval/<str:task_id>/items/<str:item_id>",

@@ -5,9 +5,14 @@ from apps.integrations.verification_approval.models import (
     SearchVerificationTaskRequest,
     VerificationTask,
 )
+from apps.jobs.models import Job
 from apps.product_data.verification_approval.schemas import (
     VerificationAction,
+    VerificationActionSubmission,
+    VerificationItemJobSubmission,
+    VerificationOperation,
     VerificationSearchSubmission,
+    VerificationTaskOperationSubmission,
 )
 
 VERIFICATION_ENVIRONMENTS = ("环境1", "环境2", "环境3")
@@ -21,71 +26,65 @@ def get_verification_config() -> dict[str, object]:
     }
 
 
-def search_verification_task(
-    submission: VerificationSearchSubmission,
-    *,
-    trace_id: str,
-) -> dict[str, Any] | None:
-    if submission.environment not in VERIFICATION_ENVIRONMENTS:
-        raise ValueError("核实审批环境无效")
-    if submission.category not in VERIFICATION_CATEGORIES:
-        raise ValueError("核实审批类别无效")
-    with VerificationApprovalAdapter(trace_id) as adapter:
-        task = adapter.search(
-            SearchVerificationTaskRequest(
-                environment=submission.environment,
-                category=submission.category,
-                contract_no=submission.contract_no,
+def execute_verification_approval(
+    job: Job,
+    operation: VerificationOperation,
+) -> dict[str, Any]:
+    with VerificationApprovalAdapter(job) as adapter:
+        if operation == VerificationOperation.SEARCH:
+            submission = VerificationSearchSubmission.model_validate(job.payload)
+            if submission.environment not in VERIFICATION_ENVIRONMENTS:
+                raise ValueError("核实审批环境无效")
+            if submission.category not in VERIFICATION_CATEGORIES:
+                raise ValueError("核实审批类别无效")
+            task = adapter.search(
+                SearchVerificationTaskRequest(
+                    environment=submission.environment,
+                    category=submission.category,
+                    contract_no=submission.contract_no,
+                )
             )
-        )
-    return _dump(task) if task is not None else None
+            return {"task": _dump(task) if task is not None else None}
 
+        if operation in {
+            VerificationOperation.CLAIM,
+            VerificationOperation.RETURN,
+            VerificationOperation.REFRESH,
+        }:
+            submission = VerificationTaskOperationSubmission.model_validate(job.payload)
+            context = submission.context
+            _validate_context(context.id, context)
+            if operation == VerificationOperation.CLAIM:
+                task = adapter.claim(context.id, context)
+            elif operation == VerificationOperation.RETURN:
+                task = adapter.return_to_pool(context.id, context)
+            else:
+                task = adapter.refresh(context.id, context)
+            return {"task": _dump(task)}
 
-def claim_verification_task(
-    task_id: str,
-    context: VerificationTask,
-    *,
-    trace_id: str,
-) -> dict[str, Any]:
-    _validate_context(task_id, context)
-    with VerificationApprovalAdapter(trace_id) as adapter:
-        return _dump(adapter.claim(task_id, context))
+        if operation == VerificationOperation.ITEM_UPDATE:
+            submission = VerificationItemJobSubmission.model_validate(job.payload)
+            _validate_context(submission.context.id, submission.context)
+            task = adapter.update_item(
+                submission.context.id,
+                submission.item_id,
+                submission.status,
+                submission.context,
+            )
+            return {"task": _dump(task)}
 
+        if operation == VerificationOperation.ACTION:
+            submission = VerificationActionSubmission.model_validate(job.payload)
+            action = VerificationAction(submission.action)
+            _validate_context(submission.context.id, submission.context)
+            task = adapter.apply_action(
+                submission.context.id,
+                action.value,
+                submission.context,
+            )
+            return {"task": _dump(task)}
 
-def return_verification_task(
-    task_id: str,
-    context: VerificationTask,
-    *,
-    trace_id: str,
-) -> dict[str, Any]:
-    _validate_context(task_id, context)
-    with VerificationApprovalAdapter(trace_id) as adapter:
-        return _dump(adapter.return_to_pool(task_id, context))
-
-
-def update_verification_item(
-    task_id: str,
-    item_id: str,
-    status: str,
-    context: VerificationTask,
-    *,
-    trace_id: str,
-) -> dict[str, Any]:
-    _validate_context(task_id, context)
-    with VerificationApprovalAdapter(trace_id) as adapter:
-        return _dump(adapter.update_item(task_id, item_id, status, context))
-
-
-def apply_verification_action(
-    task_id: str,
-    action: VerificationAction,
-    context: VerificationTask,
-    *,
-    trace_id: str,
-) -> dict[str, Any]:
-    _validate_context(task_id, context)
-    with VerificationApprovalAdapter(trace_id) as adapter:
-        return _dump(adapter.apply_action(task_id, action.value, context))
+    raise ValueError(f"不支持的核实审批操作：{operation}")
 
 
 def _validate_context(task_id: str, context: VerificationTask) -> None:

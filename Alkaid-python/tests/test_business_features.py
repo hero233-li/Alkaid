@@ -83,73 +83,93 @@ def test_business_access_runs_search_invalidate_notifications_and_push(
 
 
 @pytest.mark.django_db
-def test_verification_approval_data_and_mutations_come_from_backend(client) -> None:
+def test_verification_approval_data_and_mutations_run_as_jobs(
+    client,
+    django_capture_on_commit_callbacks,
+) -> None:
     config = client.get("/api/product-data/verification-approval/config")
     assert config.status_code == 200
     assert config.json()["data"]["categories"] == ["合同核实", "资料核实", "放款核实"]
 
-    search = client.post(
+    search_job = _execute_job_request(
+        client,
+        django_capture_on_commit_callbacks,
         "/api/product-data/verification-approval/search",
-        data=json.dumps(
-            {
-                "environment": "环境1",
-                "category": "合同核实",
-                "contractNo": "HT20260710001",
-            }
-        ),
-        content_type="application/json",
-        HTTP_X_TRACE_ID="verify-search",
+        key="verify-search",
+        body={
+            "environment": "环境1",
+            "category": "合同核实",
+            "contractNo": "HT20260710001",
+        },
     )
-    assert search.status_code == 200
-    task = search.json()["data"]
+    assert search_job.kind == "verification_approval.search"
+    assert search_job.api_calls.count() == 1
+    task = search_job.result["task"]
     assert task["ownershipStatus"] == "unclaimed"
     assert len(task["items"]) == 6
 
-    claim = client.post(
+    claim_job = _execute_job_request(
+        client,
+        django_capture_on_commit_callbacks,
         f"/api/product-data/verification-approval/{task['id']}/claim",
-        data=json.dumps({"context": task}),
-        content_type="application/json",
+        key="verify-claim",
+        body={"context": task},
     )
-    assert claim.status_code == 200
-    task = claim.json()["data"]
+    task = claim_job.result["task"]
     assert task["ownershipStatus"] == "claimed"
     assert task["tellerNo"] == "T1027"
     assert task["organizationNo"] == "510001"
 
-    item = client.post(
+    refresh_context = task
+    item_job = _execute_job_request(
+        client,
+        django_capture_on_commit_callbacks,
         f"/api/product-data/verification-approval/{task['id']}/items/identity",
-        data=json.dumps({"status": "completed", "context": task}),
-        content_type="application/json",
+        key="verify-item-complete",
+        body={"status": "completed", "context": task},
     )
-    assert item.status_code == 200
-    task = item.json()["data"]
+    task = item_job.result["task"]
     assert task["items"][0]["status"] == "completed"
 
-    complete = client.post(
-        f"/api/product-data/verification-approval/{task['id']}/actions/complete",
-        data=json.dumps({"action": "complete", "context": task}),
-        content_type="application/json",
+    refresh_job = _execute_job_request(
+        client,
+        django_capture_on_commit_callbacks,
+        f"/api/product-data/verification-approval/{task['id']}/refresh",
+        key="verify-refresh",
+        body={"context": refresh_context},
     )
-    assert complete.status_code == 200
-    task = complete.json()["data"]
+    task = refresh_job.result["task"]
+    assert task["ownershipStatus"] == "claimed"
+    assert task["items"][0]["status"] == "completed"
+
+    complete_job = _execute_job_request(
+        client,
+        django_capture_on_commit_callbacks,
+        f"/api/product-data/verification-approval/{task['id']}/actions/complete",
+        key="verify-complete",
+        body={"action": "complete", "context": task},
+    )
+    task = complete_job.result["task"]
     assert all(value["status"] == "completed" for value in task["items"])
 
-    submit = client.post(
+    submit_job = _execute_job_request(
+        client,
+        django_capture_on_commit_callbacks,
         f"/api/product-data/verification-approval/{task['id']}/actions/submit",
-        data=json.dumps({"action": "submit", "context": task}),
-        content_type="application/json",
+        key="verify-submit",
+        body={"action": "submit", "context": task},
     )
-    assert submit.status_code == 200
-    task = submit.json()["data"]
+    task = submit_job.result["task"]
     assert task["taskStatus"] == "已提交"
 
-    returned = client.post(
+    return_job = _execute_job_request(
+        client,
+        django_capture_on_commit_callbacks,
         f"/api/product-data/verification-approval/{task['id']}/return",
-        data=json.dumps({"context": task}),
-        content_type="application/json",
+        key="verify-return",
+        body={"context": task},
     )
-    assert returned.status_code == 200
-    assert returned.json()["data"]["ownershipStatus"] == "unclaimed"
+    assert return_job.result["task"]["ownershipStatus"] == "unclaimed"
 
 
 @pytest.mark.django_db
@@ -164,11 +184,15 @@ def test_verification_mutation_requires_search_result_context(client) -> None:
 
 
 @pytest.mark.django_db
-def test_verification_search_can_return_no_external_task(client) -> None:
-    response = client.post(
+def test_verification_search_can_return_no_external_task(
+    client,
+    django_capture_on_commit_callbacks,
+) -> None:
+    job = _execute_job_request(
+        client,
+        django_capture_on_commit_callbacks,
         "/api/product-data/verification-approval/search",
-        data=json.dumps({"environment": "环境1", "category": "资料核实", "contractNo": "0"}),
-        content_type="application/json",
+        key="verify-search-empty",
+        body={"environment": "环境1", "category": "资料核实", "contractNo": "0"},
     )
-    assert response.status_code == 200
-    assert response.json()["data"] is None
+    assert job.result["task"] is None

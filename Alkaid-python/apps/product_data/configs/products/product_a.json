@@ -46,9 +46,9 @@
   ],
   "features": {
     "applicationLinks": [
-      {"environment": "环境1", "category": "动态链接", "requiredFields": ["customerName", "customerPhone", "customerCertificateNo", "customerCompanyName", "customerCompanyCode"]},
-      {"environment": "环境2", "category": "动态链接", "requiredFields": ["customerName", "customerPhone", "customerCertificateNo", "customerCompanyName", "customerCompanyCode"]},
-      {"environment": "环境3", "category": "太阳码"}
+      {"environment": "env-1", "category": "动态链接", "requiredFields": ["customerName", "customerPhone", "customerCertificateNo", "customerCompanyName", "customerCompanyCode"]},
+      {"environment": "env-2", "category": "动态链接", "requiredFields": ["customerName", "customerPhone", "customerCertificateNo", "customerCompanyName", "customerCompanyCode"]},
+      {"environment": "env-3", "category": "太阳码"}
     ]
   }
 }

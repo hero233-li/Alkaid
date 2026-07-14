@@ -9,6 +9,36 @@ class LinkCategory(str, Enum):
     DYNAMIC_LINK = "动态链接"
 
 
+class ApplicationLinkOption(BaseModel):
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    label: str
+    value: str
+
+
+class ApplicationLinkRouteConfig(BaseModel):
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    environment: str
+    category: LinkCategory
+    requiredFields: tuple[str, ...] = ()
+
+
+class ApplicationLinkProductConfig(BaseModel):
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    label: str
+    value: str
+    routes: tuple[ApplicationLinkRouteConfig, ...]
+
+
+class ApplicationLinkPageConfig(BaseModel):
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    environments: tuple[ApplicationLinkOption, ...]
+    products: tuple[ApplicationLinkProductConfig, ...]
+
+
 class ApplicationLinkSubmission(BaseModel):
     """Stable HTTP contract for the application-link page."""
 

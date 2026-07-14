@@ -43,9 +43,9 @@
   ],
   "features": {
     "applicationLinks": [
-      {"environment": "环境1", "category": "动态链接", "requiredFields": ["customerName", "customerPhone", "customerCertificateNo", "customerCompanyName", "customerCompanyCode", "restoreStatus", "spcode"]},
-      {"environment": "环境2", "category": "动态链接", "requiredFields": ["customerName", "customerPhone", "customerCertificateNo", "customerCompanyName", "customerCompanyCode", "restoreStatus", "spcode"]},
-      {"environment": "环境3", "category": "动态链接", "requiredFields": ["customerName", "customerPhone", "customerCertificateNo", "customerCompanyName", "customerCompanyCode", "restoreStatus", "spcode"]}
+      {"environment": "env-1", "category": "动态链接", "requiredFields": ["customerName", "customerPhone", "customerCertificateNo", "customerCompanyName", "customerCompanyCode", "restoreStatus", "spcode"]},
+      {"environment": "env-2", "category": "动态链接", "requiredFields": ["customerName", "customerPhone", "customerCertificateNo", "customerCompanyName", "customerCompanyCode", "restoreStatus", "spcode"]},
+      {"environment": "env-3", "category": "动态链接", "requiredFields": ["customerName", "customerPhone", "customerCertificateNo", "customerCompanyName", "customerCompanyCode", "restoreStatus", "spcode"]}
     ]
   }
 }

@@ -50,11 +50,11 @@ export function buildApplicationLinkSubmission(
   values: ApplicationLinkFormValues,
 ): ApplicationLinkSubmission {
   const environment = requiredText(values.environment, '请选择环境');
-  const productName = requiredText(values.product, '请选择产品');
-  const product = findProduct(config, productName);
+  const productCode = requiredText(values.product, '请选择产品');
+  const product = findProduct(config, productCode);
   const category = requiredCategory(values.category);
 
-  if (!product || !product.environments.includes(environment)) {
+  if (!product || !product.routes.some((route) => route.environment === environment)) {
     throw new Error('当前环境下没有该产品');
   }
   if (!categoriesForProduct(product, environment).includes(category)) {
@@ -63,7 +63,7 @@ export function buildApplicationLinkSubmission(
 
   const submission: ApplicationLinkSubmission = {
     environment,
-    product: productName,
+    product: productCode,
     category,
     cooperationProject: requiredText(values.cooperationProject, '请选择合作项目'),
     loanType: requiredText(values.loanType, '请选择首贷续贷'),
@@ -73,10 +73,13 @@ export function buildApplicationLinkSubmission(
     submission.requestJson = parseDynamicLinkRequestJson(values.requestJson);
   }
 
-  if (product?.extraFields?.includes('restoreStatus')) {
+  const route = product.routes.find((item) => (
+    item.environment === environment && item.category === category
+  ));
+  if (route?.requiredFields.includes('restoreStatus')) {
     submission.restoreStatus = requiredText(values.restoreStatus, '请选择还原状况');
   }
-  if (product?.extraFields?.includes('spcode')) {
+  if (route?.requiredFields.includes('spcode')) {
     submission.spcode = requiredText(values.spcode, '请输入企业代码 spcode');
   }
 

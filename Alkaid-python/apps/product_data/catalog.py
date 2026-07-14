@@ -338,6 +338,22 @@ def _load_product_catalog(
             product_raw[product.code] = raw
         if not products:
             raise ProductCatalogError("没有找到产品配置")
+        known_environments = {option.value for option in reference.environments}
+        for product in products.values():
+            unknown_product_environments = set(product.environments) - known_environments
+            if unknown_product_environments:
+                raise ProductCatalogError(
+                    f"产品 {product.code} 引用了未知环境代码："
+                    f"{', '.join(sorted(unknown_product_environments))}"
+                )
+            unknown_link_environments = {
+                route.environment for route in product.features.applicationLinks
+            } - known_environments
+            if unknown_link_environments:
+                raise ProductCatalogError(
+                    f"产品 {product.code} 的申请链接引用了未知环境代码："
+                    f"{', '.join(sorted(unknown_link_environments))}"
+                )
         checksum = _checksum({"reference": reference_raw, "products": product_raw})
         catalog = ProductCatalog(reference=reference, products=products, checksum=checksum)
         # Build once so cross-product UI definitions and reset references are validated too.

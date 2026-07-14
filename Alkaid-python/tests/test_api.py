@@ -148,7 +148,6 @@ def test_oversized_request_identifier_returns_400_before_job_creation(client) ->
 
 
 @pytest.mark.django_db
-@override_settings(DEBUG=True)
 def test_application_link_route_is_frozen_and_executes_shared_adapter(
     client, caplog, django_capture_on_commit_callbacks
 ) -> None:
@@ -165,27 +164,32 @@ def test_application_link_route_is_frozen_and_executes_shared_adapter(
     job = Job.objects.get(id=response.json()["data"]["id"])
     assert job.status == JobStatus.SUCCESS
     assert job.execution_config_snapshot["category"] == "太阳码"
+    assert job.execution_config_snapshot["environment"] == "env-1"
+    assert job.execution_config_snapshot["product"] == "product-b"
+    assert job.payload["environment"] == "env-1"
     assert job.result["links"]["applicationNo"].startswith("LINK-PRODUCT-B-")
     assert job.api_calls.count() == 2
+    events = {record.message: record for record in caplog.records}
+    assert events["application_link_execution_started"].job_id == job.id
+    assert events["application_link_execution_started"].product == "product-b"
+    assert events["application_link_execution_started"].environment == "env-1"
+    assert events["application_link_application_created"].application_no.startswith(
+        "LINK-PRODUCT-B-"
+    )
+    assert events["application_link_links_generated"].category == "太阳码"
 
-    records = {
-        record.message: record
-        for record in caplog.records
-        if record.message.startswith("application_link_")
-    }
-    request_record = records["application_link_request_body"]
-    config_record = records["application_link_product_config"]
-    locations_record = records["application_link_product_locations"]
 
-    assert request_record.request_body["product"] == "product-b"
-    assert request_record.request_body["payload"]["cooperationProject"] == "合作项目"
-    assert config_record.product_config["code"] == "product-b"
-    assert "fields" not in config_record.product_config
-    assert "locations" not in config_record.product_config
-    assert config_record.catalog_version >= 1
-    assert config_record.catalog_checksum.startswith("sha256:")
-    assert locations_record.locations[0]["value"] == "example-location"
-    assert locations_record.locations[0]["branches"][0]["value"] == "example-branch"
+@pytest.mark.django_db
+def test_application_link_config_uses_stable_catalog_codes(client) -> None:
+    response = client.get("/api/product-data/tools/application-links/config")
+
+    assert response.status_code == 200
+    config = response.json()["data"]
+    assert config["environments"][0] == {"label": "环境1", "value": "env-1"}
+    product_b = next(item for item in config["products"] if item["value"] == "product-b")
+    assert product_b["label"] == "产品B"
+    assert product_b["routes"][0]["environment"] == "env-1"
+    assert product_b["routes"][0]["category"] == "太阳码"
 
 
 @pytest.mark.django_db

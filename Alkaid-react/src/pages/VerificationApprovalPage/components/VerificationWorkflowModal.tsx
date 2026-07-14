@@ -3,11 +3,13 @@ import { Modal, Progress, Space, Spin, Tag, Typography } from 'antd';
 interface VerificationWorkflowModalProps {
   active: boolean;
   label: string;
+  progress: number;
 }
 
 export default function VerificationWorkflowModal({
   active,
   label,
+  progress,
 }: VerificationWorkflowModalProps) {
   return (
     <Modal
@@ -27,8 +29,8 @@ export default function VerificationWorkflowModal({
         </Space>
         <Tag color="processing">处理中</Tag>
       </Space>
-      <Progress percent={8} status="active" strokeWidth={13} showInfo={false} />
-      <Typography.Text type="secondary">正在等待后端返回，请不要重复操作</Typography.Text>
+      <Progress percent={Math.max(5, progress)} status="active" strokeWidth={13} />
+      <Typography.Text type="secondary">任务已提交到 Celery，正在等待执行结果，请不要重复操作</Typography.Text>
     </Modal>
   );
 }

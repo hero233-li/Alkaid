@@ -1,3 +1,5 @@
+import logging
+
 from django.utils import timezone
 
 from apps.integrations.application_link.adapter import ApplicationLinkAdapter
@@ -8,15 +10,71 @@ from apps.integrations.application_link.models import (
 from apps.jobs.models import Job
 from apps.product_data.application_links.schemas import (
     ApplicationLinkExecutionSnapshot,
+    ApplicationLinkOption,
+    ApplicationLinkPageConfig,
+    ApplicationLinkProductConfig,
     ApplicationLinkResult,
+    ApplicationLinkRouteConfig,
     ApplicationLinkSubmission,
     submission_payload,
 )
-from apps.product_data.catalog import ProductCatalogError, load_product_catalog
+from apps.product_data.catalog import ProductCatalog, ProductCatalogError, load_product_catalog
+
+logger = logging.getLogger(__name__)
 
 
 class ApplicationLinkConfigurationError(ValueError):
     pass
+
+
+def normalize_submission(
+    submission: ApplicationLinkSubmission,
+) -> ApplicationLinkSubmission:
+    """Translate legacy display labels into stable catalog codes at the HTTP boundary."""
+    try:
+        catalog = load_product_catalog()
+        product = catalog.product(submission.product)
+        environment = _environment_code(catalog, submission.environment)
+    except ProductCatalogError as exc:
+        raise ApplicationLinkConfigurationError("当前环境下没有该产品") from exc
+    return submission.model_copy(
+        update={"product": product.code, "environment": environment}
+    )
+
+
+def get_application_link_config() -> ApplicationLinkPageConfig:
+    """Build page routing config from the backend product catalog."""
+    catalog = load_product_catalog()
+    products = tuple(
+        ApplicationLinkProductConfig(
+            label=product.name,
+            value=product.code,
+            routes=tuple(
+                ApplicationLinkRouteConfig(
+                    environment=_environment_code(catalog, route.environment),
+                    category=route.category,
+                    requiredFields=route.requiredFields,
+                )
+                for route in product.features.applicationLinks
+            ),
+        )
+        for product in catalog.products.values()
+        if product.features.applicationLinks
+    )
+    return ApplicationLinkPageConfig(
+        environments=tuple(
+            ApplicationLinkOption(label=option.label, value=option.value)
+            for option in catalog.reference.environments
+        ),
+        products=products,
+    )
+
+
+def _environment_code(catalog: ProductCatalog, environment_code_or_label: str) -> str:
+    for option in catalog.reference.environments:
+        if environment_code_or_label in {option.value, option.label}:
+            return option.value
+    raise ProductCatalogError(f"未知环境：{environment_code_or_label}")
 
 
 def resolve_execution_snapshot(
@@ -30,7 +88,7 @@ def resolve_execution_snapshot(
         raise ApplicationLinkConfigurationError("当前环境下没有该产品") from exc
 
     environment_exists = any(
-        route.environment == submission.environment
+        _environment_code(catalog, route.environment) == submission.environment
         for route in configured_product.features.applicationLinks
     )
     if not environment_exists:
@@ -38,12 +96,12 @@ def resolve_execution_snapshot(
 
     for route in configured_product.features.applicationLinks:
         if (
-            route.environment == submission.environment
+            _environment_code(catalog, route.environment) == submission.environment
             and route.category == submission.category.value
         ):
             snapshot = ApplicationLinkExecutionSnapshot(
                 config_version=catalog.reference.version,
-                product=submission.product,
+                product=configured_product.code,
                 environment=submission.environment,
                 category=submission.category,
                 required_fields=route.requiredFields,
@@ -92,6 +150,15 @@ def generate_application_links(
     snapshot: ApplicationLinkExecutionSnapshot,
 ) -> ApplicationLinkResult:
     validate_submission(submission, snapshot)
+    log_context = {
+        "job_id": job.id,
+        "workflow_id": str(job.workflow_id),
+        "trace_id": job.trace_id,
+        "product": submission.product,
+        "environment": submission.environment,
+        "category": submission.category.value,
+    }
+    logger.info("application_link_execution_started", extra=log_context)
     with ApplicationLinkAdapter(job) as adapter:
         application = adapter.create_application(
             CreateApplicationRequest(
@@ -100,14 +167,22 @@ def generate_application_links(
                 payload=submission_payload(submission),
             )
         )
+        logger.info(
+            "application_link_application_created",
+            extra={**log_context, "application_no": application.application_no},
+        )
         links = adapter.generate_links(
             GenerateLinksRequest(
                 application_no=application.application_no,
                 product=submission.product,
                 category=submission.category.value,
             ),
-            category=submission.category,
+            category=submission.category.value,
         )
+    logger.info(
+        "application_link_links_generated",
+        extra={**log_context, "application_no": application.application_no},
+    )
     return ApplicationLinkResult(
         internalUrl=links.internal_url,
         externalUrl=links.external_url,

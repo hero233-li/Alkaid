@@ -1,14 +1,10 @@
 import type {
   ApplicationLinkConfig,
   ApplicationLinkFormValues,
+  ApplicationLinkOption,
   LinkCategory,
   ProductLinkConfig,
 } from './types';
-
-export interface ApplicationLinkOption {
-  value: string;
-  label: string;
-}
 
 export interface ApplicationLinkFormModel {
   environment?: string;
@@ -36,13 +32,15 @@ export function isDynamicApplicationLink(category?: LinkCategory) {
   return category === '动态链接';
 }
 
-export function findProduct(config: ApplicationLinkConfig, productName?: string) {
-  return config.products.find((item) => item.name === productName);
+export function findProduct(config: ApplicationLinkConfig, productCode?: string) {
+  return config.products.find((item) => item.value === productCode);
 }
 
 export function productsForEnvironment(config: ApplicationLinkConfig, environment?: string) {
   return environment
-    ? config.products.filter((item) => item.environments.includes(environment))
+    ? config.products.filter((item) => (
+      item.routes.some((route) => route.environment === environment)
+    ))
     : [];
 }
 
@@ -50,7 +48,11 @@ export function categoriesForProduct(
   product: ProductLinkConfig | undefined,
   environment: string | undefined,
 ) {
-  return environment && product ? product.categoriesByEnvironment[environment] ?? [] : [];
+  return environment && product
+    ? product.routes
+      .filter((route) => route.environment === environment)
+      .map((route) => route.category)
+    : [];
 }
 
 export function categoriesForEnvironment(
@@ -93,12 +95,12 @@ function firstProductForEnvironmentAndCategory(
 export function getInitialApplicationLinkValues(
   config: ApplicationLinkConfig,
 ): ApplicationLinkFormValues {
-  const environment = config.environments[0];
+  const environment = config.environments[0]?.value;
   const category = firstCategoryForEnvironment(config, environment);
   const product = firstProductForEnvironmentAndCategory(config, environment, category);
   return {
     environment,
-    product: product?.name,
+    product: product?.value,
     category,
     cooperationProject: config.cooperationProjects[0],
     loanType: config.loanTypes[0],
@@ -115,16 +117,19 @@ export function buildApplicationLinkFormModel(
   const products = productsForEnvironmentAndCategory(config, environment, category);
   const product = findProduct(config, values.product);
   const categories = categoriesForEnvironment(config, environment);
+  const route = product?.routes.find((item) => (
+    item.environment === environment && item.category === category
+  ));
 
   return {
     environment,
     product,
     category,
     dynamic: isDynamicApplicationLink(category),
-    showRestoreStatus: Boolean(product?.extraFields?.includes('restoreStatus')),
-    showSpcode: Boolean(product?.extraFields?.includes('spcode')),
-    environmentOptions: toOptions(config.environments),
-    productOptions: toOptions(products.map((item) => item.name)),
+    showRestoreStatus: Boolean(route?.requiredFields.includes('restoreStatus')),
+    showSpcode: Boolean(route?.requiredFields.includes('spcode')),
+    environmentOptions: config.environments,
+    productOptions: products.map(({ label, value }) => ({ label, value })),
     categoryOptions: toOptions(categories),
     cooperationProjectOptions: toOptions(config.cooperationProjects),
     loanTypeOptions: toOptions(config.loanTypes),
@@ -143,7 +148,7 @@ export function getApplicationLinkCascadeUpdates(
     const product = firstProductForEnvironmentAndCategory(config, environment, category);
     return {
       category,
-      product: product?.name,
+      product: product?.value,
       requestJson: undefined,
     };
   }
@@ -155,7 +160,7 @@ export function getApplicationLinkCascadeUpdates(
       allValues.category,
     );
     return {
-      product: product?.name,
+      product: product?.value,
       requestJson: undefined,
       restoreStatus: restoreStatusValues[0],
     };
