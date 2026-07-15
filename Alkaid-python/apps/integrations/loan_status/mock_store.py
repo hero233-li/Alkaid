@@ -6,6 +6,7 @@ from typing import Any
 
 from django.db import transaction
 
+from apps.jobs.mock_state import get_or_create_locked_mock_state
 from apps.jobs.models import MockToolState
 from apps.mock_data.application_generator import (
     birth_date_for_age,
@@ -21,29 +22,21 @@ class LoanMockStore:
 
     def search(self, environment: str, customer_no: str) -> list[dict[str, Any]]:
         sequence = _customer_sequence(customer_no)
-        with transaction.atomic():
-            state = (
-                MockToolState.objects.select_for_update()
-                .filter(namespace=NAMESPACE, key=customer_no)
-                .first()
-            )
-            if state is None:
-                card = _build_card(sequence, environment, customer_no)
-                state = MockToolState.objects.create(
-                    namespace=NAMESPACE,
-                    key=customer_no,
-                    payload=card,
-                )
-            return [copy.deepcopy(state.payload)]
+        key = _state_key(environment, customer_no)
+        card = _build_card(sequence, environment, customer_no)
+        state = get_or_create_locked_mock_state(NAMESPACE, key, card)
+        return [copy.deepcopy(state.payload)]
 
     def apply_action(
         self,
+        environment: str,
+        customer_no: str,
         contract_no: str,
         action: str,
         payload: dict[str, Any],
     ) -> dict[str, Any]:
         with transaction.atomic():
-            state, card, loan = self._find_loan(contract_no)
+            state, card, loan = self._find_loan(environment, customer_no, contract_no)
             amount = float(payload.get("amount") or 0)
             if action == "freeze":
                 loan["freezeStatus"] = "是"
@@ -82,18 +75,21 @@ class LoanMockStore:
             return {"card": copy.deepcopy(card), "message": f"{labels[action]}成功"}
 
     def _find_loan(
-        self, contract_no: str
+        self, environment: str, customer_no: str, contract_no: str
     ) -> tuple[MockToolState, dict[str, Any], dict[str, Any]]:
-        states = list(
-            MockToolState.objects.select_for_update()
-            .filter(namespace=NAMESPACE)
-            .order_by("key")
-        )
-        for state in states:
-            card = copy.deepcopy(state.payload)
-            for loan in card["loans"]:
-                if loan["contractNo"] == contract_no:
-                    return state, card, loan
+        try:
+            state = MockToolState.objects.select_for_update().get(
+                namespace=NAMESPACE,
+                key=_state_key(environment, customer_no),
+            )
+        except MockToolState.DoesNotExist as exc:
+            raise ValueError("贷款合同不存在，请先查询") from exc
+        card = copy.deepcopy(state.payload)
+        if card.get("environment") != environment or card.get("customerNo") != customer_no:
+            raise ValueError("贷款所属环境或客户不匹配，请重新查询")
+        for loan in card["loans"]:
+            if loan["contractNo"] == contract_no:
+                return state, card, loan
         raise ValueError("贷款合同不存在，请先查询")
 
     @staticmethod
@@ -169,6 +165,10 @@ def _build_card(sequence: int, environment: str, customer_no: str) -> dict[str, 
         "overdueDebt": 0.0,
         "quotaNo": loan["quotaNo"],
     }
+
+
+def _state_key(environment: str, customer_no: str) -> str:
+    return f"{environment}:{customer_no}"
 
 
 def _build_voucher(contract_no: str, index: int, amount: float) -> dict[str, Any]:

@@ -20,6 +20,8 @@ def execute_card_status(job: Job, operation: CardStatusOperation) -> dict[str, A
         result = adapter.apply_action(
             submission.card_no,
             submission.action.value,
+            environment=submission.environment,
+            customer_no=submission.customer_no,
             amount=submission.amount,
             target_card=submission.target_card,
         )

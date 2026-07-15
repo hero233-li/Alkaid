@@ -31,6 +31,8 @@ class CardStatusAdapter:
         card_no: str,
         action: str,
         *,
+        environment: str,
+        customer_no: str,
         amount: float | None,
         target_card: str | None = None,
     ) -> CardActionResult:
@@ -42,6 +44,8 @@ class CardStatusAdapter:
         return CARD_MOCK_STORE.apply_action(
             card_no,
             action,
+            environment=environment,
+            customer_no=customer_no,
             amount=amount,
             target_card=target_card,
         )

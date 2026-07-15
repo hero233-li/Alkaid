@@ -6,6 +6,7 @@ from datetime import date
 from django.db import transaction
 
 from apps.integrations.card_status.models import CardActionResult, CardRecord
+from apps.jobs.mock_state import get_or_create_locked_mock_state
 from apps.jobs.models import MockToolState
 from apps.mock_data.application_generator import (
     birth_date_for_age,
@@ -28,43 +29,37 @@ class CardMockStore:
             gender="男" if sequence % 2 else "女",
             company_type="91",
         )
-        with transaction.atomic():
-            state = (
-                MockToolState.objects.select_for_update()
-                .filter(namespace=NAMESPACE, key=generated.card_no)
-                .first()
-            )
-            if state is None:
-                card = CardRecord(
-                    environment=environment,
-                    customer_no=customer_no,
-                    certificate_no=generated.certificate_no,
-                    card_no=generated.card_no,
-                    balance=10_000.0,
-                    status="正常",
-                )
-                state = MockToolState.objects.create(
-                    namespace=NAMESPACE,
-                    key=card.card_no,
-                    payload=card.model_dump(mode="json", by_alias=True),
-                )
-            return (CardRecord.model_validate(state.payload),)
+        card = CardRecord(
+            environment=environment,
+            customer_no=customer_no,
+            certificate_no=generated.certificate_no,
+            card_no=generated.card_no,
+            balance=10_000.0,
+            status="正常",
+        )
+        key = _state_key(environment, card.card_no)
+        state = get_or_create_locked_mock_state(
+            NAMESPACE, key, card.model_dump(mode="json", by_alias=True)
+        )
+        return (CardRecord.model_validate(state.payload),)
 
     def apply_action(
         self,
         card_no: str,
         action: str,
         *,
+        environment: str,
+        customer_no: str,
         amount: float | None,
         target_card: str | None = None,
     ) -> CardActionResult:
-        keys = [card_no]
+        keys = [_state_key(environment, card_no)]
         if action == "transfer":
             if not target_card:
                 raise ValueError("转账需要目标卡号")
             if target_card == card_no:
                 raise ValueError("源卡与目标卡不能相同")
-            keys.append(target_card)
+            keys.append(_state_key(environment, target_card))
 
         with transaction.atomic():
             states = {
@@ -73,10 +68,12 @@ class CardMockStore:
                 .filter(namespace=NAMESPACE, key__in=sorted(keys))
                 .order_by("key")
             }
-            source_state = states.get(card_no)
+            source_state = states.get(_state_key(environment, card_no))
             if source_state is None:
                 raise ValueError("卡号不存在，请先查询客户卡片")
             source = CardRecord.model_validate(source_state.payload)
+            if source.environment != environment or source.customer_no != customer_no:
+                raise ValueError("卡片所属环境或客户不匹配，请重新查询")
             source_balance = source.balance
             target_state = None
 
@@ -91,7 +88,7 @@ class CardMockStore:
                 value = _positive_amount(amount)
                 if value > source_balance:
                     raise ValueError("卡余额不足")
-                target_state = states.get(target_card or "")
+                target_state = states.get(_state_key(environment, target_card or ""))
                 if target_state is None:
                     raise ValueError("目标卡不存在，请先查询目标客户卡片")
                 target = CardRecord.model_validate(target_state.payload)
@@ -139,3 +136,7 @@ def _positive_amount(value: float | None) -> float:
 
 
 CARD_MOCK_STORE = CardMockStore()
+
+
+def _state_key(environment: str, card_no: str) -> str:
+    return f"{environment}:{card_no}"

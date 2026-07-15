@@ -27,14 +27,21 @@ class LoanStatusAdapter:
         return LOAN_MOCK_STORE.search(environment, customer_no)
 
     def apply_action(
-        self, contract_no: str, action: str, payload: dict[str, Any]
+        self,
+        environment: str,
+        customer_no: str,
+        contract_no: str,
+        action: str,
+        payload: dict[str, Any],
     ) -> dict[str, Any]:
         self._require_mock_mode()
         logger.info(
             "loan_status_mock_action",
             extra={"job_id": self.job.id, "trace_id": self.job.trace_id, "action": action},
         )
-        return LOAN_MOCK_STORE.apply_action(contract_no, action, payload)
+        return LOAN_MOCK_STORE.apply_action(
+            environment, customer_no, contract_no, action, payload
+        )
 
     @staticmethod
     def _require_mock_mode() -> None:

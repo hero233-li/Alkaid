@@ -68,6 +68,18 @@ def test_readiness_checks_database_catalog_endpoints_and_messages(client) -> Non
 
 
 @pytest.mark.django_db
+@override_settings(
+    EXTERNAL_SYSTEM_MODE="real",
+    APPLICATION_LINK_PROTOCOL_CONFIRMED=False,
+    APPLICATION_LINK_SIGNER="",
+)
+def test_readiness_rejects_unconfirmed_real_application_link_protocol(client) -> None:
+    response = client.get("/health/ready/")
+    assert response.status_code == 503
+    assert response.json()["status"] == "not_ready"
+
+
+@pytest.mark.django_db
 def test_product_application_freezes_catalog_and_runs_mock_external_flow(
     client, django_capture_on_commit_callbacks
 ) -> None:

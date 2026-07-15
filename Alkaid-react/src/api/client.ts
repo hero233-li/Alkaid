@@ -78,6 +78,7 @@ apiClient.interceptors.response.use(
     if (error.config?.showGlobalProgress !== false) {
       updateApiProgress(-1);
     }
+    if (axios.isCancel(error)) return Promise.reject(error);
     return Promise.reject(new Error(getErrorMessage(error)));
   },
 );

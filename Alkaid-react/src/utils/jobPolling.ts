@@ -23,7 +23,13 @@ export async function pollJobUntilTerminal<T extends JobLike>(
   while (true) {
     if (options.signal?.aborted) throw abortError(options.cancelledMessage);
     if (Date.now() >= deadline) throw new Error(options.timeoutMessage);
-    const job = await options.fetchJob(options.signal);
+    let job: T;
+    try {
+      job = await options.fetchJob(options.signal);
+    } catch (error) {
+      if (options.signal?.aborted) throw abortError(options.cancelledMessage);
+      throw error;
+    }
     options.onProgress(job);
     if (job.status === 'success') return job;
     if (options.terminalStatuses.has(job.status)) {

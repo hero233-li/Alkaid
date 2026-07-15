@@ -17,6 +17,8 @@ def execute_loan_status(job: Job, operation: LoanStatusOperation) -> dict[str, A
     if operation == LoanStatusOperation.ACTION:
         submission = LoanActionSubmission.model_validate(job.payload)
         result = adapter.apply_action(
+            submission.environment,
+            submission.customer_no,
             submission.contract_no,
             submission.action.value,
             submission.integration_payload(),

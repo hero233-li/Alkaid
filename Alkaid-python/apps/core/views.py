@@ -5,6 +5,7 @@ from pathlib import Path
 from django.conf import settings
 from django.db import connection
 from django.http import FileResponse, Http404, JsonResponse
+from django.utils.module_loading import import_string
 from django.views.decorators.http import require_GET
 
 from apps.integrations.mock_product.api import validate_product_endpoint_coverage
@@ -37,6 +38,15 @@ def readiness(request):
         validate_product_endpoint_coverage(set(catalog.products))
         checks["productEndpoints"] = "ok"
         checks["rawMessages"] = {"status": "ok", **validate_message_catalog()}
+        if settings.EXTERNAL_SYSTEM_MODE == "real":
+            if not settings.APPLICATION_LINK_PROTOCOL_CONFIRMED:
+                raise RuntimeError("APPLICATION_LINK_PROTOCOL_CONFIRMED 未确认")
+            if not settings.APPLICATION_LINK_SIGNER:
+                raise RuntimeError("APPLICATION_LINK_SIGNER 未配置")
+            signer = import_string(settings.APPLICATION_LINK_SIGNER)
+            if not callable(signer):
+                raise RuntimeError("APPLICATION_LINK_SIGNER 不可调用")
+            checks["applicationLinkProtocol"] = "ok"
     except Exception as exc:
         logger.exception("readiness_check_failed")
         checks["error"] = type(exc).__name__

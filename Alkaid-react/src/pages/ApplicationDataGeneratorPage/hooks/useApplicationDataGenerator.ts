@@ -5,11 +5,17 @@ import type { ApplicationDataActivity, ApplicationDataConfig, ApplicationDataFor
 
 export function useApplicationDataGenerator() {
   const [config, setConfig] = useState<ApplicationDataConfig | null>(null);
+  const [configError, setConfigError] = useState<string | null>(null);
   const [records, setRecords] = useState<ApplicationDataRecord[]>([]);
   const [activity, setActivity] = useState<ApplicationDataActivity | null>(null);
   const controllerRef = useRef<AbortController | null>(null);
+  const loadConfig = async () => {
+    setConfigError(null);
+    try { setConfig(await getApplicationDataConfig()); }
+    catch (error) { setConfigError(error instanceof Error ? error.message : '配置加载失败'); }
+  };
   useEffect(() => {
-    void getApplicationDataConfig().then(setConfig).catch((error) => message.error(error instanceof Error ? error.message : '配置加载失败'));
+    void loadConfig();
     return () => controllerRef.current?.abort();
   }, []);
   const generate = async (values: ApplicationDataFormValues) => {
@@ -25,11 +31,13 @@ export function useApplicationDataGenerator() {
     } catch (error) {
       if (!isCancelled(error)) message.error(error instanceof Error ? error.message : '生成失败');
     } finally {
-      if (controllerRef.current === controller) controllerRef.current = null;
-      setActivity(null);
+      if (controllerRef.current === controller) {
+        controllerRef.current = null;
+        setActivity(null);
+      }
     }
   };
-  return { config, records, activity, busy: Boolean(activity), generate };
+  return { config, configError, records, activity, busy: Boolean(activity), generate, reloadConfig: loadConfig };
 }
 
 function isCancelled(error: unknown) {

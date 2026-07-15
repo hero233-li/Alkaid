@@ -1,11 +1,13 @@
 import json
+from concurrent.futures import ThreadPoolExecutor
 from datetime import date
 
 import pytest
+from django.db import close_old_connections
 
 from apps.integrations.card_status.mock_store import CARD_MOCK_STORE, CardMockStore
 from apps.integrations.loan_status.mock_store import LOAN_MOCK_STORE, LoanMockStore
-from apps.jobs.models import Job, JobStatus
+from apps.jobs.models import Job, JobStatus, MockToolState
 from apps.mock_data.application_generator import (
     generate_application_record,
     validate_social_credit_code,
@@ -188,6 +190,8 @@ def test_card_transfer_rejects_invalid_target_or_balance(target, amount, message
         CARD_MOCK_STORE.apply_action(
             source.card_no,
             "transfer",
+            environment=source.environment,
+            customer_no=source.customer_no,
             amount=amount,
             target_card=target_card,
         )
@@ -301,12 +305,74 @@ def test_loan_search_and_action_use_dedicated_jobs(
 @pytest.mark.django_db
 def test_mock_state_is_shared_across_store_instances() -> None:
     card = CARD_MOCK_STORE.search("环境1", "C000000000777")[0]
-    CardMockStore().apply_action(card.card_no, "deposit", amount=250)
+    CardMockStore().apply_action(
+        card.card_no,
+        "deposit",
+        environment=card.environment,
+        customer_no=card.customer_no,
+        amount=250,
+    )
     assert CardMockStore().search("环境1", "C000000000777")[0].balance == 10_250
 
     loan_card = LOAN_MOCK_STORE.search("环境1", "C000000000778")[0]
     contract_no = loan_card["loans"][0]["contractNo"]
-    LoanMockStore().apply_action(contract_no, "freeze", {})
+    LoanMockStore().apply_action(
+        "环境1", "C000000000778", contract_no, "freeze", {}
+    )
     assert LoanMockStore().search("环境1", "C000000000778")[0]["loans"][0][
         "freezeStatus"
     ] == "是"
+
+
+@pytest.mark.django_db
+def test_mock_state_is_isolated_by_environment_and_validates_owner() -> None:
+    env1 = CARD_MOCK_STORE.search("环境1", "C000000000901")[0]
+    env2 = CARD_MOCK_STORE.search("环境2", "C000000000901")[0]
+    CARD_MOCK_STORE.apply_action(
+        env1.card_no,
+        "deposit",
+        environment="环境1",
+        customer_no=env1.customer_no,
+        amount=100,
+    )
+    assert CARD_MOCK_STORE.search("环境1", env1.customer_no)[0].balance == 10_100
+    assert CARD_MOCK_STORE.search("环境2", env2.customer_no)[0].balance == 10_000
+    with pytest.raises(ValueError, match="不存在"):
+        CARD_MOCK_STORE.apply_action(
+            env1.card_no,
+            "deposit",
+            environment="环境3",
+            customer_no=env1.customer_no,
+            amount=100,
+        )
+
+    loan1 = LOAN_MOCK_STORE.search("环境1", "C000000000902")[0]
+    loan2 = LOAN_MOCK_STORE.search("环境2", "C000000000902")[0]
+    contract_no = loan1["loans"][0]["contractNo"]
+    LOAN_MOCK_STORE.apply_action(
+        "环境1", loan1["customerNo"], contract_no, "freeze", {}
+    )
+    assert LOAN_MOCK_STORE.search("环境1", loan1["customerNo"])[0]["loans"][0][
+        "freezeStatus"
+    ] == "是"
+    assert LOAN_MOCK_STORE.search("环境2", loan2["customerNo"])[0]["loans"][0][
+        "freezeStatus"
+    ] == "否"
+
+
+@pytest.mark.django_db(transaction=True)
+def test_concurrent_first_search_converges_on_one_mock_state() -> None:
+    def search() -> str:
+        close_old_connections()
+        try:
+            return CardMockStore().search("环境1", "C000000000903")[0].card_no
+        finally:
+            close_old_connections()
+
+    with ThreadPoolExecutor(max_workers=2) as executor:
+        cards = list(executor.map(lambda _: search(), range(2)))
+
+    assert cards[0] == cards[1]
+    assert MockToolState.objects.filter(
+        namespace="card_status", key=f"环境1:{cards[0]}"
+    ).count() == 1
