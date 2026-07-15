@@ -30,7 +30,7 @@
 | 方法 | 路径 | 说明 |
 | --- | --- | --- |
 | `GET` | `/health/` | 健康检查 |
-| `GET` | `/health/ready/` | 数据库与静态运行配置就绪检查 |
+| `GET` | `/health/ready/` | 数据库、静态配置及真实申请链接门禁检查 |
 | `GET` | `/api/product-data/applications/config` | 获取产品申请表单配置 |
 | `POST` | `/api/product-data/applications` | 创建或幂等返回产品申请 Job |
 | `GET` | `/api/product-data/tools/application-links/config` | 获取申请链接环境、产品和路由配置 |
@@ -56,6 +56,7 @@
 | `POST` | `/api/product-data/tools/loans/search` | 创建客户贷款查询 Job |
 | `POST` | `/api/product-data/tools/loans/{contractNo}/actions/{action}` | 创建贷款操作 Job |
 | `GET` | `/api/jobs/{jobId}` | 查询 Job 详情和已保存日志 |
+| `GET` | `/api/jobs/{jobId}/payload` | staff 权限读取 Job 原始 payload |
 | `POST` | `/api/jobs/{jobId}/retry` | 重试失败、超时或已取消 Job |
 | `POST` | `/api/jobs/{jobId}/cancel` | 请求取消 Job |
 | `GET` | `/api/jobs/{jobId}/logs` | 增量查询 Job 日志 |
@@ -76,7 +77,8 @@
 
 ### `GET /health/ready/`
 
-检查数据库查询、产品 Catalog、产品外系统接口覆盖和全部原始报文结构。全部正常返回 `200` 和
+检查数据库查询、产品 Catalog、产品外系统接口覆盖和全部原始报文结构。真实模式还会检查
+`APPLICATION_LINK_PROTOCOL_CONFIRMED=true`、Signer 已配置且可加载。全部正常返回 `200` 和
 `{"status":"ready","checks":...}`；任一项失败返回 `503`。该接口不主动调用真实外系统，
 因此不会产生业务副作用；Worker/Broker 可用性仍由进程监管和运行监控负责。
 

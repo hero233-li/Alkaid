@@ -11,6 +11,10 @@ GitLab 分支、提交、发布和文件上传规范见
 
 本机发布流程见 [`docs/LOCAL_RELEASE_WORKFLOW.md`](./docs/LOCAL_RELEASE_WORKFLOW.md)。
 
+本次异步 Job、外系统 Integration、环境变量、数据库迁移、调用链和测试说明见
+[`docs/ASYNC_WORKFLOW_OPERATIONS.md`](./docs/ASYNC_WORKFLOW_OPERATIONS.md)；完整接口契约见
+[`docs/API.md`](./docs/API.md)。
+
 ## 本机 DEV
 
 后端本机开发使用 MySQL 5.7。`npm run dev` 默认会同时启动前端、Django 和 Celery worker；
@@ -19,8 +23,6 @@ worker，任务改为同步执行。
 即使保持异步配置，开发环境的 Mock 模式在投递 RabbitMQ 失败时也会自动回退到本地执行，
 不会再把队列连接异常直接返回成 HTTP 500；生产模式不会启用这个回退。
 本机启动会优先读取项目根目录的 `.env.local`，这个文件只放本机配置，不提交。
-
-当前已按你提供的内网 MySQL 信息写入 `.env.local`。如需换库，直接改这个文件即可。
 
 如果没有 `.env.local`，脚本才会使用默认连接：
 
@@ -38,6 +40,13 @@ CREATE DATABASE alkaid_dev CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 
 ```bash
 npm run dev
+```
+
+首次启动或拉取包含 Migration 的版本后，必须先执行：
+
+```bash
+cd Alkaid-python
+make migrate
 ```
 
 检查当前实际生效的 MySQL 配置：

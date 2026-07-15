@@ -80,6 +80,7 @@ POST /api/product-data/business-access/search
 GET  /api/product-data/verification-approval/config
 POST /api/product-data/verification-approval/search
 GET  /api/jobs/{id}
+GET  /api/jobs/{id}/payload
 POST /api/jobs/{id}/retry
 POST /api/jobs/{id}/cancel
 GET  /api/jobs/{id}/logs/stream?afterId=0
@@ -164,7 +165,19 @@ alkaid_prod
 ```bash
 make check
 python scripts/check_architecture.py
+python manage.py makemigrations --check --dry-run
+python scripts/verify_celery_runtime.py --min-workers 2
 ```
+
+前端测试与构建从仓库根目录旁的 `Alkaid-react` 执行：
+
+```bash
+npm test -- --run
+npm run build
+```
+
+接口、调用链、环境变量、数据库迁移和完整测试矩阵见
+[`../docs/ASYNC_WORKFLOW_OPERATIONS.md`](../docs/ASYNC_WORKFLOW_OPERATIONS.md)。
 
 Job 默认保留30天，JobLog 和接口调用详情默认保留7天。Celery Beat 每分钟收敛超过 deadline
 仍未结束的任务，并每小时清理过期记录；Worker 丢失后，同一 Celery 投递可以继续恢复该 Job。
