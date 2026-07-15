@@ -1,7 +1,0 @@
-{
-  "field_sets": {
-    "customer_base": ["customer_name", "certificate_no", "phone", "customer_type"],
-    "organization_base": ["organization_code", "outlet_code"],
-    "extra_common": ["customer_name", "certificate_no", "organization_code"]
-  }
-}

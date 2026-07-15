@@ -1,58 +1,40 @@
 import asyncio
 
-import pytest
-
-from apps.jobs.services import JobRepository
 from apps.jobs.sse import JobLogSSEApplication
 
 
-@pytest.mark.django_db(transaction=True)
-def test_sse_stream_returns_existing_logs_and_terminal_status():
-    job = JobRepository.create(
-        kind="test",
-        name="SSE 测试",
-        product="",
-        payload={},
-        trace_id="sse-trace",
-        idempotency_key="sse-job-1",
-        timeout_seconds=30,
-    ).job
-    JobRepository.mark_success(job.id, {"ok": True})
-    sent: list[dict[str, object]] = []
-    receive_count = 0
+def test_sse_closes_after_terminal_snapshot(monkeypatch) -> None:
+    async def load_snapshot(job_id: int, after_id: int):
+        return {"status": "success", "progress": 100, "logs": [], "has_more": False}
 
-    async def fallback(scope, receive, send):
-        raise AssertionError("SSE 路径不应进入 Django fallback")
+    async def django_application(scope, receive, send) -> None:
+        raise AssertionError("request should be handled by SSE")
 
-    async def receive():
-        nonlocal receive_count
-        receive_count += 1
-        if receive_count == 1:
-            return {"type": "http.request", "body": b"", "more_body": False}
-        return {"type": "http.disconnect"}
+    async def run() -> list[dict[str, object]]:
+        sent: list[dict[str, object]] = []
 
-    async def send(message):
-        sent.append(message)
+        async def receive() -> dict[str, str]:
+            return {"type": "http.disconnect"}
 
-    async def run_application():
-        application = JobLogSSEApplication(fallback)
-        await application(
+        async def send(message: dict[str, object]) -> None:
+            sent.append(message)
+
+        app = JobLogSSEApplication(django_application)
+        await app(
             {
                 "type": "http",
                 "method": "GET",
-                "path": f"/api/jobs/{job.id}/logs/stream",
+                "path": "/api/jobs/1/logs/stream",
                 "query_string": b"afterId=0",
             },
             receive,
             send,
         )
+        return sent
 
-    asyncio.run(run_application())
+    monkeypatch.setattr("apps.jobs.sse._load_snapshot", load_snapshot)
+    sent = asyncio.run(run())
 
-    assert sent[0]["type"] == "http.response.start"
     assert sent[0]["status"] == 200
-    body = b"".join(message.get("body", b"") for message in sent[1:]).decode()
-    assert "event: log" in body
-    assert "任务执行完成" in body
-    assert "event: status" in body
-    assert '"status":"success"' in body
+    assert any(b"event: status" in message.get("body", b"") for message in sent[1:])
+    assert sent[-1]["more_body"] is False

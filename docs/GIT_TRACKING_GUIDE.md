@@ -7,7 +7,7 @@
 - 根目录启动入口：`package.json`、`start-dev.bat`、`start-dev.command`
 - 开发/发布脚本：`scripts/windows/`、`scripts/macos/`
 - 项目文档：`README.md`、`docs/`
-- 后端源码与配置模板：`Alkaid-python/` 下的源码、测试、`pyproject.toml`、`uv.lock`、`requirements-dev.lock`、`.env.example`、`.env.server.example`
+- 后端源码与配置模板：`Alkaid-python/` 下的源码、测试、`pyproject.toml`、唯一依赖锁 `requirements-dev.lock`、`.env.example`、`.env.server.example`
 - 前端源码与依赖清单：`Alkaid-react/src/`、`Alkaid-react/package.json`、`Alkaid-react/package-lock.json`、Vite/TS 配置文件
 - 本地配置模板：`.env.local.example`
 
@@ -16,7 +16,7 @@
 - 真实环境变量和密码：`.env.local`、`Alkaid-python/.env`
 - 运行目录和发布产物：`Alkaid-runtime/`、`Alkaid-releases/`
 - 本地压缩包和导出包：`*.zip`、`*.tar`、`*.tar.gz`、`*.tgz`
-- 依赖目录：`node_modules/`、`Alkaid-react/node_modules/`、`Alkaid-python/.venv/`
+- 依赖目录：`node_modules/`、`Alkaid-react/node_modules/`、`.venv/`
 - 构建产物：`Alkaid-react/dist/`、`Alkaid-python/staticfiles/`、`*.tsbuildinfo`
 - 本地数据库、上传文件和日志：`*.sqlite3`、`Alkaid-python/db.sqlite3`、`Alkaid-python/media/`、`*.log`
 - 缓存目录：`__pycache__/`、`.pytest_cache/`、`.ruff_cache/`

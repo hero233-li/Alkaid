@@ -18,11 +18,29 @@ MYSQL_DATABASE="${MYSQL_DATABASE:-alkaid_dev}"
 MYSQL_USER="${MYSQL_USER:-workflow}"
 MYSQL_PASSWORD="${MYSQL_PASSWORD:-workflow}"
 MYSQL_SSL_DISABLED="${MYSQL_SSL_DISABLED:-true}"
+CELERY_BROKER_URL="${CELERY_BROKER_URL:-amqp://workflow:workflow@127.0.0.1:5672//}"
+CELERY_QUEUE="${CELERY_QUEUE:-alkaid-local}"
+CELERY_TASK_ALWAYS_EAGER="${CELERY_TASK_ALWAYS_EAGER:-false}"
 
-BACKEND_PYTHON="$PROJECT_ROOT/Alkaid-python/.venv/bin/python"
+is_truthy() {
+  case "$(printf '%s' "$1" | tr '[:upper:]' '[:lower:]')" in
+    1|true|yes|on) return 0 ;;
+    *) return 1 ;;
+  esac
+}
+
+if [ -z "${DEV_START_WORKER:-}" ]; then
+  if is_truthy "$CELERY_TASK_ALWAYS_EAGER"; then
+    DEV_START_WORKER=false
+  else
+    DEV_START_WORKER=true
+  fi
+fi
+
+BACKEND_PYTHON="$PROJECT_ROOT/.venv/bin/python"
 
 install_backend_deps() {
-  cd "$PROJECT_ROOT/Alkaid-python"
+  cd "$PROJECT_ROOT"
   if [ ! -x "$BACKEND_PYTHON" ]; then
     "$PYTHON_BOOTSTRAP" -m venv .venv
   fi
@@ -32,16 +50,16 @@ install_backend_deps() {
     "$BACKEND_PYTHON" -m pip install $PIP_INSTALL_ARGS --upgrade pip
   fi
   # shellcheck disable=SC2086
-  "$BACKEND_PYTHON" -m pip install $PIP_INSTALL_ARGS -r requirements-dev.lock
-  "$BACKEND_PYTHON" -m pip install -e . --no-deps
+  "$BACKEND_PYTHON" -m pip install $PIP_INSTALL_ARGS -r "$PROJECT_ROOT/Alkaid-python/requirements-dev.lock"
+  "$BACKEND_PYTHON" -m pip install -e "$PROJECT_ROOT/Alkaid-python" --no-deps
 }
 
-if ! "$BACKEND_PYTHON" -c "import django, uvicorn, pymysql" >/dev/null 2>&1; then
+if ! "$BACKEND_PYTHON" -c "import django, uvicorn, pymysql, celery" >/dev/null 2>&1; then
   echo "Preparing backend virtual environment..."
   install_backend_deps
 fi
 
-if [ ! -d "$PROJECT_ROOT/Alkaid-react/node_modules" ]; then
+if [ ! -d "$PROJECT_ROOT/Alkaid-react/node_modules" ] || [ ! -x "$PROJECT_ROOT/Alkaid-react/node_modules/.bin/vite" ]; then
   echo "Preparing frontend dependencies..."
   cd "$PROJECT_ROOT/Alkaid-react"
   zsh -lc "$NPM_INSTALL_CMD"
@@ -51,6 +69,7 @@ mkdir -p "$ALKAID_RUNTIME_DIR"
 
 if [ "${DEV_SPLIT_WINDOWS:-false}" = "true" ]; then
   BACKEND_RUNNER="$ALKAID_RUNTIME_DIR/dev-backend.command"
+  WORKER_RUNNER="$ALKAID_RUNTIME_DIR/dev-worker.command"
   FRONTEND_RUNNER="$ALKAID_RUNTIME_DIR/dev-frontend.command"
 
   cat > "$BACKEND_RUNNER" <<EOF
@@ -63,10 +82,29 @@ export MYSQL_DATABASE="$MYSQL_DATABASE"
 export MYSQL_USER="$MYSQL_USER"
 export MYSQL_PASSWORD="$MYSQL_PASSWORD"
 export MYSQL_SSL_DISABLED="$MYSQL_SSL_DISABLED"
-export CELERY_TASK_ALWAYS_EAGER=true
+export CELERY_BROKER_URL="$CELERY_BROKER_URL"
+export CELERY_QUEUE="$CELERY_QUEUE"
+export CELERY_TASK_ALWAYS_EAGER="$CELERY_TASK_ALWAYS_EAGER"
 cd "$PROJECT_ROOT/Alkaid-python"
 "$BACKEND_PYTHON" manage.py migrate || exit 1
 "$BACKEND_PYTHON" -m uvicorn config.asgi:application --host 127.0.0.1 --port "$DEV_BACKEND_PORT" --reload
+EOF
+
+  cat > "$WORKER_RUNNER" <<EOF
+#!/bin/zsh
+export DJANGO_SETTINGS_MODULE=config.settings.local
+export DB_ENGINE=mysql
+export MYSQL_HOST="$MYSQL_HOST"
+export MYSQL_PORT="$MYSQL_PORT"
+export MYSQL_DATABASE="$MYSQL_DATABASE"
+export MYSQL_USER="$MYSQL_USER"
+export MYSQL_PASSWORD="$MYSQL_PASSWORD"
+export MYSQL_SSL_DISABLED="$MYSQL_SSL_DISABLED"
+export CELERY_BROKER_URL="$CELERY_BROKER_URL"
+export CELERY_QUEUE="$CELERY_QUEUE"
+export CELERY_TASK_ALWAYS_EAGER="$CELERY_TASK_ALWAYS_EAGER"
+cd "$PROJECT_ROOT/Alkaid-python"
+"$BACKEND_PYTHON" -m celery -A config worker -l info -P solo -Q "$CELERY_QUEUE"
 EOF
 
   cat > "$FRONTEND_RUNNER" <<EOF
@@ -76,10 +114,15 @@ cd "$PROJECT_ROOT/Alkaid-react"
 npm run dev -- --port "$DEV_FRONTEND_PORT"
 EOF
 
-  chmod +x "$BACKEND_RUNNER" "$FRONTEND_RUNNER"
+  chmod +x "$BACKEND_RUNNER" "$WORKER_RUNNER" "$FRONTEND_RUNNER"
 
   echo "Starting dev backend on http://127.0.0.1:$DEV_BACKEND_PORT"
   open -a Terminal "$BACKEND_RUNNER"
+
+  if is_truthy "$DEV_START_WORKER" && ! is_truthy "$CELERY_TASK_ALWAYS_EAGER"; then
+    echo "Starting Celery worker for queue $CELERY_QUEUE"
+    open -a Terminal "$WORKER_RUNNER"
+  fi
 
   echo "Starting dev frontend on http://127.0.0.1:$DEV_FRONTEND_PORT"
   open -a Terminal "$FRONTEND_RUNNER"
@@ -88,9 +131,40 @@ EOF
   exit 0
 fi
 
-BACKEND_LOG="$ALKAID_RUNTIME_DIR/dev-backend.log"
+port_in_use() {
+  lsof -nP -iTCP:"$1" -sTCP:LISTEN >/dev/null 2>&1
+}
 
-export DJANGO_SETTINGS_MODULE=config.settings.local
+assert_port_free() {
+  local port="$1"
+  local name="$2"
+  if port_in_use "$port"; then
+    echo "$name port $port is already in use. Stop the old service or set DEV_${name}_PORT." >&2
+    exit 1
+  fi
+}
+
+mask_secret_url() {
+  printf '%s' "$1" | sed -E 's#(://[^:/@]+):[^@]+@#\1:********@#'
+}
+
+stop_tree() {
+  local pid="$1"
+  local name="$2"
+  if [ -n "$pid" ] && kill -0 "$pid" >/dev/null 2>&1; then
+    echo "Stopping $name..."
+    pkill -TERM -P "$pid" >/dev/null 2>&1 || true
+    kill "$pid" >/dev/null 2>&1 || true
+    sleep 1
+    pkill -KILL -P "$pid" >/dev/null 2>&1 || true
+    kill -KILL "$pid" >/dev/null 2>&1 || true
+  fi
+}
+
+assert_port_free "$DEV_BACKEND_PORT" BACKEND
+assert_port_free "$DEV_FRONTEND_PORT" FRONTEND
+
+export DJANGO_SETTINGS_MODULE="${DJANGO_SETTINGS_MODULE:-config.settings.local}"
 export DB_ENGINE=mysql
 export MYSQL_HOST="$MYSQL_HOST"
 export MYSQL_PORT="$MYSQL_PORT"
@@ -98,28 +172,46 @@ export MYSQL_DATABASE="$MYSQL_DATABASE"
 export MYSQL_USER="$MYSQL_USER"
 export MYSQL_PASSWORD="$MYSQL_PASSWORD"
 export MYSQL_SSL_DISABLED="$MYSQL_SSL_DISABLED"
-export CELERY_TASK_ALWAYS_EAGER=true
+export CELERY_BROKER_URL="$CELERY_BROKER_URL"
+export CELERY_QUEUE="$CELERY_QUEUE"
+export CELERY_TASK_ALWAYS_EAGER="$CELERY_TASK_ALWAYS_EAGER"
+
+echo "Runtime config:"
+echo "  Python: $BACKEND_PYTHON"
+echo "  Django settings: $DJANGO_SETTINGS_MODULE"
+echo "  Backend: http://127.0.0.1:$DEV_BACKEND_PORT"
+echo "  Frontend: http://127.0.0.1:$DEV_FRONTEND_PORT"
+echo "  Celery broker: $(mask_secret_url "$CELERY_BROKER_URL")"
+echo "  Celery queue: $CELERY_QUEUE"
+echo "  Celery eager: $CELERY_TASK_ALWAYS_EAGER"
+echo "  Start worker: $DEV_START_WORKER"
 
 echo "Migrating backend database..."
 cd "$PROJECT_ROOT/Alkaid-python"
 "$BACKEND_PYTHON" manage.py migrate
 
 cleanup() {
-  if [ -n "${BACKEND_PID:-}" ] && kill -0 "$BACKEND_PID" >/dev/null 2>&1; then
-    echo "Stopping backend..."
-    kill "$BACKEND_PID" >/dev/null 2>&1 || true
-  fi
+  stop_tree "${BACKEND_PID:-}" backend
+  stop_tree "${WORKER_PID:-}" worker
 }
 trap cleanup EXIT INT TERM
+
+if is_truthy "$DEV_START_WORKER" && ! is_truthy "$CELERY_TASK_ALWAYS_EAGER"; then
+  (
+    cd "$PROJECT_ROOT/Alkaid-python"
+    exec "$BACKEND_PYTHON" -m celery -A config worker -l info -P solo -Q "$CELERY_QUEUE"
+  ) &
+  WORKER_PID=$!
+  echo "Starting Celery worker for queue $CELERY_QUEUE"
+fi
 
 (
   cd "$PROJECT_ROOT/Alkaid-python"
   exec "$BACKEND_PYTHON" -m uvicorn config.asgi:application --host 127.0.0.1 --port "$DEV_BACKEND_PORT" --reload
-) > "$BACKEND_LOG" 2>&1 &
+) &
 BACKEND_PID=$!
 
 echo "Starting dev backend on http://127.0.0.1:$DEV_BACKEND_PORT"
-echo "Backend log: $BACKEND_LOG"
 echo "Starting dev frontend on http://127.0.0.1:$DEV_FRONTEND_PORT"
 
 export ALIOTH_API_TARGET="http://127.0.0.1:$DEV_BACKEND_PORT"

@@ -55,6 +55,7 @@ class Job(models.Model):
         ordering = ["-created_at"]
         indexes = [
             models.Index(fields=["status", "expires_at"], name="job_status_exp_idx"),
+            models.Index(fields=["status", "deadline_at"], name="job_status_dead_idx"),
         ]
 
 
@@ -106,3 +107,20 @@ class JobApiCall(models.Model):
     class Meta:
         ordering = ["id"]
         indexes = [models.Index(fields=["job", "id"], name="job_call_job_id_idx")]
+
+
+class MockToolState(models.Model):
+    """Shared mutable state for Mock tools executed by independent Celery workers."""
+
+    namespace = models.CharField(max_length=64)
+    key = models.CharField(max_length=255)
+    payload = models.JSONField(default=dict)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=["namespace", "key"],
+                name="mock_state_namespace_key_uniq",
+            )
+        ]

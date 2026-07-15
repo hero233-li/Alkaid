@@ -1,270 +1,68 @@
-# 产品配置与 Handler 使用说明
+# 统一产品目录
 
-当前后端采用“配置选择 Handler，Python 实现业务流程”的模式。
-
-配置文件只负责产品信息、字段要求和 Handler 选择。接口调用顺序、业务判断、长请求报文和响应清洗直接写在 Python Handler 中，不再使用 JSON workflow、endpoint 和 request profile 编排。
-
-## 1. 页面配置
-
-文件：`product_application.json`
-
-它控制前端可见内容：
-
-- 环境、产品、地区、机构和网点
-- 表单字段及字段组
-- 产品启用哪些字段组
-- 产品必填字段
-
-前端通过以下接口读取：
+产品页面、后端参数校验、Job 执行快照和申请链接路由使用同一套配置来源：
 
 ```text
-GET /api/product-data/applications/config
-```
-
-字段定义只写一次：
-
-```json
-{
-  "name": "redShieldEnabled",
-  "label": "红盾",
-  "control": "switch",
-  "defaultValue": true
-}
-```
-
-顶层字段组：
-
-```json
-"fieldSets": {
-  "customerBase": ["personName", "certificateNo", "phone", "cardNo"],
-  "whitelist": ["whitelistEnabled"],
-  "redShield": ["redShieldEnabled"],
-  "credit": ["creditEnabled"]
-}
-```
-
-产品引用字段组：
-
-```json
-{
-  "value": "product-a",
-  "fieldSets": ["selection", "customerBase", "enterprise", "whitelist", "redShield"],
-  "requiredFields": ["personName", "certificateNo", "phone", "whitelistEnabled"]
-}
-```
-
-## 2. 后端执行配置
-
-目录：`execution/source/`
-
-```text
-execution/source/
-├── manifest.json
-├── fields.json
-├── field_sets.json
+configs/
+├── reference_data.json
 └── products/
     ├── product_a.json
     ├── product_b.json
     └── product_c.json
 ```
 
-### 2.1 manifest.json
+## reference_data.json
 
-```json
-{
-  "version": 5,
-  "products": [
-    "products/product_a.json",
-    "products/product_b.json",
-    "products/product_c.json"
-  ]
-}
-```
+只维护真正跨产品共享的数据：Catalog 版本、环境选项和页面级联重置关系。
 
-新增或修改执行配置后，递增 `version`，然后执行：
+## products/*.json
 
-```bash
-python scripts/compile_product_config.py
-```
+每个产品文件自包含以下内容：
 
-检查源配置和编译结果：
+- 稳定产品代码、显示名称和产品类型
+- 产品自己的开关字段
+- 支持的环境、地区、机构和网点
+- 申请方式代码和显示名称
+- 页面字段、字段分组和字段适用的申请方式
+- 每种申请方式的必填规则
+- 申请链接功能路由
+
+字段名直接使用产品申请 API 的 payload 名称，例如 `personName`、`dynamicAmount`。
+必填规则只维护 `requiredFor`；页面的 `required` 由 Catalog 自动派生，避免双重配置。
+外系统字段名和原始报文不属于产品配置，必须保留在 `apps/integrations/<system>/`。
+
+## 运行方式
+
+`apps.product_data.catalog.load_product_catalog()` 扫描 `products/*.json`，通过 Pydantic 校验后：
+
+1. 派生前端 `ProductApplicationConfig`
+2. 直接为新 Job 冻结产品和申请方式快照
+3. 解析产品自己的申请链接路由
+
+默认目录的 Catalog 和前端派生配置会在进程内缓存。修改 JSON 后需要重启 Web、Worker 和 Beat，
+保证三个进程使用同一个配置版本；正在排队的 Job 仍使用创建时冻结的快照。
+
+运行时不再读取 `product_application.json`、`execution/source/` 或编译后的 Catalog 文件。
+
+检查配置：
 
 ```bash
 python scripts/compile_product_config.py --check
 ```
 
-运行时只读取：
+命令名称为兼容旧开发脚本而保留；它不再生成运行时文件，会同时校验统一产品目录、每个产品的
+外系统检查接口覆盖关系，以及全部原始报文的信封结构。
 
-```text
-execution/compiled/product_catalog.json
-```
+## 新增产品
 
-新 Job 会把版本和产品配置快照保存到：
+1. 在 `products/` 新增一个产品 JSON。
+2. 在对应 Integration 的 `api/` 中为产品登记外系统检查接口；若多个产品确实共用同一接口，
+   可以直接复用同一个 `EndpointSpec`。配置检查会阻止遗漏或多余映射进入发布版。
+3. 如果调用顺序与现有产品相同，不需要新增 Handler、注册表或业务类。
+4. 只有调用顺序真正不同，才在 `product_applications/services.py` 新增一个明确业务函数；
+   不为只修改常量的产品建立 Handler 或注册表。
+5. 外系统请求报文仍在对应 Integration Adapter 中显式赋值。
+6. 运行配置检查和后端测试。
 
-```text
-execution_config_version
-execution_config_snapshot
-```
-
-### 2.2 fields.json
-
-统一定义后端业务输入字段：
-
-```json
-"customer_name": {
-  "source": "application.personName",
-  "required": true,
-  "normalizer": "strip"
-}
-```
-
-- `source`：从申请参数的哪个位置读取
-- `required`：产品申请方式启用该字段后是否必填
-- `normalizer`：通用数据清洗
-
-支持的 normalizer：
-
-```text
-identity  保持原值
-strip     字符串删除首尾空格
-boolean   使用 Python bool(value) 转换
-```
-
-`boolean` 适合前端提交的 JSON 布尔值。非空字符串都将转换为 `true`，所以不能直接用它处理字符串 `"false"`、`"0"` 或 `"N"`。
-
-### 2.3 field_sets.json
-
-用于复用后端业务字段：
-
-```json
-"customer_base": [
-  "customer_name",
-  "certificate_no",
-  "phone",
-  "customer_type"
-]
-```
-
-### 2.4 products/product_a.json
-
-```json
-{
-  "product": {
-    "code": "product-a",
-    "name": "产品A",
-    "product_type": "whitelist_product",
-    "handler": "whitelist_application_v1",
-    "default_application_method": "normal",
-    "common_field_sets": ["customer_base", "organization_base"],
-    "application_methods": {
-      "normal": {
-        "name": "普通申请",
-        "operation": "mock_product.product_a.apply",
-        "fields": ["whitelist_enabled", "red_shield_enabled"]
-      }
-    }
-  }
-}
-```
-
-- `product_type`：产品业务大类
-- `handler`：实际执行业务流程的版本化 Python Handler
-- `common_field_sets`：所有申请方式共用字段
-- `application_methods`：申请方式及其额外字段
-- `operation`：任务结果中的业务操作标识
-
-配置编译时会检查 Handler 是否已经注册。
-
-## 3. Handler
-
-目录：
-
-```text
-apps/product_data/handlers/
-├── base.py
-├── products.py
-└── registry.py
-```
-
-当前注册关系：
-
-```text
-whitelist_application_v1  → WhitelistApplicationHandler
-red_shield_application_v1 → RedShieldApplicationHandler
-credit_application_v1     → CreditApplicationHandler
-```
-
-产品配置通过 `handler` 选择处理器。Handler 直接使用 Python 表达：
-
-- 接口调用顺序
-- `if/else` 业务判断
-- 提前结束
-- 多接口结果组合
-- 请求报文构建
-- 响应字段清洗
-
-公共流程和 `application/x-www-form-urlencoded` 示例在 `handlers/base.py`。产品差异在 `handlers/products.py`。
-
-## 4. 多字段 form-urlencoded
-
-公共 HTTP Client 支持：
-
-```python
-ctx.call(
-    "customer.query",
-    endpoint,
-    {
-        "req_message": {
-            "req_head": {...},
-            "req_body": {"request": {...}},
-        },
-        "bizcond": {...},
-        "starttime": ctx.start_time,
-        "traceno": ctx.trace_no,
-    },
-)
-```
-
-发送规则：
-
-- `dict/list/tuple`：自动 `json.dumps(..., ensure_ascii=False)`
-- `bool`：转换为 `true/false`
-- 其他值：使用 `str(value)`
-- `None`：不发送该表单字段
-
-最终使用：
-
-```python
-httpx.request(..., data=form_data)
-```
-
-由 httpx 生成 `application/x-www-form-urlencoded`，不要手工 URL 编码。
-
-## 5. 请求审计
-
-每次外部调用继续写入 `JobApiCall`：
-
-```json
-{
-  "query": {},
-  "form": {
-    "req_message": {},
-    "bizcond": {},
-    "starttime": "...",
-    "traceno": "..."
-  }
-}
-```
-
-审计保存序列化前的结构化表单内容，便于查看长报文；Token、证件号、手机号、卡号等字段继续脱敏，超长内容继续按现有限制截断。
-
-## 6. 新增产品类型
-
-1. 在 `handler_codes.py` 增加版本化 Handler 编号。
-2. 在 `handlers/products.py` 新增 Handler。
-3. 在 `handlers/registry.py` 注册 Handler。
-4. 新建产品配置并填写 `product_type` 和 `handler`。
-5. 在 `manifest.json` 注册产品并递增版本。
-6. 重新编译配置并运行测试。
-
-不要覆盖已经被旧 Job 引用的 Handler 行为。逻辑发生不兼容变化时新增 `*_v2`，并让新产品配置引用新版本；旧 Handler 至少保留到相关 Job 超过保留期限。
+创建 Job 时会保存 `execution_config_snapshot`。字段和申请方式配置更新后，历史 Job 仍使用创建
+时的快照；旧快照中的历史 Handler/operation 字段会被兼容读取但不再参与新任务执行。

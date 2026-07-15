@@ -27,7 +27,7 @@ export interface JobDetail {
   status: JobStatus;
   stage: string;
   progress: number;
-  payload: Record<string, unknown>;
+  payload?: Record<string, unknown>;
   result: Record<string, unknown>;
   errorMessage?: string;
   traceId: string;

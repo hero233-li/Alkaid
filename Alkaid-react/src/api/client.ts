@@ -25,6 +25,30 @@ function updateApiProgress(delta: number) {
   });
 }
 
+function getErrorMessage(error: unknown): string {
+  if (axios.isAxiosError(error)) {
+    const data = error.response?.data;
+    if (typeof data === 'string' && data.trim() && !data.trimStart().startsWith('<')) {
+      return data;
+    }
+    if (data && typeof data === 'object') {
+      const body = data as Record<string, unknown>;
+      for (const key of ['message', 'detail', 'error']) {
+        if (typeof body[key] === 'string' && body[key]) {
+          return body[key] as string;
+        }
+      }
+    }
+    if (error.code === 'ERR_NETWORK') {
+      return '后端服务不可达，请确认 Django 服务和端口 8000 已启动';
+    }
+    if (error.response?.status) {
+      return `请求失败（HTTP ${error.response.status}）`;
+    }
+  }
+  return error instanceof Error ? error.message : '请求失败';
+}
+
 export const apiClient = axios.create({
   baseURL: '/api',
   timeout: 15000,
@@ -54,7 +78,7 @@ apiClient.interceptors.response.use(
     if (error.config?.showGlobalProgress !== false) {
       updateApiProgress(-1);
     }
-    const message = error.response?.data?.message || error.message || '请求失败';
-    return Promise.reject(new Error(message));
+    if (axios.isCancel(error)) return Promise.reject(error);
+    return Promise.reject(new Error(getErrorMessage(error)));
   },
 );

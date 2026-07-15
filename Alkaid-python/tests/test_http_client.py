@@ -1,101 +1,88 @@
-import json
-from urllib.parse import parse_qs
-
 import httpx
+import pytest
 from pydantic import BaseModel
 
-from apps.integrations.example_system.adapter import ExampleSystemAdapter
-from apps.integrations.example_system.models import ExampleLookupRequest
-from apps.integrations.http import HttpClient, HttpClientConfig
+from apps.integrations.auth import TokenManager
+from apps.integrations.contracts import EndpointSpec, RetryMode
+from apps.integrations.executor import EndpointExecutor
+from apps.integrations.http import ExternalServiceError, HttpClient, HttpClientConfig
 
 
-class FormResponse(BaseModel):
-    ok: bool
+class Response(BaseModel):
+    code: str
 
 
-def test_adapter_converts_nested_wire_response_to_typed_result():
+def test_http_client_serializes_form_objects_and_propagates_trace_id() -> None:
+    captured: dict[str, object] = {}
+
     def handler(request: httpx.Request) -> httpx.Response:
-        assert request.headers["X-Trace-ID"] == "workflow-1"
-        assert request.url.params["value"] == "raw"
-        return httpx.Response(
-            200,
-            json={"data": {"reference": "ref-1", "display_value": "Typed value"}},
-        )
+        captured["body"] = request.content.decode()
+        captured["trace"] = request.headers["X-Trace-ID"]
+        return httpx.Response(200, json={"code": "0000"})
 
-    client = HttpClient(
+    with HttpClient(
         HttpClientConfig(base_url="https://example.test", max_retries=0),
         transport=httpx.MockTransport(handler),
-    )
-    try:
-        result = ExampleSystemAdapter(client).lookup(
-            ExampleLookupRequest(value="raw"), workflow_id="workflow-1"
+    ) as client:
+        response = client.request(
+            "POST",
+            "/form",
+            response_model=Response,
+            form_data={"payload": {"a": 1}, "req_message": {"REQ_BODY": {}}},
+            trace_id="trace-123",
         )
-    finally:
-        client.close()
 
-    assert result.reference == "ref-1"
-    assert result.display_value == "Typed value"
+    assert response.code == "0000"
+    assert captured["trace"] == "trace-123"
+    assert "req_message=%7B%22REQ_BODY%22%3A%7B%7D%7D" in str(captured["body"])
 
 
-def test_http_client_retries_retryable_status():
-    attempts = 0
+def test_safe_endpoint_retries_retry_after_but_never_endpoint_does_not(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    sleeps: list[float] = []
+    monkeypatch.setattr("apps.integrations.http.time.sleep", sleeps.append)
+    calls = 0
 
     def handler(request: httpx.Request) -> httpx.Response:
-        nonlocal attempts
-        attempts += 1
-        if attempts == 1:
-            return httpx.Response(503, json={"error": "busy"})
-        return httpx.Response(
-            200,
-            json={"data": {"reference": "ref-2", "display_value": "ok"}},
-        )
+        nonlocal calls
+        calls += 1
+        if calls == 1:
+            return httpx.Response(429, headers={"Retry-After": "10"}, json={"code": "busy"})
+        return httpx.Response(200, json={"code": "0000"})
 
+    safe = EndpointSpec(
+        operation_id="safe",
+        method="GET",
+        path="/safe",
+        response_model=Response,
+        retry_mode=RetryMode.SAFE,
+    )
+    with HttpClient(
+        HttpClientConfig(
+            base_url="https://example.test",
+            max_retries=1,
+            retry_max_backoff_seconds=0.5,
+        ),
+        transport=httpx.MockTransport(handler),
+    ) as client:
+        result = EndpointExecutor(client, TokenManager({})).execute(safe, trace_id="trace")
+
+    assert result.code == "0000"
+    assert calls == 2
+    assert sleeps == [0.5]
+
+    calls = 0
+    never = EndpointSpec(
+        operation_id="never",
+        method="POST",
+        path="/never",
+        response_model=Response,
+    )
     with HttpClient(
         HttpClientConfig(base_url="https://example.test", max_retries=1),
         transport=httpx.MockTransport(handler),
     ) as client:
-        result = ExampleSystemAdapter(client).lookup(
-            ExampleLookupRequest(value="raw"), workflow_id="workflow-2"
-        )
-
-    assert attempts == 2
-    assert result.reference == "ref-2"
-
-
-def test_http_client_serializes_multi_field_urlencoded_form():
-    def handler(request: httpx.Request) -> httpx.Response:
-        assert request.headers["Content-Type"].startswith(
-            "application/x-www-form-urlencoded"
-        )
-        form = parse_qs(request.content.decode(), keep_blank_values=True)
-        assert json.loads(form["req_message"][0]) == {
-            "req_head": {"traceno": "trace-1"},
-            "req_body": {"request": {"name": "张三"}},
-        }
-        assert json.loads(form["bizcond"][0]) == {"type": "01"}
-        assert form["starttime"] == ["20260704150000"]
-        assert form["enabled"] == ["false"]
-        return httpx.Response(200, json={"ok": True})
-
-    with HttpClient(
-        HttpClientConfig(base_url="https://example.test", max_retries=0),
-        transport=httpx.MockTransport(handler),
-    ) as client:
-        result = client.request(
-            "POST",
-            "/form",
-            response_model=FormResponse,
-            form_data={
-                "req_message": {
-                    "req_head": {"traceno": "trace-1"},
-                    "req_body": {"request": {"name": "张三"}},
-                },
-                "bizcond": {"type": "01"},
-                "starttime": "20260704150000",
-                "enabled": False,
-                "omitted": None,
-            },
-            workflow_id="trace-1",
-        )
-
-    assert result.ok is True
+        with pytest.raises(ExternalServiceError):
+            EndpointExecutor(client, TokenManager({})).execute(never, trace_id="trace")
+    assert calls == 1

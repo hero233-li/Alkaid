@@ -51,7 +51,23 @@ if /I "%UPGRADE_PIP%"=="true" (
 )
 .venv\Scripts\python.exe -m pip install %PIP_INSTALL_ARGS% -r requirements-dev.lock
 if errorlevel 1 exit /b 1
-.venv\Scripts\python.exe -m pip install -e . --no-deps
+
+echo Running backend release gates...
+set "DJANGO_SETTINGS_MODULE=config.settings.test"
+set "CELERY_TASK_ALWAYS_EAGER=true"
+.venv\Scripts\python.exe manage.py check
+if errorlevel 1 exit /b 1
+.venv\Scripts\python.exe manage.py makemigrations --check --dry-run
+if errorlevel 1 exit /b 1
+.venv\Scripts\python.exe scripts\compile_product_config.py --check
+if errorlevel 1 exit /b 1
+.venv\Scripts\python.exe scripts\check_architecture.py
+if errorlevel 1 exit /b 1
+.venv\Scripts\python.exe -m pytest
+if errorlevel 1 exit /b 1
+.venv\Scripts\python.exe -m ruff check .
+if errorlevel 1 exit /b 1
+.venv\Scripts\python.exe -m ruff format --check .
 if errorlevel 1 exit /b 1
 popd
 

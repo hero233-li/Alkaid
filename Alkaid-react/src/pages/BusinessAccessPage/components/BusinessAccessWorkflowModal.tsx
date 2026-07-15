@@ -1,37 +1,16 @@
 import { Modal, Progress, Space, Tag, Typography } from 'antd';
-import type { BusinessAccessWorkflowActivity } from '../../../api/businessAccess';
+import {
+  businessAccessJobStatusLabels,
+  getBusinessAccessVisibleProgress,
+} from '../model/jobModel';
+import type { BusinessAccessWorkflowActivity } from '../types';
 
 interface BusinessAccessWorkflowModalProps {
   activity: BusinessAccessWorkflowActivity | null;
 }
 
-const statusLabels: Record<BusinessAccessWorkflowActivity['status'], string> = {
-  submitting: '正在提交',
-  pending: '等待执行',
-  running: '执行中',
-  retrying: '重试中',
-  success: '已完成',
-  failed: '执行失败',
-  cancel_requested: '取消中',
-  cancelled: '已取消',
-  timed_out: '已超时',
-};
-
-function visibleProgress(activity: BusinessAccessWorkflowActivity) {
-  if (activity.progress > 0) {
-    return activity.progress;
-  }
-  if (activity.status === 'submitting') {
-    return 5;
-  }
-  if (activity.status === 'pending') {
-    return 10;
-  }
-  return 15;
-}
-
 export default function BusinessAccessWorkflowModal({ activity }: BusinessAccessWorkflowModalProps) {
-  const percent = activity ? visibleProgress(activity) : 0;
+  const percent = activity ? getBusinessAccessVisibleProgress(activity) : 0;
 
   return (
     <Modal
@@ -50,7 +29,7 @@ export default function BusinessAccessWorkflowModal({ activity }: BusinessAccess
           <div className="business-access-workflow-modal-heading">
             <Typography.Title level={5}>{activity.label}</Typography.Title>
             <Space size={8}>
-              <Tag color="processing">{statusLabels[activity.status]}</Tag>
+              <Tag color="processing">{businessAccessJobStatusLabels[activity.status]}</Tag>
               <Typography.Text type="secondary">
                 {activity.jobId ? `Workflow Job #${activity.jobId}` : '正在创建 Job'}
               </Typography.Text>

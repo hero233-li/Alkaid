@@ -34,8 +34,8 @@ if not exist "%RELEASE_DIR%\Alkaid-react\dist\web\index.html" (
 )
 
 if /I not "%SKIP_HEALTH_CHECK%"=="true" (
-  echo Checking verification server on http://127.0.0.1:%VERIFY_PORT%/health/
-  powershell -NoProfile -ExecutionPolicy Bypass -Command "try { $r = Invoke-WebRequest -UseBasicParsing -Uri 'http://127.0.0.1:%VERIFY_PORT%/health/' -TimeoutSec 3; if ($r.StatusCode -eq 200) { exit 0 } else { exit 1 } } catch { exit 1 }"
+  echo Checking verification server on http://127.0.0.1:%VERIFY_PORT%/health/ready/
+  powershell -NoProfile -ExecutionPolicy Bypass -Command "try { $r = Invoke-WebRequest -UseBasicParsing -Uri 'http://127.0.0.1:%VERIFY_PORT%/health/ready/' -TimeoutSec 3; if ($r.StatusCode -eq 200) { exit 0 } else { exit 1 } } catch { exit 1 }"
   if errorlevel 1 (
     echo Verification server is not healthy.
     echo Keep release-verify.bat running, or set SKIP_HEALTH_CHECK=true if you already verified manually.

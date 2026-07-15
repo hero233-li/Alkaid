@@ -36,8 +36,29 @@ npm run dev
 npm run dev:env
 ```
 
-默认只使用一个命令窗口：前端日志显示在当前窗口，后端日志写到
-`Alkaid-runtime\dev-backend.log` 和 `Alkaid-runtime\dev-backend.err.log`。
+默认只使用一个命令窗口：前端、后端和 Celery worker 的日志都会实时显示在当前窗口，
+不再额外写入开发日志文件。
+
+默认启动前会清理 `DEV_BACKEND_PORT` 和 `DEV_FRONTEND_PORT` 上的遗留监听进程，退出时按
+进程树停止后端和 Worker 并等待端口释放。若只想检测端口占用而不自动清理，在 `.env.local`
+设置 `DEV_CLEAN_STALE_PORTS=false`。权限不足时请使用管理员终端或手工停止日志中显示的 PID。
+
+如果暂时没有 RabbitMQ，可以在 `.env.local` 设置：
+
+```text
+CELERY_TASK_ALWAYS_EAGER=true
+DEV_START_WORKER=false
+```
+
+这样 `npm run dev` 会跳过 worker，任务在 Django 进程里同步执行。正常联调异步链路时保持：
+
+```text
+CELERY_TASK_ALWAYS_EAGER=false
+DEV_START_WORKER=true
+CELERY_QUEUE=alkaid-local
+```
+
+开发虚拟环境固定在项目根目录 `.venv`，不要再使用 `Alkaid-python\.venv`。
 
 如果需要前后端分成两个窗口：
 
@@ -76,7 +97,8 @@ CREATE DATABASE alkaid_dev CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 scripts\windows\release-build.bat
 ```
 
-脚本会复制当前代码到 `Alkaid-releases\yyyyMMdd-HHmmss`，然后在发布目录里安装依赖并构建前端。
+脚本会复制当前代码到 `Alkaid-releases\yyyyMMdd-HHmmss`，然后在发布目录里安装依赖、执行
+Django/配置/架构/测试/Ruff 门禁并构建前端。任一检查失败都不会生成可验证发布候选。
 如果内网只能使用本地 Python wheel 包：
 
 ```bat
@@ -132,6 +154,15 @@ Windows 启动项或任务计划程序：
 ```bat
 Alkaid-runtime\prod-start.bat
 ```
+
+启动前需要在任务计划或系统环境中提供 `DJANGO_SECRET_KEY`、`CELERY_BROKER_URL`、
+`MOCK_PRODUCT_BASE_URL`、`APPLICATION_LINK_BASE_URL`、`APPLICATION_LINK_API_TOKEN` 和
+`APPLICATION_LINK_FORM_SIGN`（内网协议要求签名时同时设置
+`APPLICATION_LINK_SIGN_REQUIRED=true`）、
+`BUSINESS_ACCESS_BASE_URL`、`BUSINESS_ACCESS_API_TOKEN`、`VERIFICATION_APPROVAL_BASE_URL`、
+`VERIFICATION_APPROVAL_API_TOKEN`、`MOCK_FIXED_SYSTEM_TOKEN`。生产固定使用
+`config.settings.server`、真实外系统模式和异步 Celery；
+启动脚本会监管 Web、Worker、Beat 三个进程，不再在 Web 进程内同步执行任务。
 
 不要把开发目录里的 `scripts\windows\prod-start.bat` 放入开机启动项。否则以后脚本本身改到一半，
 也可能影响开机。

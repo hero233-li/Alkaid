@@ -7,10 +7,13 @@ from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_GET, require_POST
 
 from apps.core.responses import api_error, api_response
+from apps.jobs.dispatch import enqueue_job
 from apps.jobs.models import Job, JobApiCall
 from apps.jobs.services import (
     InvalidJobTransition,
-    JobRepository,
+    add_job_log,
+    request_job_cancel,
+    request_job_retry,
     serialize_job,
     serialize_log,
 )
@@ -23,15 +26,6 @@ def _get_job(job_id: int) -> Job | None:
         return None
 
 
-def _enqueue(job: Job) -> None:
-    if job.kind == "product_application":
-        from apps.product_data.tasks import execute_product_application
-
-        execute_product_application.delay(job.id)
-        return
-    raise ValueError(f"不支持的任务类型：{job.kind}")
-
-
 @require_GET
 def job_detail(request: HttpRequest, job_id: int) -> JsonResponse:
     job = _get_job(job_id)
@@ -40,16 +34,26 @@ def job_detail(request: HttpRequest, job_id: int) -> JsonResponse:
     return api_response(serialize_job(job))
 
 
+@require_GET
+def job_payload_detail(request: HttpRequest, job_id: int) -> JsonResponse:
+    if not request.user.is_authenticated or not request.user.is_staff:
+        return api_error("无权查看 Job 原始参数", status=403)
+    job = _get_job(job_id)
+    if job is None:
+        return api_error("Job 不存在", status=404)
+    return api_response({"id": job.id, "payload": job.payload})
+
+
 @csrf_exempt
 @require_POST
 def retry_job(request: HttpRequest, job_id: int) -> JsonResponse:
     if _get_job(job_id) is None:
         return api_error("Job 不存在", status=404)
     try:
-        job = JobRepository.request_retry(job_id)
+        job = request_job_retry(job_id)
     except InvalidJobTransition as exc:
         return api_error(str(exc), status=409)
-    transaction.on_commit(lambda: _enqueue(job))
+    transaction.on_commit(lambda: enqueue_job(job))
     return api_response(serialize_job(job))
 
 
@@ -59,12 +63,15 @@ def cancel_job(request: HttpRequest, job_id: int) -> JsonResponse:
     job = _get_job(job_id)
     if job is None:
         return api_error("Job 不存在", status=404)
-    job = JobRepository.request_cancel(job_id)
+    try:
+        job = request_job_cancel(job_id)
+    except InvalidJobTransition as exc:
+        return api_error(str(exc), status=409)
     if job.celery_task_id:
         try:
             current_app.control.revoke(job.celery_task_id, terminate=False)
         except Exception as exc:
-            JobRepository.add_log(
+            add_job_log(
                 job,
                 "WARN",
                 f"向 Celery 发送撤销通知失败，将由任务状态阻止后续执行：{exc}",

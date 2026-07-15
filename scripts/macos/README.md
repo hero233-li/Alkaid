@@ -19,11 +19,25 @@ npm run dev:env
 - 后端：`http://127.0.0.1:8000`
 - 前端：`http://127.0.0.1:5174`
 
-前端日志显示在当前窗口，后端日志写到：
+前端、后端和 Celery worker 的日志都会实时显示在当前 Terminal 窗口，
+不再额外写入开发日志文件。
+
+如果暂时没有 RabbitMQ，可以在 `.env.local` 设置：
 
 ```text
-Alkaid-runtime/dev-backend.log
+CELERY_TASK_ALWAYS_EAGER=true
+DEV_START_WORKER=false
 ```
+
+正常联调异步链路时保持：
+
+```text
+CELERY_TASK_ALWAYS_EAGER=false
+DEV_START_WORKER=true
+CELERY_QUEUE=alkaid-local
+```
+
+开发虚拟环境固定在项目根目录 `.venv`，不要再使用 `Alkaid-python/.venv`。
 
 如果需要前后端分成两个窗口：
 

@@ -1,0 +1,19 @@
+{
+  "method": "POST",
+  "path": "/links/sun-code",
+  "contentType": "application/x-www-form-urlencoded",
+  "form": {
+    "msg_id": "trace-application-link-contract",
+    "sign": "<configured-by-python>",
+    "timestamp": "20260714214500",
+    "REQ_MESSAGE": "{\"REQ_HEAD\":{\"traceno\":\"trace-application-link-contract\",\"starttime\":\"2026-07-14T13:45:00+00:00\",\"product\":\"product-b\"},\"REQ_BODY\":{\"request\":{\"env\":\"env-1\",\"product\":\"product-b\",\"category\":\"太阳码\",\"payload\":{\"loanType\":\"首贷\"},\"cooperationProjectId\":\"PROJECT-001\"}}}",
+    "biz_content": "{\"REQ_HEAD\":{\"traceno\":\"trace-application-link-contract\",\"starttime\":\"2026-07-14T13:45:00+00:00\",\"product\":\"product-b\"},\"REQ_BODY\":{\"request\":{\"env\":\"env-1\",\"product\":\"product-b\",\"category\":\"太阳码\",\"payload\":{\"loanType\":\"首贷\"},\"cooperationProjectId\":\"PROJECT-001\"}}}"
+  },
+  "successResponse": {
+    "code": "0000",
+    "data": {
+      "internal_url": "https://internal.example/apply/LINK-001",
+      "external_url": "https://external.example/apply/LINK-001"
+    }
+  }
+}

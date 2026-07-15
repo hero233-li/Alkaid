@@ -1,7 +1,7 @@
 import { Button, Card, Popconfirm, Space, Tag, type TableProps } from 'antd';
 import { BellRing, Ban } from 'lucide-react';
 import { ActionTable } from '../../../components/common';
-import type { BusinessAccessRecord } from '../../../api/businessAccess';
+import type { BusinessAccessRecord } from '../types';
 
 function formatDate(value: string) {
   const date = new Date(value);

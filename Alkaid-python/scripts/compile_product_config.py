@@ -1,38 +1,45 @@
 #!/usr/bin/env python3
 import argparse
+import os
 import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
+os.environ.setdefault("DJANGO_SETTINGS_MODULE", "config.settings.base")
 
-from apps.product_data.execution_config import (  # noqa: E402
-    COMPILED_PATH,
-    compile_execution_catalog,
-    load_execution_catalog,
-    render_compiled_catalog,
+import django  # noqa: E402
+
+django.setup()
+
+from apps.integrations.mock_product.api import (  # noqa: E402
+    validate_product_endpoint_coverage,
 )
+from apps.integrations.mock_product.messages import validate_message_catalog  # noqa: E402
+from apps.product_data.catalog import load_product_catalog  # noqa: E402
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description="Validate and compile product execution config")
-    parser.add_argument("--check", action="store_true", help="Fail when compiled output is stale")
-    args = parser.parse_args()
-    rendered = render_compiled_catalog(compile_execution_catalog())
-    if args.check:
-        source_catalog = compile_execution_catalog()
-        try:
-            compiled_catalog = load_execution_catalog()
-        except ValueError:
-            compiled_catalog = None
-        if compiled_catalog != source_catalog:
-            print("Compiled product execution config is stale")
-            return 1
-        print("Product execution config is valid and current")
-        return 0
-    COMPILED_PATH.parent.mkdir(parents=True, exist_ok=True)
-    COMPILED_PATH.write_text(rendered, encoding="utf-8")
-    print(f"Wrote {COMPILED_PATH.relative_to(ROOT)}")
+    parser = argparse.ArgumentParser(description="Validate the unified product catalog")
+    parser.add_argument(
+        "--check",
+        action="store_true",
+        help="Compatibility flag; validation is always performed",
+    )
+    parser.parse_args()
+    catalog = load_product_catalog()
+    validate_product_endpoint_coverage(set(catalog.products))
+    message_summary = validate_message_catalog()
+    for product in catalog.products.values():
+        for method in product.applicationMethods:
+            catalog.snapshot(product.code, method.code)
+    print(
+        "Product catalog is valid: "
+        f"version={catalog.reference.version}, "
+        f"products={len(catalog.products)}, "
+        f"raw_messages={message_summary['messages']}, "
+        f"checksum={catalog.checksum}"
+    )
     return 0
 
 

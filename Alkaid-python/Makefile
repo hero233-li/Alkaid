@@ -1,22 +1,22 @@
-.PHONY: install lock migrate run worker beat test lint check
+.PHONY: install lock migrate run worker beat test lint format check
 
 PYTHON_BOOTSTRAP ?= python3.10
-PYTHON ?= .venv/bin/python
+VENV_DIR ?= ../.venv
+PYTHON ?= $(VENV_DIR)/bin/python
 PIP ?= $(PYTHON) -m pip
 PIP_INSTALL_ARGS ?=
 UPGRADE_PIP ?= false
-LOCAL_ENV ?= DJANGO_SETTINGS_MODULE=config.settings.local DB_ENGINE=mysql MYSQL_HOST=$${MYSQL_HOST:-127.0.0.1} MYSQL_PORT=$${MYSQL_PORT:-3306} MYSQL_DATABASE=$${MYSQL_DATABASE:-alkaid_dev} MYSQL_USER=$${MYSQL_USER:-workflow} MYSQL_PASSWORD=$${MYSQL_PASSWORD:-workflow} MYSQL_SSL_DISABLED=$${MYSQL_SSL_DISABLED:-true} CELERY_TASK_ALWAYS_EAGER=true
+LOCAL_ENV ?= DJANGO_SETTINGS_MODULE=config.settings.local DB_ENGINE=mysql MYSQL_HOST=$${MYSQL_HOST:-127.0.0.1} MYSQL_PORT=$${MYSQL_PORT:-3306} MYSQL_DATABASE=$${MYSQL_DATABASE:-alkaid_dev} MYSQL_USER=$${MYSQL_USER:-workflow} MYSQL_PASSWORD=$${MYSQL_PASSWORD:-workflow} MYSQL_SSL_DISABLED=$${MYSQL_SSL_DISABLED:-true} CELERY_BROKER_URL=$${CELERY_BROKER_URL:-amqp://workflow:workflow@127.0.0.1:5672//} CELERY_QUEUE=$${CELERY_QUEUE:-alkaid-local} CELERY_TASK_ALWAYS_EAGER=$${CELERY_TASK_ALWAYS_EAGER:-false}
 TEST_ENV ?= DJANGO_SETTINGS_MODULE=config.settings.test CELERY_TASK_ALWAYS_EAGER=true
 
 install:
-	$(PYTHON_BOOTSTRAP) -m venv .venv
+	$(PYTHON_BOOTSTRAP) -m venv $(VENV_DIR)
 	$(PYTHON) -m ensurepip --upgrade
 	if [ "$(UPGRADE_PIP)" = "true" ]; then $(PIP) install $(PIP_INSTALL_ARGS) --upgrade pip; fi
 	$(PIP) install $(PIP_INSTALL_ARGS) -r requirements-dev.lock
-	$(PIP) install -e . --no-deps
 
 lock:
-	uv lock
+	uv pip compile pyproject.toml --extra dev --python-version 3.10 -o requirements-dev.lock
 
 migrate:
 	$(LOCAL_ENV) $(PYTHON) manage.py migrate
@@ -25,10 +25,10 @@ run:
 	$(LOCAL_ENV) $(PYTHON) -m uvicorn config.asgi:application --host 127.0.0.1 --port 8000 --reload
 
 worker:
-	DJANGO_SETTINGS_MODULE=config.settings.local $(PYTHON) -m celery -A config worker --loglevel=INFO --queues=$${CELERY_QUEUE:-workflow-dev}
+	$(LOCAL_ENV) $(PYTHON) -m celery -A config worker --loglevel=INFO --pool=solo --queues=$${CELERY_QUEUE:-alkaid-local}
 
 beat:
-	DJANGO_SETTINGS_MODULE=config.settings.local $(PYTHON) -m celery -A config beat --loglevel=INFO
+	$(LOCAL_ENV) $(PYTHON) -m celery -A config beat --loglevel=INFO
 
 test:
 	$(TEST_ENV) $(PYTHON) -m pytest
@@ -36,8 +36,14 @@ test:
 lint:
 	$(PYTHON) -m ruff check .
 
+format:
+	$(PYTHON) -m ruff format .
+
 check:
-	$(LOCAL_ENV) $(PYTHON) manage.py check
+	$(TEST_ENV) $(PYTHON) manage.py check
 	$(TEST_ENV) $(PYTHON) manage.py makemigrations --check --dry-run
+	$(TEST_ENV) $(PYTHON) scripts/compile_product_config.py --check
+	$(PYTHON) scripts/check_architecture.py
 	$(TEST_ENV) $(PYTHON) -m pytest
 	$(PYTHON) -m ruff check .
+	$(PYTHON) -m ruff format --check .

@@ -5,6 +5,7 @@
   "scripts": {
     "dev": "node scripts/dev.mjs",
     "dev:split": "node scripts/dev.mjs --split",
-    "dev:env": "node scripts/dev.mjs --print-env"
+    "dev:env": "node scripts/dev.mjs --print-env",
+    "dev:worker": "node scripts/dev.mjs --worker"
   }
 }

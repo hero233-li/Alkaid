@@ -3,6 +3,8 @@ import logging
 import time
 import uuid
 from collections.abc import Callable, Mapping
+from datetime import datetime, timezone
+from email.utils import parsedate_to_datetime
 from typing import Any, Protocol
 
 import httpx
@@ -41,7 +43,12 @@ class HttpClientConfig(BaseModel):
     base_url: str
     token: str | None = None
     timeout_seconds: float = Field(default=10, gt=0)
+    connect_timeout_seconds: float | None = Field(default=None, gt=0)
+    write_timeout_seconds: float | None = Field(default=None, gt=0)
+    pool_timeout_seconds: float | None = Field(default=None, gt=0)
     max_retries: int = Field(default=2, ge=0, le=5)
+    retry_backoff_seconds: float = Field(default=0.2, ge=0)
+    retry_max_backoff_seconds: float = Field(default=5, gt=0)
 
 
 class ExternalServiceError(RuntimeError):
@@ -51,7 +58,7 @@ class ExternalServiceError(RuntimeError):
 
 
 class HttpClient:
-    retryable_statuses = {502, 503, 504}
+    retryable_statuses = {429, 502, 503, 504}
 
     def __init__(
         self,
@@ -65,7 +72,12 @@ class HttpClient:
         self.config = config
         self._client = httpx.Client(
             base_url=config.base_url,
-            timeout=config.timeout_seconds,
+            timeout=httpx.Timeout(
+                config.timeout_seconds,
+                connect=config.connect_timeout_seconds or config.timeout_seconds,
+                write=config.write_timeout_seconds or config.timeout_seconds,
+                pool=config.pool_timeout_seconds or config.timeout_seconds,
+            ),
             headers=headers,
             transport=transport,
         )
@@ -89,9 +101,10 @@ class HttpClient:
         form_data: Mapping[str, Any] | None = None,
         params: Mapping[str, str] | None = None,
         headers: Mapping[str, str] | None = None,
-        workflow_id: str | None = None,
+        trace_id: str | None = None,
         observer: HttpCallObserver | None = None,
         response_validator: Callable[[ResponseModel], None] | None = None,
+        max_retries: int | None = None,
     ) -> ResponseModel:
         return self.request_detailed(
             method,
@@ -101,9 +114,10 @@ class HttpClient:
             form_data=form_data,
             params=params,
             headers=headers,
-            workflow_id=workflow_id,
+            trace_id=trace_id,
             observer=observer,
             response_validator=response_validator,
+            max_retries=max_retries,
         ).data
 
     def request_detailed(
@@ -116,13 +130,14 @@ class HttpClient:
         form_data: Mapping[str, Any] | None = None,
         params: Mapping[str, str] | None = None,
         headers: Mapping[str, str] | None = None,
-        workflow_id: str | None = None,
+        trace_id: str | None = None,
         observer: HttpCallObserver | None = None,
         response_validator: Callable[[ResponseModel], None] | None = None,
+        max_retries: int | None = None,
     ) -> HttpResult[ResponseModel]:
         if body is not None and form_data is not None:
             raise ValueError("body 和 form_data 不能同时传递")
-        trace_id = workflow_id or str(uuid.uuid4())
+        trace_id = trace_id or str(uuid.uuid4())
         started = time.monotonic()
         response: httpx.Response | None = None
         response_handle: object | None = None
@@ -137,9 +152,13 @@ class HttpClient:
         request_headers = dict(self._client.headers)
         request_headers.update(headers or {})
         request_headers["X-Trace-ID"] = trace_id
+        request_retries = self.config.max_retries if max_retries is None else max_retries
+        if request_retries < 0 or request_retries > 5:
+            raise ValueError("max_retries 必须在 0 到 5 之间")
 
-        for attempt in range(self.config.max_retries + 1):
+        for attempt in range(request_retries + 1):
             attempt_started = time.monotonic()
+            response = None
             response_handle = (
                 observer.started(
                     method=method,
@@ -186,11 +205,11 @@ class HttpClient:
                         error=exc,
                     )
                     response_handle = None
-                if attempt == self.config.max_retries:
+                if attempt == request_retries:
                     self._log(method, path, trace_id, started, None, attempt + 1)
                     raise ExternalServiceError("external service transport error") from exc
-            if attempt < self.config.max_retries:
-                time.sleep(0.1 * (2**attempt))
+            if attempt < request_retries:
+                time.sleep(self._retry_delay(attempt, response))
 
         if response is None:
             raise ExternalServiceError("external service returned no response")
@@ -253,6 +272,13 @@ class HttpClient:
             body=_response_body(response),
         )
 
+    def _retry_delay(self, attempt: int, response: httpx.Response | None) -> float:
+        retry_after = _retry_after_seconds(response)
+        if retry_after is not None:
+            return min(retry_after, self.config.retry_max_backoff_seconds)
+        exponential = self.config.retry_backoff_seconds * (2**attempt)
+        return min(exponential, self.config.retry_max_backoff_seconds)
+
     @staticmethod
     def _log(
         method: str,
@@ -296,3 +322,21 @@ def _serialize_form(form_data: Mapping[str, Any] | None) -> dict[str, str] | Non
         else:
             serialized[name] = str(value)
     return serialized
+
+
+def _retry_after_seconds(response: httpx.Response | None) -> float | None:
+    if response is None:
+        return None
+    value = response.headers.get("Retry-After", "").strip()
+    if not value:
+        return None
+    try:
+        return max(0.0, float(value))
+    except ValueError:
+        try:
+            retry_at = parsedate_to_datetime(value)
+        except (TypeError, ValueError, OverflowError):
+            return None
+        if retry_at.tzinfo is None:
+            retry_at = retry_at.replace(tzinfo=timezone.utc)
+        return max(0.0, (retry_at - datetime.now(timezone.utc)).total_seconds())
