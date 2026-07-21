@@ -3,10 +3,20 @@ from collections.abc import Mapping
 from typing import Any
 
 from django.conf import settings
+from django.db import transaction
+from django.http import HttpRequest, JsonResponse
 from django.utils import timezone
 
+from apps.core.responses import api_error, api_response
+from apps.jobs.dispatch import enqueue_job
 from apps.jobs.models import ApiCallStatus, Job, JobApiCall
-from apps.jobs.services import add_job_log
+from apps.jobs.services import (
+    JobConflict,
+    add_job_log,
+    create_job,
+    resolve_job_identifiers,
+    serialize_job,
+)
 
 SENSITIVE_KEYS = {
     "authorization",
@@ -30,6 +40,47 @@ SENSITIVE_KEYS = {
     "req_message",
     "biz_content",
 }
+
+
+def submit_async_job(
+    request: HttpRequest,
+    *,
+    kind: str,
+    name: str,
+    product: str,
+    payload: dict[str, Any],
+    timeout_seconds: int,
+    snapshot: dict[str, Any] | None = None,
+    snapshot_version: int = 1,
+    include_payload: bool = False,
+) -> JsonResponse:
+    """Create and enqueue one menu Job with consistent HTTP semantics."""
+    try:
+        key, trace_id = resolve_job_identifiers(
+            request.headers.get("X-Idempotency-Key"),
+            request.headers.get("X-Trace-ID"),
+        )
+        created = create_job(
+            kind=kind,
+            name=name,
+            product=product,
+            payload=payload,
+            trace_id=trace_id,
+            idempotency_key=key,
+            timeout_seconds=timeout_seconds,
+            execution_config_version=snapshot_version,
+            execution_config_snapshot=snapshot or {},
+        )
+    except JobConflict as exc:
+        return api_error(str(exc), status=409)
+    except ValueError as exc:
+        return api_error(str(exc), status=400)
+    if created.created:
+        transaction.on_commit(lambda: enqueue_job(created.job))
+    return api_response(
+        serialize_job(created.job, include_payload=include_payload),
+        status=202 if created.created else 200,
+    )
 
 
 def _masked(value: Any) -> str:

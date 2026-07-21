@@ -2,8 +2,12 @@ import pytest
 from django.core.exceptions import ImproperlyConfigured
 from django.test import override_settings
 
-from apps.integrations.application_link.adapter import ApplicationLinkAdapter, _configured_sign
+from apps.integrations.application_link.models import GenerateApplicationLinkRequest
 from apps.integrations.mock_product.client import create_product_http_client
+from apps.integrations.product_system.application_link import (
+    _configured_sign,
+    generate_application_link,
+)
 from apps.jobs.services import create_job
 
 
@@ -47,8 +51,15 @@ def test_application_link_real_mode_requires_confirmed_protocol() -> None:
         timeout_seconds=60,
     ).job
     with pytest.raises(ImproperlyConfigured, match="真实协议尚未确认"):
-        with ApplicationLinkAdapter(job):
-            pass
+        generate_application_link(
+            job,
+            GenerateApplicationLinkRequest(
+                env="env-1",
+                product="product-a",
+                category="太阳码",
+                payload={},
+            ),
+        )
 
 
 @override_settings(EXTERNAL_SYSTEM_MODE="real", APPLICATION_LINK_SIGNER="")

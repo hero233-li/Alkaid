@@ -7,7 +7,21 @@ ROOT = Path(__file__).resolve().parents[1]
 APPS_ROOT = ROOT / "apps"
 FORBIDDEN_IMPORTS = {"requests", "httpx"}
 FRAMEWORK_MUTABLE_GLOBALS = {"urlpatterns"}
+FORBIDDEN_PRODUCT_DATA_CLASS_SUFFIXES = ("Flow", "Context", "Handler", "Adapter")
+REMOVED_THIN_ADAPTERS = (
+    "integrations/application_link/adapter.py",
+    "integrations/business_access/adapter.py",
+    "integrations/card_status/adapter.py",
+    "integrations/loan_status/adapter.py",
+    "integrations/verification_approval/adapter.py",
+    "integrations/mock_product/adapters/application.py",
+    "integrations/example_system/adapter.py",
+)
 errors: list[str] = []
+
+for relative_path in REMOVED_THIN_ADAPTERS:
+    if (APPS_ROOT / relative_path).exists():
+        errors.append(f"apps/{relative_path}: removed thin adapter was reintroduced")
 
 for path in APPS_ROOT.rglob("*.py"):
     relative = path.relative_to(APPS_ROOT)
@@ -20,10 +34,29 @@ for path in APPS_ROOT.rglob("*.py"):
                 and node.module.startswith("apps.product_data")
             ):
                 location = f"{path.relative_to(ROOT)}:{node.lineno}"
-                errors.append(
-                    f"{location}: integration adapter imports product-data business code"
-                )
+                errors.append(f"{location}: integration adapter imports product-data business code")
         continue
+
+    if relative.parts[0] == "product_data":
+        for node in ast.walk(tree):
+            if isinstance(node, ast.ClassDef) and node.name.endswith(
+                FORBIDDEN_PRODUCT_DATA_CLASS_SUFFIXES
+            ):
+                errors.append(
+                    f"{path.relative_to(ROOT)}:{node.lineno}: forbidden orchestration class "
+                    f"{node.name}"
+                )
+            if relative.name == "tasks.py" and isinstance(node, ast.ImportFrom):
+                if node.module and node.module.startswith("apps.integrations"):
+                    errors.append(
+                        f"{path.relative_to(ROOT)}:{node.lineno}: task imports integration directly"
+                    )
+            if relative.name == "views.py" and isinstance(node, ast.ImportFrom):
+                if node.module in {"apps.jobs.dispatch", "apps.jobs.services"}:
+                    errors.append(
+                        f"{path.relative_to(ROOT)}:{node.lineno}: "
+                        "menu view bypasses submit_async_job"
+                    )
     for node in ast.walk(tree):
         imported: set[str] = set()
         if isinstance(node, ast.Import):

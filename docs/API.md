@@ -223,7 +223,8 @@
 
 ## 4. Mock 申请数据、卡状态和贷款状态
 
-三个工具均保持 `View → Job → RabbitMQ → Celery Task → Service → Mock Adapter` 的异步链路。
+三个工具均保持 `View → Job → RabbitMQ → Celery Task → Service` 的异步链路。申请数据在
+Service 本地计算；卡和贷款通过 `integrations/product_system/` 的公开操作函数访问 Mock Store。
 申请数据生成支持单次 1–1000 条，并受 `APPLICATION_DATA_MAX_RESULT_BYTES` 结果大小保护；
 `birthDate` 是身份证号生日段的权威值，后端会校验它与 `age/currentDate` 一致。接口返回姓名、
 身份证号、银行卡号、手机号、开卡柜员、公司/个体名称、统一社会信用代码和组织机构代码。
@@ -236,7 +237,7 @@
 {"actionResult": {"card": {}, "message": "处理成功"}}
 ```
 
-当前 Adapter 只实现 Mock 模式；`EXTERNAL_SYSTEM_MODE=real` 时会明确报真实外系统尚未配置，
+卡和贷款当前只实现 Mock 模式；`EXTERNAL_SYSTEM_MODE=real` 时会明确报真实外系统尚未配置，
 不会静默返回 Mock 数据。卡/贷款 Mock 状态保存在数据库共享表中，可跨 Celery Worker 读取。
 卡/贷款 mutation 属于非幂等写操作，不能通过通用 Job retry 重放。
 

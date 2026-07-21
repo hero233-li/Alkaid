@@ -103,7 +103,8 @@ def test_verification_approval_data_and_mutations_run_as_jobs(
             "contractNo": "HT20260710001",
         },
     )
-    assert search_job.kind == "verification_approval.search"
+    assert search_job.kind == "verification_approval"
+    assert search_job.payload["operation"] == "search"
     assert search_job.api_calls.count() == 1
     task = search_job.result["task"]
     assert task["ownershipStatus"] == "unclaimed"
@@ -116,6 +117,8 @@ def test_verification_approval_data_and_mutations_run_as_jobs(
         key="verify-claim",
         body={"context": task},
     )
+    assert claim_job.payload["data"]["context"]["tellerNo"] == task["tellerNo"]
+    assert claim_job.payload["data"]["context"]["organizationNo"] == task["organizationNo"]
     task = claim_job.result["task"]
     assert task["ownershipStatus"] == "claimed"
     assert task["tellerNo"] == "T1027"
@@ -149,6 +152,8 @@ def test_verification_approval_data_and_mutations_run_as_jobs(
         key="verify-supplement",
         body={"action": "supplement", "context": task},
     )
+    assert supplement_job.payload["data"]["context"]["tellerNo"] == task["tellerNo"]
+    assert supplement_job.payload["data"]["context"]["organizationNo"] == task["organizationNo"]
     task = supplement_job.result["task"]
     assert task["taskStatus"] == "待补件"
 
@@ -161,7 +166,7 @@ def test_verification_approval_data_and_mutations_run_as_jobs(
     )
     task = refresh_job.result["task"]
     assert task["ownershipStatus"] == "claimed"
-    assert refresh_job.payload["context"]["items"][0]["status"] == "completed"
+    assert refresh_job.payload["data"]["context"]["items"][0]["status"] == "completed"
     assert task["items"][0]["status"] == "pending"
 
     complete_job = _execute_job_request(

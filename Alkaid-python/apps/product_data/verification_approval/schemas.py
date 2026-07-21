@@ -34,6 +34,11 @@ class VerificationOperation(str, Enum):
     ACTION = "action"
 
 
+class VerificationCommand(VerificationPayload):
+    operation: VerificationOperation
+    data: dict[str, object]
+
+
 class VerificationItemUpdateSubmission(VerificationPayload):
     status: str = Field(pattern=r"^(pending|completed)$")
     context: VerificationTask

@@ -4,8 +4,7 @@ from urllib.parse import parse_qs
 import httpx
 import pytest
 
-import apps.integrations.application_link.adapter as adapter_module
-from apps.integrations.application_link.adapter import ApplicationLinkAdapter
+import apps.integrations.product_system.application_link as application_link_module
 from apps.integrations.application_link.models import GenerateApplicationLinkRequest
 from apps.integrations.contracts import BusinessResponseError
 from apps.integrations.http import HttpClient, HttpClientConfig
@@ -66,19 +65,20 @@ def test_generate_link_uses_one_five_field_form_and_returns_two_urls(
         ),
         transport=httpx.MockTransport(handler),
     )
-    monkeypatch.setattr(adapter_module, "_create_client", lambda: client)
-    monkeypatch.setattr(adapter_module, "_configured_sign", lambda message: "test-sign")
+    monkeypatch.setattr(
+        application_link_module,
+        "create_product_system_client",
+        lambda service, environment=None: client,
+    )
+    monkeypatch.setattr(application_link_module, "_configured_sign", lambda message: "test-sign")
 
     job = _job()
-    with ApplicationLinkAdapter(job) as adapter:
-        result = adapter.generate_link(_request(category))
+    result = application_link_module.generate_application_link(job, _request(category))
 
     assert len(captured) == 1
     assert captured[0].method == "POST"
     assert captured[0].url.path == expected_path
-    assert captured[0].headers["content-type"].startswith(
-        "application/x-www-form-urlencoded"
-    )
+    assert captured[0].headers["content-type"].startswith("application/x-www-form-urlencoded")
     form = parse_qs(captured[0].content.decode(), keep_blank_values=True)
     assert set(form) == {"msg_id", "sign", "timestamp", "REQ_MESSAGE", "biz_content"}
     assert form["msg_id"] == [job.trace_id]
@@ -119,11 +119,15 @@ def test_generate_link_records_business_error(monkeypatch) -> None:
             )
         ),
     )
-    monkeypatch.setattr(adapter_module, "_create_client", lambda: client)
+    monkeypatch.setattr(
+        application_link_module,
+        "create_product_system_client",
+        lambda service, environment=None: client,
+    )
 
     job = _job()
-    with pytest.raises(BusinessResponseError), ApplicationLinkAdapter(job) as adapter:
-        adapter.generate_link(_request("太阳码"))
+    with pytest.raises(BusinessResponseError):
+        application_link_module.generate_application_link(job, _request("太阳码"))
 
     call = job.api_calls.get()
     assert call.status == ApiCallStatus.FAILED

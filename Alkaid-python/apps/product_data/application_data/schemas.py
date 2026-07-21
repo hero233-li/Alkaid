@@ -37,6 +37,13 @@ class ApplicationDataSubmission(BaseModel):
         return self
 
 
+class ApplicationDataCommand(BaseModel):
+    model_config = ConfigDict(alias_generator=to_camel, populate_by_name=True, extra="forbid")
+
+    operation: ApplicationDataOperation
+    data: dict[str, object]
+
+
 class ApplicationDataRecord(BaseModel):
     model_config = ConfigDict(alias_generator=to_camel, populate_by_name=True, frozen=True)
 

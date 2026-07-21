@@ -1,8 +1,11 @@
 from typing import Any
 
-from apps.integrations.mock_product.adapters import MockProductApplicationAdapter
+from apps.integrations.application_link.models import GenerateApplicationLinkRequest
 from apps.integrations.mock_product.models import ProductCheckInput, ProductSubmissionInput
+from apps.integrations.product_system.application_link import generate_application_link
+from apps.integrations.product_system.product_application import ProductApplicationSession
 from apps.jobs.models import Job
+from apps.jobs.steps import save_job_step
 from apps.product_data.catalog import (
     ProductCatalog,
     ProductExecutionSnapshot,
@@ -106,7 +109,24 @@ def run_product_application(
     snapshot = snapshot or resolve_product_snapshot(job, submission.product)
     if snapshot.product_code != submission.product:
         raise ProductConfigurationError("Job 执行配置与提交产品不一致")
-    flow_result = _run_mock_product_flow(job, submission, snapshot)
+    result = dict(job.result or {})
+    if "links" not in result:
+        links = generate_application_link(job, build_link_request(submission))
+        save_job_step(job, "links", links.model_dump(mode="json"))
+        result = dict(job.result)
+
+    if "application" not in result or "followup" not in result:
+        with ProductApplicationSession(job) as session:
+            if "application" not in result:
+                application = submit_product_application(session, submission, snapshot)
+                save_job_step(job, "application", application)
+                result = dict(job.result)
+            if "followup" not in result:
+                session.audit(session.request_head())
+                save_job_step(job, "followup", {"status": "success"})
+                result = dict(job.result)
+
+    application = result["application"]
     return {
         "validated": True,
         "product": submission.product,
@@ -118,63 +138,103 @@ def run_product_application(
         "applicationMethod": snapshot.method_code,
         "executionFields": list(snapshot.fields),
         "message": "示例产品参数校验完成",
-        **flow_result,
+        "applicationNo": application["applicationNo"],
+        "flowTokenVersions": application["flowTokenVersions"],
+        "fixedTokenCall": "success",
+        **result,
     }
 
 
-def _run_mock_product_flow(
-    job: Job,
+def execute_product_application(job: Job) -> dict[str, Any]:
+    submission = ProductApplicationSubmission(
+        name=job.name,
+        product=job.product,
+        payload=job.payload,
+    )
+    snapshot = resolve_product_snapshot(job, job.product)
+    validate_submission(submission, execution_snapshot=snapshot)
+    return run_product_application(job, submission, snapshot=snapshot)
+
+
+def build_link_request(
+    submission: ProductApplicationSubmission,
+) -> GenerateApplicationLinkRequest:
+    product = load_product_catalog().product(submission.product)
+    environment = str(submission.payload["environment"])
+    route = next(
+        (item for item in product.features.applicationLinks if item.environment == environment),
+        None,
+    )
+    if route is None:
+        raise ProductConfigurationError("当前产品和环境未配置申请链接")
+    certificate_no = str(submission.payload["certificateNo"])
+    return GenerateApplicationLinkRequest(
+        env=environment,
+        product=submission.product,
+        category=route.category,
+        cooperation_project_id=None,
+        payload={
+            "loanType": submission.payload["applicationMethod"],
+            "customerName": submission.payload["personName"],
+            "customerPhone": submission.payload["phone"],
+            "customerCertificateNo": certificate_no,
+            "customerCompanyName": submission.payload.get("companyName") or "",
+            "customerCompanyCode": submission.payload.get("creditCode") or "",
+            "openId": f"OPEN-{certificate_no[-8:]}",
+            "unionId": f"UNION-{certificate_no[-8:]}",
+        },
+    )
+
+
+def submit_product_application(
+    session: ProductApplicationSession,
     submission: ProductApplicationSubmission,
     snapshot: ProductExecutionSnapshot,
 ) -> dict[str, object]:
-    """Execute the one flow currently shared by every configured mock product."""
-
-    with MockProductApplicationAdapter(job) as adapter:
-        request_head = adapter.request_head()
-        adapter.login(request_head)
-        version_after_login = adapter.flow_token_version
-        adapter.check_product(
-            request_head,
-            ProductCheckInput(
-                product=snapshot.product_code,
-                customer_type=submission.payload["customerType"],
-                switch_name=snapshot.switch_field,
-                switch_enabled=bool(submission.payload[snapshot.switch_field]),
-                product_type=snapshot.product_type,
-            ),
-        )
-        version_after_check = adapter.flow_token_version
-        adapter.rotate_token(request_head)
-        version_after_rotate = adapter.flow_token_version
-        application = adapter.submit_application(
-            request_head,
-            ProductSubmissionInput(
-                product=submission.product,
-                environment=submission.payload["environment"],
-                product_type=snapshot.product_type,
-                organization_code=submission.payload["branch"],
-                customer_name=submission.payload["personName"],
-                certificate_no=submission.payload["certificateNo"],
-                phone=submission.payload["phone"],
-                customer_type=submission.payload["customerType"],
-                outlet_code=submission.payload["outlet"],
-                application_method=submission.payload["applicationMethod"],
-                risk={
-                    name: submission.payload[name]
-                    for name in (
-                        "whitelistEnabled",
-                        "redShieldEnabled",
-                        "creditEnabled",
-                    )
-                    if name in submission.payload
-                },
-                dynamic_term=submission.payload.get("dynamicTerm"),
-                dynamic_amount=submission.payload.get("dynamicAmount"),
-                extra_reason=submission.payload.get("extraReason"),
-            ),
-        )
-        version_after_submit = adapter.flow_token_version
-        adapter.audit(request_head)
+    request_head = session.request_head()
+    session.login(request_head)
+    version_after_login = session.flow_token_version
+    session.check_product(
+        request_head,
+        ProductCheckInput(
+            product=snapshot.product_code,
+            customer_type=submission.payload["customerType"],
+            switch_name=snapshot.switch_field,
+            switch_enabled=bool(submission.payload[snapshot.switch_field]),
+            product_type=snapshot.product_type,
+        ),
+    )
+    version_after_check = session.flow_token_version
+    session.rotate_token(request_head)
+    version_after_rotate = session.flow_token_version
+    application = session.submit_application(
+        request_head,
+        ProductSubmissionInput(
+            product=submission.product,
+            environment=submission.payload["environment"],
+            product_type=snapshot.product_type,
+            organization_code=submission.payload["branch"],
+            customer_name=submission.payload["personName"],
+            certificate_no=submission.payload["certificateNo"],
+            phone=submission.payload["phone"],
+            customer_type=submission.payload["customerType"],
+            outlet_code=submission.payload["outlet"],
+            application_method=submission.payload["applicationMethod"],
+            risk={
+                name: submission.payload[name]
+                for name in (
+                    "whitelistEnabled",
+                    "redShieldEnabled",
+                    "creditEnabled",
+                )
+                if name in submission.payload
+            },
+            dynamic_term=submission.payload.get("dynamicTerm"),
+            dynamic_amount=submission.payload.get("dynamicAmount"),
+            extra_reason=submission.payload.get("extraReason"),
+        ),
+    )
+    version_after_submit = session.flow_token_version
 
     return {
         "applicationNo": application.data["applicationNo"],
@@ -184,5 +244,4 @@ def _run_mock_product_flow(
             "rotate": version_after_rotate,
             "submit": version_after_submit,
         },
-        "fixedTokenCall": "success",
     }

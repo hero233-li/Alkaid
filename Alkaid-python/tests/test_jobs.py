@@ -140,8 +140,7 @@ def test_external_write_task_rejects_cancel_during_call_and_finishes_success(
 
     job = _create_job(key="write-cancel-task", kind="verification_approval.action")
 
-    def external_call(completing_job, operation):
-        del operation
+    def external_call(completing_job):
         response = client.post(f"/api/jobs/{completing_job.id}/cancel")
         assert response.status_code == 409
         return {"externalWrite": "completed"}

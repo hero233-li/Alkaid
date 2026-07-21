@@ -16,13 +16,13 @@ from apps.integrations.mock_product.models import (
 from apps.jobs.models import Job
 
 
-class MockProductApplicationAdapter:
-    """Application-domain adapter for the mock product external system."""
+class ProductApplicationSession:
+    """Stateful product-system session shared by login, submit and audit calls."""
 
     def __init__(self, job: Job) -> None:
         self._client = MockProductClient(job)
 
-    def __enter__(self) -> "MockProductApplicationAdapter":
+    def __enter__(self) -> "ProductApplicationSession":
         self._client.__enter__()
         return self
 

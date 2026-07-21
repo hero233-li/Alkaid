@@ -19,6 +19,11 @@ class BusinessAccessPayload(BaseModel):
     )
 
 
+class BusinessAccessCommand(BusinessAccessPayload):
+    operation: BusinessAccessOperation
+    data: dict[str, object]
+
+
 class BusinessAccessSearchSubmission(BusinessAccessPayload):
     environment: str = Field(min_length=1, max_length=128)
     name: str | None = Field(default=None, max_length=128)

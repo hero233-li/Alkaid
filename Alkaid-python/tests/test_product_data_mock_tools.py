@@ -123,7 +123,8 @@ def test_card_search_and_action_use_dedicated_jobs(
             "amount": 500,
         },
     )
-    assert action.kind == "card_status.action"
+    assert action.kind == "card_status"
+    assert action.payload["operation"] == "action"
     assert action.result["actionResult"]["card"]["balance"] == 10_500
 
 
@@ -298,7 +299,8 @@ def test_loan_search_and_action_use_dedicated_jobs(
         },
     )
     result = action.result["actionResult"]
-    assert action.kind == "loan_status.action"
+    assert action.kind == "loan_status"
+    assert action.payload["operation"] == "action"
     assert result["card"]["loans"][0]["freezeStatus"] == "是"
 
 
@@ -316,12 +318,8 @@ def test_mock_state_is_shared_across_store_instances() -> None:
 
     loan_card = LOAN_MOCK_STORE.search("环境1", "C000000000778")[0]
     contract_no = loan_card["loans"][0]["contractNo"]
-    LoanMockStore().apply_action(
-        "环境1", "C000000000778", contract_no, "freeze", {}
-    )
-    assert LoanMockStore().search("环境1", "C000000000778")[0]["loans"][0][
-        "freezeStatus"
-    ] == "是"
+    LoanMockStore().apply_action("环境1", "C000000000778", contract_no, "freeze", {})
+    assert LoanMockStore().search("环境1", "C000000000778")[0]["loans"][0]["freezeStatus"] == "是"
 
 
 @pytest.mark.django_db
@@ -349,15 +347,13 @@ def test_mock_state_is_isolated_by_environment_and_validates_owner() -> None:
     loan1 = LOAN_MOCK_STORE.search("环境1", "C000000000902")[0]
     loan2 = LOAN_MOCK_STORE.search("环境2", "C000000000902")[0]
     contract_no = loan1["loans"][0]["contractNo"]
-    LOAN_MOCK_STORE.apply_action(
-        "环境1", loan1["customerNo"], contract_no, "freeze", {}
+    LOAN_MOCK_STORE.apply_action("环境1", loan1["customerNo"], contract_no, "freeze", {})
+    assert (
+        LOAN_MOCK_STORE.search("环境1", loan1["customerNo"])[0]["loans"][0]["freezeStatus"] == "是"
     )
-    assert LOAN_MOCK_STORE.search("环境1", loan1["customerNo"])[0]["loans"][0][
-        "freezeStatus"
-    ] == "是"
-    assert LOAN_MOCK_STORE.search("环境2", loan2["customerNo"])[0]["loans"][0][
-        "freezeStatus"
-    ] == "否"
+    assert (
+        LOAN_MOCK_STORE.search("环境2", loan2["customerNo"])[0]["loans"][0]["freezeStatus"] == "否"
+    )
 
 
 @pytest.mark.django_db(transaction=True)
@@ -373,6 +369,6 @@ def test_concurrent_first_search_converges_on_one_mock_state() -> None:
         cards = list(executor.map(lambda _: search(), range(2)))
 
     assert cards[0] == cards[1]
-    assert MockToolState.objects.filter(
-        namespace="card_status", key=f"环境1:{cards[0]}"
-    ).count() == 1
+    assert (
+        MockToolState.objects.filter(namespace="card_status", key=f"环境1:{cards[0]}").count() == 1
+    )

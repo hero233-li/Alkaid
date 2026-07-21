@@ -1,22 +1,29 @@
 from typing import Any
 
-from apps.integrations.loan_status.adapter import LoanStatusAdapter
+from apps.integrations.product_system.loan_status import apply_loan_action, search_loans
 from apps.jobs.models import Job
 from apps.product_data.loan_status.schemas import (
     LoanActionSubmission,
     LoanSearchSubmission,
+    LoanStatusCommand,
     LoanStatusOperation,
 )
 
 
-def execute_loan_status(job: Job, operation: LoanStatusOperation) -> dict[str, Any]:
-    adapter = LoanStatusAdapter(job)
+def execute_loan_status(job: Job) -> dict[str, Any]:
+    if "operation" in job.payload:
+        command = LoanStatusCommand.model_validate(job.payload)
+        operation, data = command.operation, command.data
+    else:
+        operation = LoanStatusOperation(job.kind.removeprefix("loan_status."))
+        data = job.payload
     if operation == LoanStatusOperation.SEARCH:
-        submission = LoanSearchSubmission.model_validate(job.payload)
-        return {"cards": adapter.search(submission.environment, submission.customer_no)}
+        submission = LoanSearchSubmission.model_validate(data)
+        return {"cards": search_loans(job, submission.environment, submission.customer_no)}
     if operation == LoanStatusOperation.ACTION:
-        submission = LoanActionSubmission.model_validate(job.payload)
-        result = adapter.apply_action(
+        submission = LoanActionSubmission.model_validate(data)
+        result = apply_loan_action(
+            job,
             submission.environment,
             submission.customer_no,
             submission.contract_no,

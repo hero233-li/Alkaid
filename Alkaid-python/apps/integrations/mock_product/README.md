@@ -1,73 +1,13 @@
-# Mock Product Integration
+# Mock Product 协议资源
 
-This integration follows the production-style raw-message workflow used by the project.
+该目录只保留产品申请外系统的协议资源和底层会话能力：
 
-Current roles:
+- `api/`：接口、认证、Token 更新和成功码声明；
+- `models/`：语义输入及响应模型；
+- `raw_messages/`、`messages.py`：版本化原始报文与隔离复制；
+- `client.py`：表单组装、Token Provider 和 Job 审计；
+- `mock_transport.py`：Mock 外系统服务端响应。
 
-- `api/`: endpoint suffixes, auth rules, token update rules and success codes.
-- `models/`: semantic inputs and typed response models.
-- `raw_messages/`: fixed vendor request messages grouped by business area.
-- `messages.py`: cached loading plus an isolated deep copy for each call.
-- `adapters/`: explicit per-operation field assignment and business-facing methods.
-- `client.py`: common `payload`/`req_message` form assembly, tokens and Job audit wiring.
+共享登录和 Token 状态的业务会话位于 `integrations/product_system/product_application.py`。该 Session 显式赋值动态报文字段；不存在只管理 `with` 生命周期的 Adapter。
 
-Current stage:
-
-```text
-mock_product/
-├── api/
-│   ├── auth.py
-│   ├── application.py
-│   └── audit.py
-├── models/
-│   ├── auth.py
-│   ├── application.py
-│   └── common.py
-├── adapters/
-│   └── application.py
-├── client.py
-├── messages.py
-├── mock_transport.py
-└── raw_messages/
-    └── application.json
-```
-
-Message scale rules:
-
-- Keep fixed vendor messages in `raw_messages/<domain>.json`.
-- Give deployed messages stable versioned keys such as `product_apply_v1`.
-- Load with `new_message()` and assign changing fields explicitly in the domain adapter.
-- Never mutate the cached source object and never put private keys in raw message files.
-- Keep the outer `payload`/`req_message` assembly in `client.py`.
-- `compile_product_config.py --check` validates every JSON template, including messages not yet reached by
-  the current demo flow.
-
-As this external system grows, keep splitting by business boundary rather than by line count:
-
-```text
-mock_product/
-├── api/
-│   ├── application.py
-│   ├── customer.py
-│   └── loan.py
-├── models/
-│   ├── application.py
-│   ├── customer.py
-│   └── loan.py
-├── adapters/
-│   ├── application.py
-│   ├── customer.py
-│   └── loan.py
-└── raw_messages/
-    ├── application.json
-    ├── customer.json
-    └── loan.json
-```
-
-`client.py` owns common transport behavior. Domain adapters own the unavoidable per-message assignments; no
-generic mapping DSL or processor registry is introduced.
-
-`mock_transport.py` owns mock external responses. It is intentionally not imported by the product business
-service, so switching to a real Base URL does not change product application logic.
-
-Do not split only because a file is long. Split when a business boundary becomes clear, when unrelated changes start touching the same file, or when finding the right operation becomes slow.
+固定报文必须使用稳定版本键，通过 `new_message()` 获取深拷贝，不得修改缓存源对象，也不得保存私钥。`compile_product_config.py --check` 会校验所有 JSON 报文信封。

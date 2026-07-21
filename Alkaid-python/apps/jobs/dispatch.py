@@ -4,11 +4,31 @@ import logging
 from typing import Any
 
 from django.conf import settings
+from django.utils.module_loading import import_string
 
 from apps.jobs.models import Job
 from apps.jobs.services import add_job_log, mark_job_failed
 
 logger = logging.getLogger(__name__)
+
+TASK_REGISTRY = {
+    "product_application": (
+        "apps.product_data.product_applications.tasks.execute_product_application"
+    ),
+    "application_link": "apps.product_data.application_links.tasks.execute_application_link",
+    "business_access": "apps.product_data.business_access.tasks.execute_business_access_task",
+    "verification_approval": (
+        "apps.product_data.verification_approval.tasks.execute_verification_approval_task"
+    ),
+    "application_data": "apps.product_data.application_data.tasks.execute_application_data_task",
+    "card_status": "apps.product_data.card_status.tasks.execute_card_status_task",
+    "loan_status": "apps.product_data.loan_status.tasks.execute_loan_status_task",
+}
+
+LEGACY_KIND_ALIASES = {
+    "application_link_generation": "application_link",
+    "application_data.generate": "application_data",
+}
 
 
 def enqueue_job(job: Job) -> None:
@@ -55,34 +75,8 @@ def _allow_sync_fallback() -> bool:
 
 
 def _task_for_kind(kind: str) -> Any:
-    if kind == "product_application":
-        from apps.product_data.product_applications.tasks import execute_product_application
-
-        return execute_product_application
-    if kind == "application_link_generation":
-        from apps.product_data.application_links.tasks import execute_application_link
-
-        return execute_application_link
-    if kind.startswith("business_access."):
-        from apps.product_data.business_access.tasks import execute_business_access_task
-
-        return execute_business_access_task
-    if kind.startswith("verification_approval."):
-        from apps.product_data.verification_approval.tasks import (
-            execute_verification_approval_task,
-        )
-
-        return execute_verification_approval_task
-    if kind == "application_data.generate":
-        from apps.product_data.application_data.tasks import execute_application_data_task
-
-        return execute_application_data_task
-    if kind.startswith("card_status."):
-        from apps.product_data.card_status.tasks import execute_card_status_task
-
-        return execute_card_status_task
-    if kind.startswith("loan_status."):
-        from apps.product_data.loan_status.tasks import execute_loan_status_task
-
-        return execute_loan_status_task
-    raise ValueError(f"不支持的任务类型：{kind}")
+    canonical = LEGACY_KIND_ALIASES.get(kind, kind.split(".", 1)[0])
+    path = TASK_REGISTRY.get(canonical)
+    if not path:
+        raise ValueError(f"不支持的任务类型：{kind}")
+    return import_string(path)

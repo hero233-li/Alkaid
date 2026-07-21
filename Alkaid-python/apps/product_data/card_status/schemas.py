@@ -21,6 +21,11 @@ class CardPayload(BaseModel):
     model_config = ConfigDict(alias_generator=to_camel, populate_by_name=True, extra="forbid")
 
 
+class CardStatusCommand(CardPayload):
+    operation: CardStatusOperation
+    data: dict[str, object]
+
+
 class CardSearchSubmission(CardPayload):
     environment: str = Field(min_length=1, max_length=128)
     customer_no: str = Field(min_length=1, max_length=32)

@@ -2,10 +2,10 @@ import logging
 
 from django.utils import timezone
 
-from apps.integrations.application_link.adapter import ApplicationLinkAdapter
 from apps.integrations.application_link.models import (
     GenerateApplicationLinkRequest,
 )
+from apps.integrations.product_system.application_link import generate_application_link
 from apps.jobs.models import Job
 from apps.product_data.application_links.schemas import (
     ApplicationLinkExecutionSnapshot,
@@ -37,9 +37,7 @@ def normalize_submission(
         raise ApplicationLinkConfigurationError(str(exc)) from exc
     try:
         environment = _environment_code(catalog, submission.environment)
-        cooperation_project_id = _cooperation_project_id(
-            catalog, submission.cooperationProjectId
-        )
+        cooperation_project_id = _cooperation_project_id(catalog, submission.cooperationProjectId)
     except ProductCatalogError as exc:
         raise ApplicationLinkConfigurationError(str(exc)) from exc
     return submission.model_copy(
@@ -90,9 +88,7 @@ def _environment_code(catalog: ProductCatalog, environment_code_or_label: str) -
     raise ProductCatalogError(f"未知环境：{environment_code_or_label}")
 
 
-def _cooperation_project_id(
-    catalog: ProductCatalog, project_id_or_label: str | None
-) -> str | None:
+def _cooperation_project_id(catalog: ProductCatalog, project_id_or_label: str | None) -> str | None:
     options = catalog.reference.cooperationProjects
     if not options:
         return None
@@ -186,16 +182,16 @@ def generate_application_links(
         "category": submission.category.value,
     }
     logger.info("application_link_execution_started", extra=log_context)
-    with ApplicationLinkAdapter(job) as adapter:
-        links = adapter.generate_link(
-            GenerateApplicationLinkRequest(
-                env=submission.environment,
-                product=submission.product,
-                category=submission.category.value,
-                cooperation_project_id=submission.cooperationProjectId,
-                payload=business_payload(submission),
-            )
-        )
+    links = generate_application_link(
+        job,
+        GenerateApplicationLinkRequest(
+            env=submission.environment,
+            product=submission.product,
+            category=submission.category.value,
+            cooperation_project_id=submission.cooperationProjectId,
+            payload=business_payload(submission),
+        ),
+    )
     logger.info(
         "application_link_links_generated",
         extra=log_context,
@@ -205,3 +201,15 @@ def generate_application_links(
         externalUrl=links.external_url,
         generatedAt=timezone.now().isoformat(),
     )
+
+
+def execute_application_link(job: Job) -> dict[str, object]:
+    submission = ApplicationLinkSubmission.model_validate(job.payload)
+    if job.execution_config_snapshot:
+        snapshot = ApplicationLinkExecutionSnapshot.model_validate(job.execution_config_snapshot)
+    else:
+        submission = normalize_submission(submission)
+        snapshot = resolve_execution_snapshot(submission)
+    validate_submission(submission, snapshot)
+    result = generate_application_links(job, submission, snapshot=snapshot)
+    return {"links": result.model_dump(mode="json")}

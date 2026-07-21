@@ -12,7 +12,7 @@ React Page / Hook
   → Django View（Schema 校验、创建 Job、投递 Celery）
   → Celery Task（TaskRunner 管理状态、超时、取消）
   → Product Service（业务步骤）
-  → Integration Adapter（外系统协议）
+  → product_system 公开操作函数（外系统协议）
   → HttpClient / Mock Store
   → Job.result、JobLog、JobApiCall
   → GET /api/jobs/{id} 或 SSE 返回前端
@@ -21,19 +21,23 @@ React Page / Hook
 目录职责：
 
 - `apps/product_data/<feature>/`：Schema、View、Task 和业务 Service；不拼接真实外系统报文。
-- `apps/integrations/<system>/`：请求/响应模型、Adapter、Mock transport 和真实 HTTP 协议。
+- `apps/integrations/product_system/`：共享配置、Client、协议外壳和公开操作函数。
+- `apps/integrations/<capability>/`：请求/响应模型、Endpoint 声明和 Mock transport。
 - `apps/jobs/`：Job 状态、幂等、重试、取消、超时、审计、SSE 和共享 TaskRunner。
 - `Alkaid-react/src/utils/jobPolling.ts`：150 秒前端轮询截止、AbortSignal 和终态处理。
 
 申请链接保持一次外部调用：
 
 ```text
-View → Job → Task → Service → Adapter
+View → Job → Task → Service → product_system.application_link
   → msg_id + sign + timestamp + REQ_MESSAGE + biz_content
 ```
 
 `REQ_MESSAGE` 与 `biz_content` 使用同一份序列化业务报文。真实模式必须先完成协议确认并配置
 Signer。卡和贷款 Mock 状态存入 MySQL，Key 包含环境，支持多个 Worker 共享且避免环境串用。
+
+多操作菜单只使用一个稳定 Job kind，具体动作保存到 `payload.operation`。产品申请的
+`links/application/followup` 每步完成后立即写入 `Job.result`，Worker 恢复时跳过已有步骤。
 
 ## 2. 环境变量
 
@@ -98,6 +102,7 @@ python manage.py migrate
 - 非幂等写 Job 进入 `running` 后拒绝取消和通用重试，避免外系统成功而本地误报取消。
 - 申请数据的 `birthDate` 是身份证号生日段的权威输入，并与 `age/currentDate` 校验。
 - 卡转账要求目标卡存在于同一环境，源卡扣款和目标卡入账在同一事务中完成。
+- 核实审批查询返回的完整任务对象由前端作为后续操作的 `context` 携带，后端不重复查询。
 - `/health/ready/` 不调用真实业务接口；RabbitMQ 和 Worker 使用独立脚本验证。
 
 ## 5. 测试方式

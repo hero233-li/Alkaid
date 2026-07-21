@@ -5,6 +5,9 @@ import pytest
 from django.test import override_settings
 
 from apps.jobs.models import Job, JobStatus
+from apps.jobs.services import create_job
+from apps.product_data.catalog import load_product_catalog
+from apps.product_data.product_applications import services as application_services
 from apps.product_data.product_applications.tasks import execute_product_application
 
 
@@ -97,7 +100,46 @@ def test_product_application_freezes_catalog_and_runs_mock_external_flow(
     assert job.status == JobStatus.SUCCESS
     assert job.execution_config_snapshot["product_code"] == "product-b"
     assert job.result["applicationNo"].startswith("APP-")
-    assert job.api_calls.count() == 5
+    assert job.api_calls.count() == 6
+    assert {"links", "application", "followup"} <= set(job.result)
+
+
+@pytest.mark.django_db
+def test_product_application_resumes_from_persisted_link_checkpoint(monkeypatch) -> None:
+    submission = _product_b_submission()
+    snapshot = load_product_catalog().snapshot("product-b")
+    job = create_job(
+        kind="product_application",
+        name=str(submission["name"]),
+        product="product-b",
+        payload=submission["payload"],
+        trace_id="checkpoint-trace",
+        idempotency_key="checkpoint-job",
+        timeout_seconds=60,
+        execution_config_version=snapshot.catalog_version,
+        execution_config_snapshot=snapshot.model_dump(mode="json"),
+    ).job
+
+    def fail_session(job):
+        raise RuntimeError("application unavailable")
+
+    monkeypatch.setattr(application_services, "ProductApplicationSession", fail_session)
+    with pytest.raises(RuntimeError, match="application unavailable"):
+        application_services.execute_product_application(job)
+
+    job.refresh_from_db()
+    assert set(job.result) == {"links"}
+
+    def links_must_not_run_again(*args, **kwargs):
+        raise AssertionError("completed links step ran again")
+
+    monkeypatch.setattr(
+        application_services,
+        "generate_application_link",
+        links_must_not_run_again,
+    )
+    with pytest.raises(RuntimeError, match="application unavailable"):
+        application_services.execute_product_application(job)
 
 
 @pytest.mark.django_db
@@ -160,7 +202,7 @@ def test_oversized_request_identifier_returns_400_before_job_creation(client) ->
 
 
 @pytest.mark.django_db
-def test_application_link_route_is_frozen_and_executes_shared_adapter(
+def test_application_link_route_is_frozen_and_executes_shared_operation(
     client, caplog, django_capture_on_commit_callbacks
 ) -> None:
     caplog.set_level(logging.INFO)

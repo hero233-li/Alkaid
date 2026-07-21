@@ -93,10 +93,10 @@ GET  /api/jobs/{id}/calls/{callId}
 
 Celery 将普通过程日志写入 `JobLog`，将每次外部 HTTP 请求的脱敏请求、响应、错误和耗时写入
 `JobApiCall`。日志窗口通过 ASGI SSE 增量接收日志；断线后使用最后一个 `afterId` 续传。
-外部系统 Adapter 使用 `HttpClient` 时传入 `JobHttpCallObserver`，即可记录结构化调用详情。
+外系统公开操作函数使用 `HttpClient` 时传入 `JobHttpCallObserver`，即可记录结构化调用详情。
 
 产品申请、申请链接、业务准入和核实审批分别拥有自己的业务目录和 Integration。Mock 响应放在
-各自的 `mock_transport.py`，不会写进 View、Service 或 Adapter；本地 Mock 与真实外系统共用
+各自的 `mock_transport.py`，不会写进 View 或 Service；本地 Mock 与真实外系统共用
 同一套请求模型、HTTP Client 和响应校验。完整边界见 `apps/integrations/README.md` 和
 `apps/product_data/README.md`。
 
@@ -132,15 +132,16 @@ HTTP 连接、读写和连接池超时分别可配置；只有显式声明为 `R
 ## 代码边界
 
 - `apps/integrations/http.py`：唯一通用 HTTP 传输层。
-- `apps/integrations/<system>/`：外部系统报文和 Adapter；原始 JSON 不能越过此边界。
+- `apps/integrations/product_system/`：外系统共享配置、Client、协议外壳和公开操作函数。
+- `apps/integrations/<capability>/`：外系统模型、Endpoint、Mock transport 和原始报文资源。
 - `apps/jobs/`：异步任务状态、日志、外部调用审计、重试、取消和 SSE。
 - `apps/product_data/catalog.py`：产品配置的唯一加载、校验和 Job 快照入口。
 
 页面业务按域拆分到 `apps/product_data/<feature>/`。`product_applications/` 负责产品申请，
 `application_links/` 负责申请链接生成；两者只保留自己的 Schema、HTTP 入口、任务和业务服务，
 并共享 `jobs` 基础设施。当前产品共用的调用顺序直接写在
-`product_applications/services.py`；只有出现真实差异时才增加独立业务函数。外部系统实现位于
-`apps/integrations/<system>/`，业务层不拼接原始报文，也不直接调用 HTTP。
+`product_applications/services.py`；只有出现真实差异时才增加独立业务函数。外部系统调用统一
+进入 `apps/integrations/product_system/`，业务层不拼接原始报文，也不直接调用 HTTP。
 
 业务模块禁止直接导入 `requests` 或 `httpx`。运行 `python scripts/check_architecture.py`
 检查这一约束。

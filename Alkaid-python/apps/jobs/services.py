@@ -25,19 +25,20 @@ class CreatedJob:
 
 
 MAX_REQUEST_IDENTIFIER_LENGTH = 128
-NON_RETRYABLE_JOB_KINDS = {
-    "product_application",
+NON_RETRYABLE_JOB_KINDS = {"product_application", "application_link"}
+NON_RETRYABLE_OPERATIONS = {
+    "business_access": {"invalidate", "push"},
+    "verification_approval": {"claim", "return", "item-update", "action"},
+    "card_status": {"action"},
+    "loan_status": {"action"},
+}
+LEGACY_NON_RETRYABLE_JOB_KINDS = {
     "application_link_generation",
-    "business_access.invalidate",
-    "business_access.push",
-    "verification_approval.claim",
-    "verification_approval.return",
-    "verification_approval.item-update",
-    "verification_approval.action",
+    *(f"business_access.{item}" for item in ("invalidate", "push")),
+    *(f"verification_approval.{item}" for item in ("claim", "return", "item-update", "action")),
     "card_status.action",
     "loan_status.action",
 }
-NON_CANCELLABLE_RUNNING_JOB_KINDS = NON_RETRYABLE_JOB_KINDS
 
 
 def resolve_job_identifiers(
@@ -216,7 +217,7 @@ def mark_job_failed(job_id: int, error: str) -> Job:
         status=JobStatus.FAILED,
         stage="failed",
         progress=100,
-        result={},
+        result=None,
         error_message=error[:4000],
         log_level="ERROR",
         log_message=f"任务执行失败：{error[:1000]}",
@@ -229,7 +230,7 @@ def mark_job_cancelled(job_id: int, message: str = "任务已取消") -> Job:
         status=JobStatus.CANCELLED,
         stage="cancelled",
         progress=100,
-        result={},
+        result=None,
         error_message="",
         log_level="WARN",
         log_message=message,
@@ -242,7 +243,7 @@ def mark_job_timed_out(job_id: int, message: str = "任务执行超时") -> Job:
         status=JobStatus.TIMED_OUT,
         stage="timed_out",
         progress=100,
-        result={},
+        result=None,
         error_message=message,
         log_level="ERROR",
         log_message=message,
@@ -255,7 +256,7 @@ def _finish_job(
     status: str,
     stage: str,
     progress: int,
-    result: dict[str, Any],
+    result: dict[str, Any] | None,
     error_message: str,
     log_level: str,
     log_message: str,
@@ -267,20 +268,21 @@ def _finish_job(
         job.status = status
         job.stage = stage
         job.progress = progress
-        job.result = result
+        if result is not None:
+            job.result = result
         job.error_message = error_message
         job.expires_at = timezone.now() + timedelta(hours=settings.JOB_RETENTION_HOURS)
-        job.save(
-            update_fields=[
-                "status",
-                "stage",
-                "progress",
-                "result",
-                "error_message",
-                "expires_at",
-                "updated_at",
-            ]
-        )
+        update_fields = [
+            "status",
+            "stage",
+            "progress",
+            "error_message",
+            "expires_at",
+            "updated_at",
+        ]
+        if result is not None:
+            update_fields.append("result")
+        job.save(update_fields=update_fields)
         add_job_log(
             job,
             log_level,
@@ -296,7 +298,7 @@ def request_job_retry(job_id: int) -> Job:
         job = Job.objects.select_for_update().get(id=job_id)
         if job.status not in {JobStatus.FAILED, JobStatus.TIMED_OUT, JobStatus.CANCELLED}:
             raise InvalidJobTransition("当前状态不允许重试")
-        if job.kind in NON_RETRYABLE_JOB_KINDS:
+        if _is_non_retryable(job):
             raise InvalidJobTransition(
                 "该任务包含未确认幂等能力的外系统写操作，禁止重试；请先核对外系统结果"
             )
@@ -330,10 +332,7 @@ def request_job_cancel(job_id: int) -> Job:
         job = Job.objects.select_for_update().get(id=job_id)
         if job.status in TERMINAL_JOB_STATUSES:
             return job
-        if (
-            job.status == JobStatus.RUNNING
-            and job.kind in NON_CANCELLABLE_RUNNING_JOB_KINDS
-        ):
+        if job.status == JobStatus.RUNNING and _is_non_retryable(job):
             raise InvalidJobTransition(
                 "该任务已进入未确认幂等能力的外系统写阶段，不能取消；请等待结果并核对外系统状态"
             )
@@ -362,6 +361,13 @@ def request_job_cancel(job_id: int) -> Job:
             celery_task_id=job.celery_task_id,
         )
         return job
+
+
+def _is_non_retryable(job: Job) -> bool:
+    if job.kind in NON_RETRYABLE_JOB_KINDS or job.kind in LEGACY_NON_RETRYABLE_JOB_KINDS:
+        return True
+    operation = job.payload.get("operation") if isinstance(job.payload, dict) else None
+    return operation in NON_RETRYABLE_OPERATIONS.get(job.kind, set())
 
 
 def reconcile_expired_jobs(*, now: datetime | None = None) -> dict[str, int]:

@@ -61,8 +61,8 @@ python scripts/compile_product_config.py --check
 3. 如果调用顺序与现有产品相同，不需要新增 Handler、注册表或业务类。
 4. 只有调用顺序真正不同，才在 `product_applications/services.py` 新增一个明确业务函数；
    不为只修改常量的产品建立 Handler 或注册表。
-5. 外系统请求报文仍在对应 Integration Adapter 中显式赋值。
+5. 外系统请求报文仍在 `integrations/product_system/` 对应公开操作函数或有状态 Session 中显式赋值。
 6. 运行配置检查和后端测试。
 
 创建 Job 时会保存 `execution_config_snapshot`。字段和申请方式配置更新后，历史 Job 仍使用创建
-时的快照；旧快照中的历史 Handler/operation 字段会被兼容读取但不再参与新任务执行。
+时的快照；旧快照中的历史字段会被兼容读取但不再参与新任务执行。

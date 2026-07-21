@@ -3,7 +3,7 @@ import json
 import httpx
 import pytest
 
-import apps.integrations.verification_approval.adapter as adapter_module
+import apps.integrations.product_system.verification_approval as verification_module
 from apps.integrations.http import HttpClient, HttpClientConfig
 from apps.jobs.models import ApiCallStatus, Job, JobStatus
 
@@ -66,9 +66,9 @@ def test_verification_http_failure_marks_job_and_api_call_failed(
     django_capture_on_commit_callbacks,
 ) -> None:
     monkeypatch.setattr(
-        adapter_module,
-        "_create_client",
-        lambda: _client(lambda request: httpx.Response(503, json={"message": "down"})),
+        verification_module,
+        "create_product_system_client",
+        lambda service: _client(lambda request: httpx.Response(503, json={"message": "down"})),
     )
 
     job = _submit_search(
@@ -91,9 +91,9 @@ def test_verification_business_failure_marks_job_and_api_call_failed(
     django_capture_on_commit_callbacks,
 ) -> None:
     monkeypatch.setattr(
-        adapter_module,
-        "_create_client",
-        lambda: _client(
+        verification_module,
+        "create_product_system_client",
+        lambda service: _client(
             lambda request: httpx.Response(
                 200,
                 json={"code": "9999", "message": "rejected", "data": None},
@@ -122,9 +122,9 @@ def test_verification_mutation_failure_is_audited_and_not_reported_successful(
     django_capture_on_commit_callbacks,
 ) -> None:
     monkeypatch.setattr(
-        adapter_module,
-        "_create_client",
-        lambda: _client(
+        verification_module,
+        "create_product_system_client",
+        lambda service: _client(
             lambda request: httpx.Response(
                 200,
                 json={"code": "9999", "message": "submit rejected", "data": None},
@@ -139,7 +139,7 @@ def test_verification_mutation_failure_is_audited_and_not_reported_successful(
     )
 
     assert job.status == JobStatus.FAILED
-    assert job.kind == "verification_approval.action"
+    assert job.kind == "verification_approval"
     call = job.api_calls.get()
     assert call.step == "verification_approval.action"
     assert call.status == ApiCallStatus.FAILED

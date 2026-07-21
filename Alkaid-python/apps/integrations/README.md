@@ -1,26 +1,24 @@
 # 外系统集成边界
 
-外系统代码按系统/业务域分目录，不把 Mock 响应、业务编排和 HTTP 传输混在一起：
+产品数据相关外系统统一从 `product_system/` 暴露普通操作函数：
 
 ```text
-integrations/
-├── mock_product/              # 产品申请外系统
-├── application_link/          # 申请链接外系统
-├── business_access/           # 业务准入外系统
-└── verification_approval/     # 核实审批外系统
+product_system/
+├── config.py                 # Base URL 与 Token 解析
+├── client.py                 # 唯一 HttpClient 工厂
+├── wire.py                   # 五字段和 REQ_MESSAGE 外壳
+├── application_link.py
+├── product_application.py    # 共享 Token 的有状态 Session
+├── business_access.py
+├── verification_approval.py
+├── card_status.py
+└── loan_status.py
 ```
 
-每个目录的职责固定：
+原业务目录中的 `api.py`、`models.py`、`mock_transport.py` 仍分别保存协议声明、类型和 Mock 服务端行为；业务 Service 不能直接导入 Mock。
 
-- `api.py` 或 `api/`：接口后缀、HTTP 方法、成功码、认证和重试声明。
-- `models.py` 或 `models/`：外系统请求和响应模型。
-- `adapter.py`：把后端语义输入转换为外系统调用，对业务层隐藏 HTTP 细节。
-- `mock_transport.py`：只模拟外系统服务端响应；业务服务不能导入它。
-- `raw_messages/`：固定长报文模板，仅由对应 Adapter 复制并显式覆盖动态字段。
+默认不创建 Adapter 类。普通调用函数负责创建共享 Client、执行 `EndpointExecutor`、记录 `JobApiCall` 并关闭 Client。产品申请因登录、检查、Token 轮换、提交和审计共享会话状态，保留 `ProductApplicationSession`。
 
-`EXTERNAL_SYSTEM_MODE=mock` 时 Adapter 使用 `httpx.MockTransport`，仍然经过完整的
-`EndpointExecutor -> HttpClient -> 响应模型校验` 链路。切到 `real` 时只替换 Base URL 和 Token，
-业务服务、Job 和前端 API 不变。
+`EXTERNAL_SYSTEM_MODE=mock` 仍经过完整的 `EndpointExecutor -> HttpClient -> 响应模型校验` 链路。切到 `real` 时由 `config.py` 读取各能力的 Base URL 和 Token，业务编排和前端 API 不变。
 
-业务准入和核实审批的 Mock 状态保存在各自 `mock_transport.py` 的内存 Store 中，用来模拟外系统
-记录状态；进程重启后会清空。真实模式下状态由真实外系统维护。
+当前仓库没有可执行 Java 包、命令配置或已确认的 Java 协议，因此申请链接仍走现有 HTTP 协议。取得真实 Java 合约后，JavaGateway 只能负责 JSON 文件、子进程调用和 stdout 解析，不得包含产品流程或 Job 状态逻辑。
