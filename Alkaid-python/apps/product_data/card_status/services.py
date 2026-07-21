@@ -1,6 +1,7 @@
 from typing import Any
 
 from apps.integrations.product_system.card_status import apply_card_action, search_cards
+from apps.jobs.commands import parse_menu_command
 from apps.jobs.models import Job
 from apps.product_data.card_status.schemas import (
     CardActionSubmission,
@@ -11,12 +12,12 @@ from apps.product_data.card_status.schemas import (
 
 
 def execute_card_status(job: Job) -> dict[str, Any]:
-    if "operation" in job.payload:
-        command = CardStatusCommand.model_validate(job.payload)
-        operation, data = command.operation, command.data
-    else:
-        operation = CardStatusOperation(job.kind.removeprefix("card_status."))
-        data = job.payload
+    operation, data = parse_menu_command(
+        job,
+        prefix="card_status",
+        command_model=CardStatusCommand,
+        operation_enum=CardStatusOperation,
+    )
     if operation == CardStatusOperation.SEARCH:
         submission = CardSearchSubmission.model_validate(data)
         cards = search_cards(job, submission.environment, submission.customer_no)

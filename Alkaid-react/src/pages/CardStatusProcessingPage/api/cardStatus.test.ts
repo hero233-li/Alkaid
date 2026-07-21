@@ -28,8 +28,9 @@ describe('card status API', () => {
     const get = vi.spyOn(apiClient, 'get');
     const controller = new AbortController();
     controller.abort();
-    await expect(pollCardJob(1, vi.fn(), { signal: controller.signal }))
-      .rejects.toMatchObject({ name: 'AbortError' });
+    await expect(pollCardJob(1, vi.fn(), { signal: controller.signal })).rejects.toMatchObject({
+      name: 'AbortError',
+    });
     expect(get).not.toHaveBeenCalled();
   });
 });

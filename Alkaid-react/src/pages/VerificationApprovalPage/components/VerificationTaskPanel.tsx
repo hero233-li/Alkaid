@@ -9,10 +9,7 @@ import {
   Send,
   UserCheck,
 } from 'lucide-react';
-import type {
-  VerificationQuickAction,
-  VerificationTask,
-} from '../types';
+import type { VerificationQuickAction, VerificationTask } from '../types';
 import VerificationItemCard from './VerificationItemCard';
 
 interface VerificationTaskPanelProps {
@@ -54,23 +51,39 @@ export default function VerificationTaskPanel({
   return (
     <div className="verification-task-stack">
       <Card
-        title={<span className="verification-task-title"><ClipboardCheck size={18} />合同号：{task.contractNo}</span>}
-        extra={(
+        title={
+          <span className="verification-task-title">
+            <ClipboardCheck size={18} />
+            合同号：{task.contractNo}
+          </span>
+        }
+        extra={
           <Space>
             <Button icon={<RefreshCw size={15} />} disabled={busy} onClick={onRefresh}>
               刷新
             </Button>
             {claimed ? (
-              <Button danger icon={<CornerDownLeft size={15} />} loading={busy} onClick={onReturn}>退回任务池</Button>
+              <Button danger icon={<CornerDownLeft size={15} />} loading={busy} onClick={onReturn}>
+                退回任务池
+              </Button>
             ) : (
-              <Button type="primary" icon={<UserCheck size={15} />} loading={busy} onClick={onClaim}>领取</Button>
+              <Button
+                type="primary"
+                icon={<UserCheck size={15} />}
+                loading={busy}
+                onClick={onClaim}
+              >
+                领取
+              </Button>
             )}
           </Space>
-        )}
+        }
       >
         <div className="verification-task-toolbar">
           <div className="verification-task-tags">
-            <Tag color={claimed ? 'processing' : 'default'}>领取状态：{claimed ? '已领取' : '未领取'}</Tag>
+            <Tag color={claimed ? 'processing' : 'default'}>
+              领取状态：{claimed ? '已领取' : '未领取'}
+            </Tag>
             <Tag color="blue">任务状态：{task.taskStatus}</Tag>
             <Tag>节点：{task.node}</Tag>
             <Tag>柜员号：{task.tellerNo}</Tag>

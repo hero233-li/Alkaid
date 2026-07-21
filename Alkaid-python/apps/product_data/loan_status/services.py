@@ -1,6 +1,7 @@
 from typing import Any
 
 from apps.integrations.product_system.loan_status import apply_loan_action, search_loans
+from apps.jobs.commands import parse_menu_command
 from apps.jobs.models import Job
 from apps.product_data.loan_status.schemas import (
     LoanActionSubmission,
@@ -11,12 +12,12 @@ from apps.product_data.loan_status.schemas import (
 
 
 def execute_loan_status(job: Job) -> dict[str, Any]:
-    if "operation" in job.payload:
-        command = LoanStatusCommand.model_validate(job.payload)
-        operation, data = command.operation, command.data
-    else:
-        operation = LoanStatusOperation(job.kind.removeprefix("loan_status."))
-        data = job.payload
+    operation, data = parse_menu_command(
+        job,
+        prefix="loan_status",
+        command_model=LoanStatusCommand,
+        operation_enum=LoanStatusOperation,
+    )
     if operation == LoanStatusOperation.SEARCH:
         submission = LoanSearchSubmission.model_validate(data)
         return {"cards": search_loans(job, submission.environment, submission.customer_no)}

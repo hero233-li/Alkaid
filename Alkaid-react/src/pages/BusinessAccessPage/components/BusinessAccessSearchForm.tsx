@@ -1,8 +1,6 @@
 import { Button, Card, Col, Form, Input, Row, Select, Space, type FormInstance } from 'antd';
 import { RotateCcw, Search } from 'lucide-react';
-import {
-  validateBusinessAccessSearchCriteria,
-} from '../model/searchModel';
+import { validateBusinessAccessSearchCriteria } from '../model/searchModel';
 import type { BusinessAccessSearchValues } from '../types';
 
 interface BusinessAccessSearchFormProps {
@@ -26,7 +24,11 @@ export default function BusinessAccessSearchForm({
   onSearch,
   onReset,
 }: BusinessAccessSearchFormProps) {
-  const validateSearchCriteria = ({ getFieldValue }: { getFieldValue: (name: string) => unknown }) => ({
+  const validateSearchCriteria = ({
+    getFieldValue,
+  }: {
+    getFieldValue: (name: string) => unknown;
+  }) => ({
     validator: () => {
       try {
         validateBusinessAccessSearchCriteria({

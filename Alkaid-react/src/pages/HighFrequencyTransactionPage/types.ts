@@ -1,83 +1,84 @@
-import type {Dayjs} from 'dayjs';
+import type { Dayjs } from 'dayjs';
 
 export interface HighFrequencySearchValues {
-    environment: string;
-    useDefaultParams: boolean;
-    cardNo?: string;
-    startDate?: Dayjs;
-    endDate?: Dayjs
+  environment: string;
+  useDefaultParams: boolean;
+  cardNo?: string;
+  startDate?: Dayjs;
+  endDate?: Dayjs;
 }
 
 export interface HighFrequencyQueryPayload {
-    environment: string;
-    cardNo?: string;
-    queryStartDate?: string;
-    queryEndDate?: string
+  environment: string;
+  cardNo?: string;
+  queryStartDate?: string;
+  queryEndDate?: string;
 }
 
 export interface Risk050009Detail {
-    cardNo: string;
-    counterparty: string;
-    counterpartyCardNo: string;
-    transactionTime: string;
-    tellerName: string;
-    transferScope: string;
-    organizationNo: string
+  cardNo: string;
+  counterparty: string;
+  counterpartyCardNo: string;
+  transactionTime: string;
+  tellerName: string;
+  transferScope: string;
+  organizationNo: string;
 }
 
 export interface DynamicResultColumn {
-    key: string;
-    title: string;
-    type?: 'text' | 'tag' | 'action';
-    tagColors?: Record<string, string>;
-    actionLabel?: string
+  key: string;
+  title: string;
+  type?: 'text' | 'tag' | 'action';
+  tagColors?: Record<string, string>;
+  actionLabel?: string;
 }
 
 export interface DynamicQueryResult {
-    title: string;
-    functionCode: string;
-    functionName: string;
-    head: DynamicResultColumn[];
-    body: Record<string, unknown>[];
-    columns?: DynamicResultColumn[];
-    rows?: Record<string, unknown>[]
+  title: string;
+  functionCode: string;
+  functionName: string;
+  head: DynamicResultColumn[];
+  body: Record<string, unknown>[];
+  columns?: DynamicResultColumn[];
+  rows?: Record<string, unknown>[];
 }
 
 export interface ApiResponse<T> {
-    ok: boolean;
-    data: T;
-    message?: string
+  ok: boolean;
+  data: T;
+  message?: string;
 }
 
 export type JobStatus =
-    'submitting'
-    | 'pending'
-    | 'running'
-    | 'retrying'
-    | 'success'
-    | 'failed'
-    | 'cancelled'
-    | 'timed_out';
+  | 'submitting'
+  | 'pending'
+  | 'running'
+  | 'retrying'
+  | 'success'
+  | 'failed'
+  | 'cancel_requested'
+  | 'cancelled'
+  | 'timed_out';
 
 export interface JobSubmission {
-    id: number;
-    status: JobStatus;
-    progress: number
+  id: number;
+  status: JobStatus;
+  progress: number;
 }
 
 export interface WorkflowJob {
-    id: number;
-    status: JobStatus;
-    progress: number;
-    currentStep?: string;
-    result: Record<string, unknown>;
-    errorMessage?: string
+  id: number;
+  status: JobStatus;
+  progress: number;
+  currentStep?: string;
+  result: { queryResult?: DynamicQueryResult };
+  errorMessage?: string;
 }
 
 export interface WorkflowActivity {
-    jobId?: number;
-    label: string;
-    status: JobStatus;
-    progress: number;
-    currentStep?: string
+  jobId?: number;
+  label: string;
+  status: JobStatus;
+  progress: number;
+  currentStep?: string;
 }

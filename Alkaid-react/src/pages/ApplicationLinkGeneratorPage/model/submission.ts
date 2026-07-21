@@ -1,8 +1,4 @@
-import {
-  categoriesForProduct,
-  findProduct,
-  isDynamicApplicationLink,
-} from './formModel';
+import { categoriesForProduct, findProduct, isDynamicApplicationLink } from './formModel';
 import type {
   ApplicationLinkConfig,
   ApplicationLinkFormValues,
@@ -80,9 +76,9 @@ export function buildApplicationLinkSubmission(
     Object.assign(submission.payload, parseDynamicLinkRequestJson(values.requestJson));
   }
 
-  const route = product.routes.find((item) => (
-    item.environment === environment && item.category === category
-  ));
+  const route = product.routes.find(
+    (item) => item.environment === environment && item.category === category,
+  );
   if (route?.requiredFields.includes('restoreStatus')) {
     submission.payload.restoreStatus = requiredText(values.restoreStatus, '请选择还原状况');
   }

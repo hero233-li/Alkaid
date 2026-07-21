@@ -73,8 +73,10 @@ def birth_date_for_age(current_date: date, age: int) -> date:
 
 
 def age_on_date(birth_date: date, current_date: date) -> int:
-    return current_date.year - birth_date.year - (
-        (current_date.month, current_date.day) < (birth_date.month, birth_date.day)
+    return (
+        current_date.year
+        - birth_date.year
+        - ((current_date.month, current_date.day) < (birth_date.month, birth_date.day))
     )
 
 
@@ -107,10 +109,7 @@ def generate_identity_number(sequence: int, birth_date: date, gender: str) -> st
     if gender == "女" and order % 2 == 1:
         order = order + 1 if order < 999 else 998
     body = f"{REGION_CODES[sequence % len(REGION_CODES)]}{birth_date:%Y%m%d}{order:03d}"
-    total = sum(
-        int(value) * weight
-        for value, weight in zip(body, IDENTITY_WEIGHTS, strict=True)
-    )
+    total = sum(int(value) * weight for value, weight in zip(body, IDENTITY_WEIGHTS, strict=True))
     return body + IDENTITY_CHECK_CODES[total % 11]
 
 

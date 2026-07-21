@@ -10,14 +10,13 @@ import type { BusinessAccessSearchValues } from '../types';
 
 export function useBusinessAccessForm() {
   const [form] = Form.useForm<BusinessAccessSearchValues>();
-  const [config, setConfig] = useState<Awaited<ReturnType<typeof getBusinessAccessConfig>> | null>(null);
+  const [config, setConfig] = useState<Awaited<ReturnType<typeof getBusinessAccessConfig>> | null>(
+    null,
+  );
   const [configLoading, setConfigLoading] = useState(true);
   const [configError, setConfigError] = useState<string | null>(null);
   const initialValues = useMemo(() => getInitialBusinessAccessSearchValues(config), [config]);
-  const environmentOptions = useMemo(
-    () => getBusinessAccessEnvironmentOptions(config),
-    [config],
-  );
+  const environmentOptions = useMemo(() => getBusinessAccessEnvironmentOptions(config), [config]);
 
   useEffect(() => {
     let active = true;
@@ -41,9 +40,10 @@ export function useBusinessAccessForm() {
     };
   }, [form]);
 
-  const createSubmission = useCallback((values: BusinessAccessSearchValues) => (
-    buildBusinessAccessSearchSubmission(values)
-  ), []);
+  const createSubmission = useCallback(
+    (values: BusinessAccessSearchValues) => buildBusinessAccessSearchSubmission(values),
+    [],
+  );
 
   const reset = useCallback(() => {
     form.resetFields();

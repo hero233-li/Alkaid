@@ -1,1 +1,24 @@
-import{Button,Modal,Typography}from'antd';export default function PasswordResultModal({password,onClose}:{password:string;onClose:()=>void}){return <Modal title="登录密码重置完成" open={Boolean(password)} closable={false} footer={<Button type="primary" onClick={onClose}>知道了</Button>}><Typography.Paragraph>新密码为：</Typography.Paragraph><div className="card-status-password">{password}</div></Modal>}
+import { Button, Modal, Typography } from 'antd';
+export default function PasswordResultModal({
+  password,
+  onClose,
+}: {
+  password: string;
+  onClose: () => void;
+}) {
+  return (
+    <Modal
+      title="登录密码重置完成"
+      open={Boolean(password)}
+      closable={false}
+      footer={
+        <Button type="primary" onClick={onClose}>
+          知道了
+        </Button>
+      }
+    >
+      <Typography.Paragraph>新密码为：</Typography.Paragraph>
+      <div className="card-status-password">{password}</div>
+    </Modal>
+  );
+}

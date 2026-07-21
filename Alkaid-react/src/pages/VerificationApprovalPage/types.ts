@@ -1,7 +1,8 @@
 export type VerificationOwnershipStatus = 'unclaimed' | 'claimed';
 export type VerificationItemStatus = 'pending' | 'completed';
 export type VerificationQuickAction = 'complete' | 'supplement' | 'submit' | 'approval-submit';
-export type VerificationOperation = 'search' | 'claim' | 'return' | 'refresh' | 'item-update' | 'action';
+export type VerificationOperation =
+  'search' | 'claim' | 'return' | 'refresh' | 'item-update' | 'action';
 export type VerificationJobStatus =
   | 'submitting'
   | 'pending'
@@ -48,6 +49,12 @@ export interface VerificationTask {
   items: VerificationItem[];
 }
 
+export interface VerificationContextProof {
+  sourceJobId: number;
+  version: number;
+  digest: string;
+}
+
 export interface VerificationActionDefinition {
   key: VerificationQuickAction;
   label: string;
@@ -63,7 +70,10 @@ export interface VerificationJobSubmission {
 }
 
 export interface VerificationJobDetail extends VerificationJobSubmission {
-  result: Record<string, unknown>;
+  result: {
+    task?: VerificationTask | null;
+    contextProof?: VerificationContextProof | null;
+  };
   errorMessage?: string;
 }
 

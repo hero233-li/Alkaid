@@ -36,7 +36,9 @@ export default function BusinessAccessResultList({
       dataIndex: 'accessResult',
       width: 110,
       render: (value: BusinessAccessRecord['accessResult']) => (
-        <Tag color={value === '通过' ? 'success' : value === '拒绝' ? 'error' : 'warning'}>{value}</Tag>
+        <Tag color={value === '通过' ? 'success' : value === '拒绝' ? 'error' : 'warning'}>
+          {value}
+        </Tag>
       ),
     },
     {
@@ -44,7 +46,9 @@ export default function BusinessAccessResultList({
       dataIndex: 'status',
       width: 100,
       render: (value: BusinessAccessRecord['status']) => (
-        <Tag color={value === 'valid' ? 'blue' : 'default'}>{value === 'valid' ? '有效' : '已失效'}</Tag>
+        <Tag color={value === 'valid' ? 'blue' : 'default'}>
+          {value === 'valid' ? '有效' : '已失效'}
+        </Tag>
       ),
     },
     { title: '查询时间', dataIndex: 'queriedAt', width: 180, render: formatDate },

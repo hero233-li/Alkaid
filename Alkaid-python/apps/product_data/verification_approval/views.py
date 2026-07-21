@@ -108,6 +108,7 @@ def update_verification_item_status(
     job_submission = VerificationItemJobSubmission(
         status=submission.status,
         context=submission.context,
+        context_proof=submission.context_proof,
         item_id=item_id,
     )
     return _submit_job(

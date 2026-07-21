@@ -27,8 +27,7 @@ def main() -> int:
     pings = inspector.ping() or {}
     if len(pings) < args.min_workers:
         print(
-            f"Expected at least {args.min_workers} workers, found {len(pings)}: "
-            f"{sorted(pings)}",
+            f"Expected at least {args.min_workers} workers, found {len(pings)}: {sorted(pings)}",
             file=sys.stderr,
         )
         return 1

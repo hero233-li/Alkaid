@@ -8,6 +8,7 @@ from django.db import IntegrityError, transaction
 from django.utils import timezone
 
 from apps.jobs.models import TERMINAL_JOB_STATUSES, Job, JobLog, JobStatus
+from apps.jobs.specs import is_non_retryable_job
 
 
 class JobConflict(ValueError):
@@ -25,20 +26,6 @@ class CreatedJob:
 
 
 MAX_REQUEST_IDENTIFIER_LENGTH = 128
-NON_RETRYABLE_JOB_KINDS = {"product_application", "application_link"}
-NON_RETRYABLE_OPERATIONS = {
-    "business_access": {"invalidate", "push"},
-    "verification_approval": {"claim", "return", "item-update", "action"},
-    "card_status": {"action"},
-    "loan_status": {"action"},
-}
-LEGACY_NON_RETRYABLE_JOB_KINDS = {
-    "application_link_generation",
-    *(f"business_access.{item}" for item in ("invalidate", "push")),
-    *(f"verification_approval.{item}" for item in ("claim", "return", "item-update", "action")),
-    "card_status.action",
-    "loan_status.action",
-}
 
 
 def resolve_job_identifiers(
@@ -364,10 +351,7 @@ def request_job_cancel(job_id: int) -> Job:
 
 
 def _is_non_retryable(job: Job) -> bool:
-    if job.kind in NON_RETRYABLE_JOB_KINDS or job.kind in LEGACY_NON_RETRYABLE_JOB_KINDS:
-        return True
-    operation = job.payload.get("operation") if isinstance(job.payload, dict) else None
-    return operation in NON_RETRYABLE_OPERATIONS.get(job.kind, set())
+    return is_non_retryable_job(job.kind, job.payload)
 
 
 def reconcile_expired_jobs(*, now: datetime | None = None) -> dict[str, int]:
@@ -455,7 +439,6 @@ def serialize_job(
     job: Job,
     *,
     include_logs: bool = True,
-    include_payload: bool = False,
 ) -> dict[str, Any]:
     data: dict[str, Any] = {
         "id": job.id,
@@ -477,6 +460,4 @@ def serialize_job(
     }
     if include_logs:
         data["logs"] = [serialize_log(log) for log in job.logs.all()]
-    if include_payload:
-        data["payload"] = job.payload
     return data

@@ -63,5 +63,4 @@ def create_product_application(request: HttpRequest) -> JsonResponse:
         timeout_seconds=settings.PRODUCT_APPLICATION_TIMEOUT_SECONDS,
         snapshot=execution_snapshot.model_dump(mode="json"),
         snapshot_version=execution_snapshot.catalog_version,
-        include_payload=True,
     )

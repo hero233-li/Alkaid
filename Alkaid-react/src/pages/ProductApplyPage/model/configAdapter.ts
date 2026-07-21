@@ -83,9 +83,10 @@ function asProducts(value: unknown): ProductDefinitionConfig[] {
       value: asString(product.value, `products[${index}].value`),
       environments: asStringArray(product.environments, `products[${index}].environments`),
       locations: asLocations(product.locations, `products[${index}].locations`),
-      fieldSets: product.fieldSets == null
-        ? []
-        : asStringArray(product.fieldSets, `products[${index}].fieldSets`),
+      fieldSets:
+        product.fieldSets == null
+          ? []
+          : asStringArray(product.fieldSets, `products[${index}].fieldSets`),
       requiredFields: asStringArray(product.requiredFields, `products[${index}].requiredFields`),
     };
   });
@@ -121,7 +122,8 @@ function asFields(value: unknown): ProductFieldConfig[] {
     names.add(name);
 
     const presentation = productFieldRegistry[name];
-    const sourceOptions = source.options == null ? undefined : asOptions(source.options, `fields[${index}].options`);
+    const sourceOptions =
+      source.options == null ? undefined : asOptions(source.options, `fields[${index}].options`);
     return {
       name,
       label: presentation?.label ?? optionalString(source.label) ?? name,
@@ -136,7 +138,9 @@ function asFields(value: unknown): ProductFieldConfig[] {
       options: sourceOptions,
       checkedLabel: presentation?.checkedLabel ?? optionalString(source.checkedLabel),
       uncheckedLabel: presentation?.uncheckedLabel ?? optionalString(source.uncheckedLabel),
-      switchWidth: presentation?.switchWidth ?? (typeof source.switchWidth === 'number' ? source.switchWidth : undefined),
+      switchWidth:
+        presentation?.switchWidth ??
+        (typeof source.switchWidth === 'number' ? source.switchWidth : undefined),
       persistDraft: presentation?.persistDraft ?? false,
     };
   });
@@ -152,22 +156,20 @@ function asFieldSets(value: unknown) {
   );
 }
 
-function buildLegacyFieldSets(
-  rawFields: unknown,
-  products: ProductDefinitionConfig[],
-) {
+function buildLegacyFieldSets(rawFields: unknown, products: ProductDefinitionConfig[]) {
   if (!Array.isArray(rawFields)) {
     throw new Error('字段配置不能为空');
   }
   const sharedFields: string[] = [];
-  const productFields = Object.fromEntries(products.map((product) => [product.value, [] as string[]]));
+  const productFields = Object.fromEntries(
+    products.map((product) => [product.value, [] as string[]]),
+  );
 
   rawFields.forEach((item, index) => {
     const field = asRecord(item, `fields[${index}]`);
     const fieldName = asString(field.name, `fields[${index}].name`);
-    const boundProducts = field.products == null
-      ? []
-      : asStringArray(field.products, `fields[${index}].products`);
+    const boundProducts =
+      field.products == null ? [] : asStringArray(field.products, `fields[${index}].products`);
     if (!boundProducts.length) {
       sharedFields.push(fieldName);
       return;
@@ -224,7 +226,9 @@ function validateConfigReferences(
     }
   }
   for (const product of products) {
-    const unknownEnvironment = product.environments.find((environment) => !environmentValues.has(environment));
+    const unknownEnvironment = product.environments.find(
+      (environment) => !environmentValues.has(environment),
+    );
     if (unknownEnvironment) {
       throw new Error(`产品 ${product.value} 引用了未知环境：${unknownEnvironment}`);
     }
@@ -232,10 +236,14 @@ function validateConfigReferences(
     if (unknownFieldSet) {
       throw new Error(`产品 ${product.value} 引用了未知字段组：${unknownFieldSet}`);
     }
-    const enabledFields = new Set(product.fieldSets.flatMap((fieldSet) => fieldSets[fieldSet] || []));
-    const unknownRequiredField = product.requiredFields.find((field) => (
-      !fieldNames.has(field) || (!ALWAYS_VISIBLE_FIELD_NAMES.has(field) && !enabledFields.has(field))
-    ));
+    const enabledFields = new Set(
+      product.fieldSets.flatMap((fieldSet) => fieldSets[fieldSet] || []),
+    );
+    const unknownRequiredField = product.requiredFields.find(
+      (field) =>
+        !fieldNames.has(field) ||
+        (!ALWAYS_VISIBLE_FIELD_NAMES.has(field) && !enabledFields.has(field)),
+    );
     if (unknownRequiredField) {
       throw new Error(`产品 ${product.value} 的必填字段未启用：${unknownRequiredField}`);
     }
@@ -290,10 +298,7 @@ const ALWAYS_VISIBLE_FIELD_NAMES = new Set([
   'outlet',
 ]);
 
-function getEnabledFieldNames(
-  config: ProductApplicationConfig,
-  product: ProductDefinitionConfig,
-) {
+function getEnabledFieldNames(config: ProductApplicationConfig, product: ProductDefinitionConfig) {
   return new Set([
     ...ALWAYS_VISIBLE_FIELD_NAMES,
     ...product.fieldSets.flatMap((fieldSet) => config.fieldSets[fieldSet] || []),
@@ -313,17 +318,24 @@ export function buildProductApplicationFields(
   values: Record<string, unknown> = {},
 ): ProductFieldConfig[] {
   const environment = chooseValue(values.environment, config.environments);
-  const availableProducts = config.products.filter((product) => product.environments.includes(environment));
+  const availableProducts = config.products.filter((product) =>
+    product.environments.includes(environment),
+  );
   const productOptions = copyOptions(availableProducts);
   const productValue = chooseValue(values.product, productOptions);
-  const product = availableProducts.find((item) => item.value === productValue) || availableProducts[0] || config.products[0];
+  const product =
+    availableProducts.find((item) => item.value === productValue) ||
+    availableProducts[0] ||
+    config.products[0];
 
   const locationOptions = copyOptions(product.locations);
   const locationValue = chooseValue(values.location, locationOptions);
-  const location = product.locations.find((item) => item.value === locationValue) || product.locations[0];
+  const location =
+    product.locations.find((item) => item.value === locationValue) || product.locations[0];
   const branchOptions = copyOptions(location?.branches || []);
   const branchValue = chooseValue(values.branch, branchOptions);
-  const branch = location?.branches.find((item) => item.value === branchValue) || location?.branches[0];
+  const branch =
+    location?.branches.find((item) => item.value === branchValue) || location?.branches[0];
   const outletOptions = copyOptions(branch?.outlets || []);
   const enabledFieldNames = getEnabledFieldNames(config, product);
 
@@ -338,20 +350,23 @@ export function buildProductApplicationFields(
   return config.fields
     .filter((field) => enabledFieldNames.has(field.name))
     .map((sourceField) => {
-    const hierarchy = hierarchyOptions[sourceField.name];
-    if (hierarchy) {
-      return { ...sourceField, options: hierarchy.options, defaultValue: hierarchy.value };
-    }
-    if (sourceField.name === 'legalPerson' && !String(values.companyName || '').trim()) {
+      const hierarchy = hierarchyOptions[sourceField.name];
+      if (hierarchy) {
+        return { ...sourceField, options: hierarchy.options, defaultValue: hierarchy.value };
+      }
+      if (sourceField.name === 'legalPerson' && !String(values.companyName || '').trim()) {
+        return {
+          ...sourceField,
+          editable: false,
+          defaultValue: true,
+          checkedLabel: '农户',
+          uncheckedLabel: '农户',
+        };
+      }
       return {
         ...sourceField,
-        editable: false,
-        defaultValue: true,
-        checkedLabel: '农户',
-        uncheckedLabel: '农户',
+        required: sourceField.required || product.requiredFields.includes(sourceField.name),
       };
-    }
-    return { ...sourceField, required: sourceField.required || product.requiredFields.includes(sourceField.name) };
     });
 }
 

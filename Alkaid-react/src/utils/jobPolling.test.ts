@@ -5,9 +5,10 @@ describe('pollJobUntilTerminal', () => {
   it('reports an in-flight HTTP cancellation as AbortError even if the client wraps it', async () => {
     const controller = new AbortController();
     const polling = pollJobUntilTerminal({
-      fetchJob: (signal) => new Promise<never>((_resolve, reject) => {
-        signal?.addEventListener('abort', () => reject(new Error('请求失败')), { once: true });
-      }),
+      fetchJob: (signal) =>
+        new Promise<never>((_resolve, reject) => {
+          signal?.addEventListener('abort', () => reject(new Error('请求失败')), { once: true });
+        }),
       onProgress: () => undefined,
       terminalStatuses: new Set(['failed']),
       timeoutMessage: '超时',

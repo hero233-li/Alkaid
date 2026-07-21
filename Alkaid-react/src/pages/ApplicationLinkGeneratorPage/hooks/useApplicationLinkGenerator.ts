@@ -1,10 +1,7 @@
 import { useCallback, useState } from 'react';
 import { message } from 'antd';
 import { pollApplicationLinkJob, submitApplicationLink } from '../api/applicationLink';
-import {
-  buildApplicationLinkActivity,
-  extractApplicationLinkResult,
-} from '../model/jobModel';
+import { buildApplicationLinkActivity, extractApplicationLinkResult } from '../model/jobModel';
 import type {
   ApplicationLinkActivity,
   ApplicationLinkResult,
@@ -20,11 +17,7 @@ export function useApplicationLinkGenerator() {
     setActivity(buildApplicationLinkActivity('submitting', 0));
     try {
       const submitted = await submitApplicationLink(values);
-      setActivity(buildApplicationLinkActivity(
-        submitted.status,
-        submitted.progress,
-        submitted.id,
-      ));
+      setActivity(buildApplicationLinkActivity(submitted.status, submitted.progress, submitted.id));
       const job = await pollApplicationLinkJob(submitted.id, (value) => {
         setActivity(buildApplicationLinkActivity(value.status, value.progress, value.id));
       });

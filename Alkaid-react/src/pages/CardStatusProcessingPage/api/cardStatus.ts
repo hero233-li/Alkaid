@@ -10,7 +10,11 @@ import type {
   CardSearchValues,
 } from '../types';
 
-interface Submission { id: number; status: CardJobStatus; progress: number }
+interface Submission {
+  id: number;
+  status: CardJobStatus;
+  progress: number;
+}
 const requestConfig = { showGlobalProgress: false, useResponseDelay: false };
 const terminal = new Set<CardJobStatus>(['success', 'failed', 'cancelled', 'timed_out']);
 
@@ -25,7 +29,9 @@ function workflowConfig() {
 
 export async function submitCardSearch(values: CardSearchValues) {
   const { data } = await apiClient.post<CardApiResponse<Submission>>(
-    '/product-data/tools/cards/search', values, workflowConfig(),
+    '/product-data/tools/cards/search',
+    values,
+    workflowConfig(),
   );
   return unwrap(data, '提交卡查询失败');
 }
@@ -50,9 +56,10 @@ export async function pollCardJob(
 ) {
   return pollJobUntilTerminal({
     fetchJob: async (signal) => {
-      const { data } = await apiClient.get<CardApiResponse<CardJob>>(
-        `/jobs/${id}`, { ...requestConfig, signal },
-      );
+      const { data } = await apiClient.get<CardApiResponse<CardJob>>(`/jobs/${id}`, {
+        ...requestConfig,
+        signal,
+      });
       return unwrap(data, '获取卡处理 Job 失败');
     },
     onProgress,

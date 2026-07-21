@@ -134,13 +134,19 @@ export default function SchemaForm<TValues extends object>({
                 name={field.name as never}
                 label={field.label}
                 valuePropName={field.control === 'switch' ? 'checked' : 'value'}
-                rules={field.rules ?? (field.required
-                  ? [{
-                      required: true,
-                      message: field.requiredMessage
-                        ?? `请填写${typeof field.label === 'string' ? field.label : '该字段'}`,
-                    }]
-                  : undefined)}
+                rules={
+                  field.rules ??
+                  (field.required
+                    ? [
+                        {
+                          required: true,
+                          message:
+                            field.requiredMessage ??
+                            `请填写${typeof field.label === 'string' ? field.label : '该字段'}`,
+                        },
+                      ]
+                    : undefined)
+                }
               >
                 {renderControl(field, form)}
               </Form.Item>

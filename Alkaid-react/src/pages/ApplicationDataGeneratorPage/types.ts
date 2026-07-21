@@ -33,7 +33,30 @@ export interface ApplicationDataRecord {
   organizationCode: string;
 }
 
-export interface ApplicationDataApiResponse<T> { ok: boolean; data: T; message?: string }
-export type ApplicationDataJobStatus = 'submitting' | 'pending' | 'running' | 'retrying' | 'success' | 'failed' | 'cancelled' | 'timed_out';
-export interface ApplicationDataJob { id: number; status: ApplicationDataJobStatus; progress: number; result: Record<string, unknown>; errorMessage?: string }
-export interface ApplicationDataActivity { jobId?: number; status: ApplicationDataJobStatus; progress: number; label: string }
+export interface ApplicationDataApiResponse<T> {
+  ok: boolean;
+  data: T;
+  message?: string;
+}
+export type ApplicationDataJobStatus =
+  | 'submitting'
+  | 'pending'
+  | 'running'
+  | 'retrying'
+  | 'success'
+  | 'failed'
+  | 'cancelled'
+  | 'timed_out';
+export interface ApplicationDataJob {
+  id: number;
+  status: ApplicationDataJobStatus;
+  progress: number;
+  result: { records?: ApplicationDataRecord[] };
+  errorMessage?: string;
+}
+export interface ApplicationDataActivity {
+  jobId?: number;
+  status: ApplicationDataJobStatus;
+  progress: number;
+  label: string;
+}

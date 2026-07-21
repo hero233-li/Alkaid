@@ -1,7 +1,6 @@
 import type {
   BusinessAccessJobDetail,
   BusinessAccessJobStatus,
-  BusinessAccessNotification,
   BusinessAccessOperation,
   BusinessAccessRecord,
   BusinessAccessWorkflowActivity,
@@ -50,7 +49,11 @@ export function getBusinessAccessVisibleProgress(activity: BusinessAccessWorkflo
   return 15;
 }
 
-function requiredResultValue<T>(detail: BusinessAccessJobDetail, key: string, message: string) {
+function requiredResultValue<T>(
+  detail: BusinessAccessJobDetail,
+  key: keyof BusinessAccessJobDetail['result'],
+  message: string,
+) {
   const value = detail.result[key];
   if (value === undefined || value === null) {
     throw new Error(message);
@@ -66,7 +69,7 @@ export function extractBusinessAccessRecords(detail: BusinessAccessJobDetail) {
   if (!Array.isArray(records)) {
     throw new Error('查询结果 records 格式不正确');
   }
-  return records as BusinessAccessRecord[];
+  return records;
 }
 
 export function extractBusinessAccessRecord(detail: BusinessAccessJobDetail) {
@@ -81,9 +84,13 @@ export function extractBusinessAccessNotifications(detail: BusinessAccessJobDeta
   if (!Array.isArray(notifications)) {
     throw new Error('通知查询结果格式不正确');
   }
-  return notifications as BusinessAccessNotification[];
+  return notifications;
 }
 
 export function extractNotificationPushResult(detail: BusinessAccessJobDetail) {
-  return requiredResultValue<NotificationPushResult>(detail, 'pushResult', '通知推送结果缺少 pushResult');
+  return requiredResultValue<NotificationPushResult>(
+    detail,
+    'pushResult',
+    '通知推送结果缺少 pushResult',
+  );
 }

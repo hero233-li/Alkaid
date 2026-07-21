@@ -13,12 +13,14 @@ export default function JobDetailContent({ result }: JobDetailContentProps) {
       <Card title="执行过程" size="small">
         <Steps
           current={result.stage === 'completed' ? 2 : result.stage === 'validate' ? 1 : 0}
-          status={result.status === 'success' ? 'finish' : terminalStatuses.has(result.status) ? 'error' : 'process'}
-          items={[
-            { title: '参数提交' },
-            { title: '规则验证' },
-            { title: '完成' },
-          ]}
+          status={
+            result.status === 'success'
+              ? 'finish'
+              : terminalStatuses.has(result.status)
+                ? 'error'
+                : 'process'
+          }
+          items={[{ title: '参数提交' }, { title: '规则验证' }, { title: '完成' }]}
         />
       </Card>
       <Card title="运行信息" size="small">
@@ -29,7 +31,12 @@ export default function JobDetailContent({ result }: JobDetailContentProps) {
           {result.deadlineAt && <span>超时时间：{formatDate(result.deadlineAt)}</span>}
         </Space>
         {result.errorMessage && (
-          <Alert type="error" showIcon message={result.errorMessage} className="product-job-error" />
+          <Alert
+            type="error"
+            showIcon
+            message={result.errorMessage}
+            className="product-job-error"
+          />
         )}
       </Card>
       <Card title="提交参数" size="small">
@@ -39,11 +46,11 @@ export default function JobDetailContent({ result }: JobDetailContentProps) {
         <div className="product-backend-logs">
           {result.logs.map((log, index) => {
             const previousLog = result.logs[index - 1];
-            const startsNewAttempt = Boolean(log.attempt || log.taskId) && (
-              !previousLog
-              || previousLog.attempt !== log.attempt
-              || previousLog.taskId !== log.taskId
-            );
+            const startsNewAttempt =
+              Boolean(log.attempt || log.taskId) &&
+              (!previousLog ||
+                previousLog.attempt !== log.attempt ||
+                previousLog.taskId !== log.taskId);
             return (
               <Fragment key={log.id || `${log.createdAt}-${index}`}>
                 {startsNewAttempt && (
@@ -54,7 +61,11 @@ export default function JobDetailContent({ result }: JobDetailContentProps) {
                 )}
                 <div className="product-backend-log-line">
                   <span className="product-backend-log-time">{formatDate(log.createdAt)}</span>
-                  <Tag color={log.level === 'ERROR' ? 'error' : log.level === 'WARN' ? 'warning' : 'blue'}>
+                  <Tag
+                    color={
+                      log.level === 'ERROR' ? 'error' : log.level === 'WARN' ? 'warning' : 'blue'
+                    }
+                  >
                     {log.level}
                   </Tag>
                   <span>{log.message}</span>
@@ -62,7 +73,9 @@ export default function JobDetailContent({ result }: JobDetailContentProps) {
               </Fragment>
             );
           })}
-          {!result.logs.length && <span className="product-backend-log-empty">暂无后端运行日志</span>}
+          {!result.logs.length && (
+            <span className="product-backend-log-empty">暂无后端运行日志</span>
+          )}
         </div>
       </Card>
     </div>

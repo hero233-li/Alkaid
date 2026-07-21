@@ -105,9 +105,9 @@ class CardMockStore:
 
             password = None
             if action in {"card-pin-reset", "login-password-reset"}:
-                password = str(
-                    int(hashlib.sha256(f"{card_no}:{action}".encode()).hexdigest(), 16)
-                )[-6:]
+                password = str(int(hashlib.sha256(f"{card_no}:{action}".encode()).hexdigest(), 16))[
+                    -6:
+                ]
             labels = {
                 "deposit": "存钱",
                 "withdraw": "取现",

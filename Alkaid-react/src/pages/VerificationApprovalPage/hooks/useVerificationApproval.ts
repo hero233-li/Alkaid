@@ -13,6 +13,7 @@ import { verificationQuickActions } from '../config/verificationApprovalConfig';
 import { allVerificationItemsCompleted } from '../model/taskModel';
 import type {
   VerificationActionDefinition,
+  VerificationContextProof,
   VerificationJobDetail,
   VerificationJobSubmission,
   VerificationOperation,
@@ -22,17 +23,25 @@ import type {
   VerificationWorkflowActivity,
 } from '../types';
 
-function extractTask(detail: VerificationJobDetail): VerificationTask | null {
+function extractTaskContext(detail: VerificationJobDetail): {
+  task: VerificationTask | null;
+  proof: VerificationContextProof | null;
+} {
   const value = detail.result.task;
-  if (value === null) return null;
+  if (value === null) return { task: null, proof: null };
   if (!value || typeof value !== 'object' || Array.isArray(value)) {
     throw new Error('核实审批 Job 结果缺少 task');
   }
-  return value as VerificationTask;
+  const proof = detail.result.contextProof;
+  if (!proof || typeof proof !== 'object' || Array.isArray(proof)) {
+    throw new Error('核实审批 Job 结果缺少 contextProof');
+  }
+  return { task: value as VerificationTask, proof: proof as VerificationContextProof };
 }
 
 export function useVerificationApproval() {
   const [task, setTask] = useState<VerificationTask | null>(null);
+  const [contextProof, setContextProof] = useState<VerificationContextProof | null>(null);
   const [hasSearched, setHasSearched] = useState(false);
   const [searching, setSearching] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
@@ -43,9 +52,12 @@ export function useVerificationApproval() {
   const pollControllerRef = useRef<AbortController | null>(null);
   const allCompleted = useMemo(() => allVerificationItemsCompleted(task), [task]);
 
-  useEffect(() => () => {
-    pollControllerRef.current?.abort();
-  }, []);
+  useEffect(
+    () => () => {
+      pollControllerRef.current?.abort();
+    },
+    [],
+  );
 
   async function runWorkflow(
     operation: VerificationOperation,
@@ -68,15 +80,19 @@ export function useVerificationApproval() {
         status: submitted.status,
         progress: submitted.progress,
       });
-      return await pollVerificationJob(submitted.id, (detail) => {
-        setActivity({
-          jobId: detail.id,
-          operation,
-          label,
-          status: detail.status,
-          progress: detail.progress,
-        });
-      }, { signal: controller.signal });
+      return await pollVerificationJob(
+        submitted.id,
+        (detail) => {
+          setActivity({
+            jobId: detail.id,
+            operation,
+            label,
+            status: detail.status,
+            progress: detail.progress,
+          });
+        },
+        { signal: controller.signal },
+      );
     } finally {
       runningRef.current = false;
       if (pollControllerRef.current === controller) pollControllerRef.current = null;
@@ -87,12 +103,12 @@ export function useVerificationApproval() {
   const search = async (submission: VerificationSearchSubmission) => {
     setSearching(true);
     try {
-      const detail = await runWorkflow(
-        'search',
-        '正在查询核实审批任务',
-        () => searchVerificationTask(submission),
+      const detail = await runWorkflow('search', '正在查询核实审批任务', () =>
+        searchVerificationTask(submission),
       );
-      setTask(extractTask(detail));
+      const next = extractTaskContext(detail);
+      setTask(next.task);
+      setContextProof(next.proof);
       setHasSearched(true);
     } catch (error) {
       if (!isCancelled(error)) {
@@ -104,37 +120,41 @@ export function useVerificationApproval() {
   };
 
   const claim = async () => {
-    if (!task || updating) return;
-    await updateTask('claim', '正在领取核实审批任务', () => claimVerificationTask(task), '任务领取成功');
+    if (!task || !contextProof || updating) return;
+    await updateTask(
+      'claim',
+      '正在领取核实审批任务',
+      () => claimVerificationTask(task, contextProof),
+      '任务领取成功',
+    );
   };
 
   const returnToPool = async () => {
-    if (!task || updating) return;
+    if (!task || !contextProof || updating) return;
     await updateTask(
       'return',
       '正在退回核实审批任务',
-      () => returnVerificationTask(task),
+      () => returnVerificationTask(task, contextProof),
       '任务已退回任务池',
     );
   };
 
-  async function refreshFromContext(context: VerificationTask) {
-    const detail = await runWorkflow(
-      'refresh',
-      '正在刷新核实审批状态',
-      () => refreshVerificationTask(context),
+  async function refreshFromContext(context: VerificationTask, proof: VerificationContextProof) {
+    const detail = await runWorkflow('refresh', '正在刷新核实审批状态', () =>
+      refreshVerificationTask(context, proof),
     );
-    const refreshed = extractTask(detail);
-    if (!refreshed) throw new Error('刷新结果缺少核实审批任务');
-    setTask(refreshed);
+    const refreshed = extractTaskContext(detail);
+    if (!refreshed.task || !refreshed.proof) throw new Error('刷新结果缺少核实审批任务');
+    setTask(refreshed.task);
+    setContextProof(refreshed.proof);
     return refreshed;
   }
 
   const refresh = async () => {
-    if (!task || updating || refreshing) return;
+    if (!task || !contextProof || updating || refreshing) return;
     setRefreshing(true);
     try {
-      await refreshFromContext(task);
+      await refreshFromContext(task, contextProof);
       message.success('核实审批状态已刷新');
     } catch (error) {
       if (!isCancelled(error)) {
@@ -146,11 +166,11 @@ export function useVerificationApproval() {
   };
 
   const setItemCompleted = async (itemId: string, completed: boolean) => {
-    if (!task || updating) return;
+    if (!task || !contextProof || updating) return;
     await updateTask(
       'item-update',
       completed ? '正在完成核实项' : '正在取消核实项完成状态',
-      () => updateVerificationItem(task, itemId, completed ? 'completed' : 'pending'),
+      () => updateVerificationItem(task, contextProof, itemId, completed ? 'completed' : 'pending'),
       completed ? '核实项已完成' : '核实项已恢复为未完成',
       true,
     );
@@ -162,12 +182,12 @@ export function useVerificationApproval() {
   };
 
   const confirmAction = async () => {
-    if (!pendingAction || !task || updating) return;
+    if (!pendingAction || !task || !contextProof || updating) return;
     const action = pendingAction;
     const succeeded = await updateTask(
       'action',
       `正在执行${action.label}`,
-      () => submitVerificationAction(task, action.key),
+      () => submitVerificationAction(task, contextProof, action.key),
       `${action.label}操作已完成`,
     );
     if (succeeded) setPendingAction(null);
@@ -183,13 +203,14 @@ export function useVerificationApproval() {
     setUpdating(true);
     try {
       const detail = await runWorkflow(operation, label, submit);
-      const updatedTask = extractTask(detail);
-      if (!updatedTask) throw new Error('核实审批操作结果缺少 task');
-      setTask(updatedTask);
+      const updated = extractTaskContext(detail);
+      if (!updated.task || !updated.proof) throw new Error('核实审批操作结果缺少 task');
+      setTask(updated.task);
+      setContextProof(updated.proof);
       message.success(successMessage);
       if (refreshAfter) {
         try {
-          await refreshFromContext(updatedTask);
+          await refreshFromContext(updated.task, updated.proof);
         } catch (refreshError) {
           message.warning(
             refreshError instanceof Error
@@ -221,6 +242,7 @@ export function useVerificationApproval() {
     search,
     clear: () => {
       setTask(null);
+      setContextProof(null);
       setHasSearched(false);
     },
     claim,
@@ -234,6 +256,5 @@ export function useVerificationApproval() {
 }
 
 function isCancelled(error: unknown) {
-  return error instanceof Error
-    && (error.name === 'AbortError' || error.name === 'CanceledError');
+  return error instanceof Error && (error.name === 'AbortError' || error.name === 'CanceledError');
 }

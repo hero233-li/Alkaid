@@ -22,10 +22,7 @@ export function useApplicationLinkForm() {
   const [config, setConfig] = useState<ApplicationLinkConfig>(emptyConfig);
   const [configLoading, setConfigLoading] = useState(true);
   const [configError, setConfigError] = useState('');
-  const initialValues = useMemo(
-    () => getInitialApplicationLinkValues(config),
-    [config],
-  );
+  const initialValues = useMemo(() => getInitialApplicationLinkValues(config), [config]);
   const watchedValues = Form.useWatch([], form) ?? initialValues;
   const formModel = useMemo(
     () => buildApplicationLinkFormModel(config, watchedValues),
@@ -49,26 +46,25 @@ export function useApplicationLinkForm() {
       .finally(() => {
         if (active) setConfigLoading(false);
       });
-    return () => { active = false; };
+    return () => {
+      active = false;
+    };
   }, [form]);
 
-  const handleValuesChange = useCallback((
-    changedValues: Partial<ApplicationLinkFormValues>,
-    allValues: ApplicationLinkFormValues,
-  ) => {
-    const updates = getApplicationLinkCascadeUpdates(
-      config,
-      changedValues,
-      allValues,
-    );
-    if (Object.keys(updates).length) {
-      form.setFieldsValue(updates);
-    }
-  }, [config, form]);
+  const handleValuesChange = useCallback(
+    (changedValues: Partial<ApplicationLinkFormValues>, allValues: ApplicationLinkFormValues) => {
+      const updates = getApplicationLinkCascadeUpdates(config, changedValues, allValues);
+      if (Object.keys(updates).length) {
+        form.setFieldsValue(updates);
+      }
+    },
+    [config, form],
+  );
 
-  const createSubmission = useCallback((values: ApplicationLinkFormValues) => (
-    buildApplicationLinkSubmission(config, values)
-  ), [config]);
+  const createSubmission = useCallback(
+    (values: ApplicationLinkFormValues) => buildApplicationLinkSubmission(config, values),
+    [config],
+  );
 
   return {
     form,

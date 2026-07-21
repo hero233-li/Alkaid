@@ -21,12 +21,7 @@ import {
   message,
 } from 'antd';
 import { Play, RefreshCw, Square } from 'lucide-react';
-import {
-  cancelJob,
-  getJobDetail,
-  retryJob,
-  streamJobLogs,
-} from '../api/jobs';
+import { cancelJob, getJobDetail, retryJob, streamJobLogs } from '../api/jobs';
 import type { JobDetail, JobLog, JobStatus } from '../types/jobs';
 import {
   getWorkflowLabGuide,
@@ -86,7 +81,11 @@ function guideTable(items: WorkflowGuideItem[]) {
       columns={[
         { title: '位置/步骤', dataIndex: 'title', width: 170 },
         { title: '说明', dataIndex: 'description' },
-        { title: '代码或路径', dataIndex: 'code', render: (value: string) => <Typography.Text code>{value}</Typography.Text> },
+        {
+          title: '代码或路径',
+          dataIndex: 'code',
+          render: (value: string) => <Typography.Text code>{value}</Typography.Text>,
+        },
       ]}
     />
   );
@@ -101,12 +100,17 @@ export default function WorkflowLearningPage() {
   const [guideError, setGuideError] = useState('');
 
   useEffect(() => {
-    getWorkflowLabGuide().then(setGuide).catch((error) => setGuideError(error instanceof Error ? error.message : '指南加载失败'));
+    getWorkflowLabGuide()
+      .then(setGuide)
+      .catch((error) => setGuideError(error instanceof Error ? error.message : '指南加载失败'));
   }, []);
 
   useEffect(() => {
     let active = true;
-    const refresh = () => getWorkflowRuntime().then((value) => active && setRuntime(value)).catch(() => undefined);
+    const refresh = () =>
+      getWorkflowRuntime()
+        .then((value) => active && setRuntime(value))
+        .catch(() => undefined);
     void refresh();
     const timer = window.setInterval(refresh, 1500);
     return () => {
@@ -120,11 +124,16 @@ export default function WorkflowLearningPage() {
       return;
     }
     let active = true;
-    const refresh = () => getJobDetail(job.id).then((detail) => {
-      if (active) {
-        setJob((current) => (current?.id === detail.id ? mergeDetail(current, detail) : current));
-      }
-    }).catch(() => undefined);
+    const refresh = () =>
+      getJobDetail(job.id)
+        .then((detail) => {
+          if (active) {
+            setJob((current) =>
+              current?.id === detail.id ? mergeDetail(current, detail) : current,
+            );
+          }
+        })
+        .catch(() => undefined);
     void refresh();
     const timer = window.setInterval(refresh, 700);
     return () => {
@@ -143,15 +152,23 @@ export default function WorkflowLearningPage() {
       job.id,
       afterId,
       {
-        onLog: (log) => setJob((current) => {
-          if (!current || current.id !== job.id || (log.id && current.logs.some((item) => item.id === log.id))) {
-            return current;
-          }
-          return { ...current, logs: [...current.logs, log] };
-        }),
-        onStatus: (status) => setJob((current) => current?.id === job.id
-          ? { ...current, status: status.status, progress: status.progress }
-          : current),
+        onLog: (log) =>
+          setJob((current) => {
+            if (
+              !current ||
+              current.id !== job.id ||
+              (log.id && current.logs.some((item) => item.id === log.id))
+            ) {
+              return current;
+            }
+            return { ...current, logs: [...current.logs, log] };
+          }),
+        onStatus: (status) =>
+          setJob((current) =>
+            current?.id === job.id
+              ? { ...current, status: status.status, progress: status.progress }
+              : current,
+          ),
       },
       controller.signal,
     ).catch(() => undefined);
@@ -175,7 +192,7 @@ export default function WorkflowLearningPage() {
     if (!job) return;
     try {
       const detail = await retryJob(job.id);
-      setJob((current) => current ? mergeDetail(current, detail) : current);
+      setJob((current) => (current ? mergeDetail(current, detail) : current));
       message.success(`已提交第 ${detail.attemptCount} 次执行`);
     } catch (error) {
       message.error(error instanceof Error ? error.message : '重试失败');
@@ -186,26 +203,58 @@ export default function WorkflowLearningPage() {
     if (!job) return;
     try {
       const detail = await cancelJob(job.id);
-      setJob((current) => current ? mergeDetail(current, detail) : current);
+      setJob((current) => (current ? mergeDetail(current, detail) : current));
       message.success('实验 Job 已取消');
     } catch (error) {
       message.error(error instanceof Error ? error.message : '取消失败');
     }
   };
 
-  const guideTabs = useMemo(() => guide ? [
-    {
-      key: 'change',
-      label: '如何修改',
-      children: <Timeline items={guide.changeSteps.map((item) => ({ children: <div><Typography.Text strong>{item.title}</Typography.Text><div>{item.description}</div><Typography.Text code>{item.code}</Typography.Text></div> }))} />,
-    },
-    { key: 'files', label: '关键文件', children: guideTable(guide.keyFiles) },
-    { key: 'apis', label: '接口清单', children: guideTable(guide.apis) },
-    { key: 'yaml', label: 'YAML 示例', children: <pre className="workflow-learning-code">{guide.definitionExample}</pre> },
-  ] : [], [guide]);
+  const guideTabs = useMemo(
+    () =>
+      guide
+        ? [
+            {
+              key: 'change',
+              label: '如何修改',
+              children: (
+                <Timeline
+                  items={guide.changeSteps.map((item) => ({
+                    children: (
+                      <div>
+                        <Typography.Text strong>{item.title}</Typography.Text>
+                        <div>{item.description}</div>
+                        <Typography.Text code>{item.code}</Typography.Text>
+                      </div>
+                    ),
+                  }))}
+                />
+              ),
+            },
+            { key: 'files', label: '关键文件', children: guideTable(guide.keyFiles) },
+            { key: 'apis', label: '接口清单', children: guideTable(guide.apis) },
+            {
+              key: 'yaml',
+              label: 'YAML 示例',
+              children: <pre className="workflow-learning-code">{guide.definitionExample}</pre>,
+            },
+          ]
+        : [],
+    [guide],
+  );
 
   if (!guide) {
-    return <div className="page-surface"><Card>{guideError ? <Alert type="error" message={guideError} /> : <Spin tip="正在加载 Workflow 指南..." />}</Card></div>;
+    return (
+      <div className="page-surface">
+        <Card>
+          {guideError ? (
+            <Alert type="error" message={guideError} />
+          ) : (
+            <Spin tip="正在加载 Workflow 指南..." />
+          )}
+        </Card>
+      </div>
+    );
   }
 
   return (
@@ -215,20 +264,46 @@ export default function WorkflowLearningPage() {
           type="info"
           showIcon
           message={guide.title}
-          description={<span>{guide.summary}　详细文档：<Typography.Text code>{guide.documentPath}</Typography.Text></span>}
+          description={
+            <span>
+              {guide.summary} 详细文档：
+              <Typography.Text code>{guide.documentPath}</Typography.Text>
+            </span>
+          }
         />
 
         <Row gutter={[12, 12]}>
-          <Col xs={12} md={6}><Card size="small"><Statistic title="Worker 数" value={runtime?.workerThreads ?? '-'} /></Card></Col>
-          <Col xs={12} md={6}><Card size="small"><Statistic title="正在执行" value={runtime?.activeWorkers ?? '-'} /></Card></Col>
-          <Col xs={12} md={6}><Card size="small"><Statistic title="队列等待" value={runtime?.queuedTasks ?? '-'} /></Card></Col>
-          <Col xs={12} md={6}><Card size="small"><Statistic title="已完成任务" value={runtime?.completedTasks ?? '-'} /></Card></Col>
+          <Col xs={12} md={6}>
+            <Card size="small">
+              <Statistic title="Worker 数" value={runtime?.workerThreads ?? '-'} />
+            </Card>
+          </Col>
+          <Col xs={12} md={6}>
+            <Card size="small">
+              <Statistic title="正在执行" value={runtime?.activeWorkers ?? '-'} />
+            </Card>
+          </Col>
+          <Col xs={12} md={6}>
+            <Card size="small">
+              <Statistic title="队列等待" value={runtime?.queuedTasks ?? '-'} />
+            </Card>
+          </Col>
+          <Col xs={12} md={6}>
+            <Card size="small">
+              <Statistic title="已完成任务" value={runtime?.completedTasks ?? '-'} />
+            </Card>
+          </Col>
         </Row>
 
         <Card title="整体执行链路" size="small">
           <Row gutter={[12, 12]}>
             {guide.architecture.map((item, index) => (
-              <Col xs={24} md={12} xl={index === guide.architecture.length - 1 ? 24 : 8} key={item.title}>
+              <Col
+                xs={24}
+                md={12}
+                xl={index === guide.architecture.length - 1 ? 24 : 8}
+                key={item.title}
+              >
                 <Card size="small" className="workflow-learning-node">
                   <Tag color="blue">{index + 1}</Tag>
                   <Typography.Text strong>{item.title}</Typography.Text>
@@ -246,19 +321,36 @@ export default function WorkflowLearningPage() {
               <Form<LabFormValues>
                 form={form}
                 layout="vertical"
-                initialValues={{ name: '我的第一个 Workflow', durationMs: 3000, simulateFailure: false }}
+                initialValues={{
+                  name: '我的第一个 Workflow',
+                  durationMs: 3000,
+                  simulateFailure: false,
+                }}
                 onFinish={submit}
               >
-                <Form.Item name="name" label="实验名称" rules={[{ required: true, message: '请输入实验名称' }]}>
+                <Form.Item
+                  name="name"
+                  label="实验名称"
+                  rules={[{ required: true, message: '请输入实验名称' }]}
+                >
                   <Input maxLength={100} />
                 </Form.Item>
-                <Form.Item name="durationMs" label="模拟业务处理时长（毫秒）" rules={[{ required: true }]}>
+                <Form.Item
+                  name="durationMs"
+                  label="模拟业务处理时长（毫秒）"
+                  rules={[{ required: true }]}
+                >
                   <InputNumber min={100} max={10000} step={500} style={{ width: '100%' }} />
                 </Form.Item>
                 <Form.Item name="simulateFailure" label="模拟执行失败" valuePropName="checked">
                   <Switch checkedChildren="失败" unCheckedChildren="成功" />
                 </Form.Item>
-                <Button type="primary" htmlType="submit" loading={submitting} icon={<Play size={15} />}>
+                <Button
+                  type="primary"
+                  htmlType="submit"
+                  loading={submitting}
+                  icon={<Play size={15} />}
+                >
                   提交到共享队列
                 </Button>
               </Form>
@@ -275,14 +367,38 @@ export default function WorkflowLearningPage() {
           <Col xs={24} xl={15}>
             <Card
               title="当前实验 Job"
-              extra={job && (
-                <Space>
-                  {retryableStatuses.has(job.status) && <Button size="small" type="primary" icon={<RefreshCw size={14} />} onClick={() => void retry()}>重试</Button>}
-                  {activeStatuses.has(job.status) && <Button size="small" danger icon={<Square size={13} />} onClick={() => void cancel()}>取消</Button>}
-                </Space>
-              )}
+              extra={
+                job && (
+                  <Space>
+                    {retryableStatuses.has(job.status) && (
+                      <Button
+                        size="small"
+                        type="primary"
+                        icon={<RefreshCw size={14} />}
+                        onClick={() => void retry()}
+                      >
+                        重试
+                      </Button>
+                    )}
+                    {activeStatuses.has(job.status) && (
+                      <Button
+                        size="small"
+                        danger
+                        icon={<Square size={13} />}
+                        onClick={() => void cancel()}
+                      >
+                        取消
+                      </Button>
+                    )}
+                  </Space>
+                )
+              }
             >
-              {!job ? <Typography.Text type="secondary">提交一次实验后，这里会显示状态、Trace、进度和实时日志。</Typography.Text> : (
+              {!job ? (
+                <Typography.Text type="secondary">
+                  提交一次实验后，这里会显示状态、Trace、进度和实时日志。
+                </Typography.Text>
+              ) : (
                 <Space direction="vertical" size={12} style={{ width: '100%' }}>
                   <Space wrap>
                     <Tag color={statusMeta[job.status].color}>{statusMeta[job.status].label}</Tag>
@@ -292,18 +408,43 @@ export default function WorkflowLearningPage() {
                   </Space>
                   <Progress
                     percent={job.progress}
-                    status={job.status === 'success' ? 'success' : retryableStatuses.has(job.status) ? 'exception' : activeStatuses.has(job.status) ? 'active' : 'normal'}
+                    status={
+                      job.status === 'success'
+                        ? 'success'
+                        : retryableStatuses.has(job.status)
+                          ? 'exception'
+                          : activeStatuses.has(job.status)
+                            ? 'active'
+                            : 'normal'
+                    }
                   />
                   {job.errorMessage && <Alert type="error" showIcon message={job.errorMessage} />}
                   <div className="product-backend-logs workflow-learning-logs">
                     {job.logs.map((log, index) => (
-                      <div className="product-backend-log-line" key={log.id || `${log.createdAt}-${index}`}>
-                        <span className="product-backend-log-time">{new Date(log.createdAt).toLocaleTimeString('zh-CN')}</span>
-                        <Tag color={log.level === 'ERROR' ? 'error' : log.level === 'WARN' ? 'warning' : 'blue'}>{log.level}</Tag>
+                      <div
+                        className="product-backend-log-line"
+                        key={log.id || `${log.createdAt}-${index}`}
+                      >
+                        <span className="product-backend-log-time">
+                          {new Date(log.createdAt).toLocaleTimeString('zh-CN')}
+                        </span>
+                        <Tag
+                          color={
+                            log.level === 'ERROR'
+                              ? 'error'
+                              : log.level === 'WARN'
+                                ? 'warning'
+                                : 'blue'
+                          }
+                        >
+                          {log.level}
+                        </Tag>
                         <span>{log.message}</span>
                       </div>
                     ))}
-                    {!job.logs.length && <span className="product-backend-log-empty">等待 Worker 日志...</span>}
+                    {!job.logs.length && (
+                      <span className="product-backend-log-empty">等待 Worker 日志...</span>
+                    )}
                   </div>
                 </Space>
               )}
@@ -316,9 +457,13 @@ export default function WorkflowLearningPage() {
             {guide.statuses.map((item) => (
               <Col xs={24} md={12} xl={8} key={item.title}>
                 <Card size="small">
-                  <Tag color={statusMeta[item.title as JobStatus]?.color || 'blue'}>{item.title}</Tag>
+                  <Tag color={statusMeta[item.title as JobStatus]?.color || 'blue'}>
+                    {item.title}
+                  </Tag>
                   <span>{item.description}</span>
-                  <div><Typography.Text code>{item.code}</Typography.Text></div>
+                  <div>
+                    <Typography.Text code>{item.code}</Typography.Text>
+                  </div>
                 </Card>
               </Col>
             ))}

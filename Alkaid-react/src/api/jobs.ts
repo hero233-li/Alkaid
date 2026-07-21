@@ -15,9 +15,7 @@ export interface JobLogStreamResult {
 }
 
 export async function getJobDetail(id: number) {
-  const { data } = await apiClient.get<ApiResponse<JobDetail>>(
-    `/jobs/${id}`,
-  );
+  const { data } = await apiClient.get<ApiResponse<JobDetail>>(`/jobs/${id}`);
   if (!data.ok) {
     throw new Error(data.message || '获取 Job 详情失败');
   }
@@ -73,7 +71,11 @@ export async function streamJobLogs(
       const block = buffer.slice(0, boundary);
       buffer = buffer.slice(boundary + 2);
       const lines = block.split('\n');
-      const eventName = lines.find((line) => line.startsWith('event:'))?.slice(6).trim() || 'message';
+      const eventName =
+        lines
+          .find((line) => line.startsWith('event:'))
+          ?.slice(6)
+          .trim() || 'message';
       const dataText = lines
         .filter((line) => line.startsWith('data:'))
         .map((line) => line.slice(5).trim())

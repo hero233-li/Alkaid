@@ -1,1 +1,32 @@
-.card-status-page{display:flex;flex-direction:column;gap:16px}.card-status-page .ant-form-item{margin-bottom:12px}.card-status-actions{display:flex;justify-content:center;margin-top:8px}.card-status-password{text-align:center;color:#1677ff;font-size:26px;font-weight:700}.card-status-toolbar{margin-bottom:16px;padding:14px 16px;background:#f6f8fb;border:1px solid #e5e7eb;border-radius:8px}.card-status-toolbar__heading{display:flex;justify-content:space-between;gap:12px;margin-bottom:12px}
+.card-status-page {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+.card-status-page .ant-form-item {
+  margin-bottom: 12px;
+}
+.card-status-actions {
+  display: flex;
+  justify-content: center;
+  margin-top: 8px;
+}
+.card-status-password {
+  text-align: center;
+  color: #1677ff;
+  font-size: 26px;
+  font-weight: 700;
+}
+.card-status-toolbar {
+  margin-bottom: 16px;
+  padding: 14px 16px;
+  background: #f6f8fb;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+}
+.card-status-toolbar__heading {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 12px;
+}

@@ -1,1 +1,19 @@
-import type{LoanAction}from'../types';export const loanStatusConfig={environments:['环境1','环境2','环境3'],defaultTellerNo:'310310',counterparties:['交易对手A','交易对手B'],banks:['交通银行','工商银行','建设银行'],counterpartyTypes:['对公','对私'],actions:[['contract-sign','合同签署'],['loan-draw','贷款提用'],['repayment','还款'],['overdue-repayment','逾期还款'],['maturity-repayment','到期还款'],['freeze','冻结'],['unfreeze','解冻']].map(([value,label])=>({value:value as LoanAction,label}))};export const loanActionLabel=(action:LoanAction)=>loanStatusConfig.actions.find(item=>item.value===action)?.label??action;
+import type { LoanAction } from '../types';
+export const loanStatusConfig = {
+  environments: ['环境1', '环境2', '环境3'],
+  defaultTellerNo: '310310',
+  counterparties: ['交易对手A', '交易对手B'],
+  banks: ['交通银行', '工商银行', '建设银行'],
+  counterpartyTypes: ['对公', '对私'],
+  actions: [
+    ['contract-sign', '合同签署'],
+    ['loan-draw', '贷款提用'],
+    ['repayment', '还款'],
+    ['overdue-repayment', '逾期还款'],
+    ['maturity-repayment', '到期还款'],
+    ['freeze', '冻结'],
+    ['unfreeze', '解冻'],
+  ].map(([value, label]) => ({ value: value as LoanAction, label })),
+};
+export const loanActionLabel = (action: LoanAction) =>
+  loanStatusConfig.actions.find((item) => item.value === action)?.label ?? action;

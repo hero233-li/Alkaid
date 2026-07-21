@@ -28,7 +28,9 @@ export default function JobResultList({
       title: '状态',
       dataIndex: 'status',
       width: 150,
-      render: (_, record) => <JobStatusTag status={record.status} attemptCount={record.attemptCount} />,
+      render: (_, record) => (
+        <JobStatusTag status={record.status} attemptCount={record.attemptCount} />
+      ),
     },
     {
       title: '进度',
@@ -50,12 +52,19 @@ export default function JobResultList({
         />
       ),
     },
-    { title: '创建时间', dataIndex: 'createdAt', width: 190, render: (value: string) => formatDate(value) },
+    {
+      title: '创建时间',
+      dataIndex: 'createdAt',
+      width: 190,
+      render: (value: string) => formatDate(value),
+    },
   ];
 
   const defaultActions = (record: ProductApplicationResult) => (
     <Space size={6}>
-      <Button size="small" onClick={() => onDetail(record)}>详情</Button>
+      <Button size="small" onClick={() => onDetail(record)}>
+        详情
+      </Button>
       {(record.status === 'failed' || record.status === 'timed_out') && (
         <Button
           size="small"

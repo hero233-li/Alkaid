@@ -39,9 +39,16 @@ class VerificationCommand(VerificationPayload):
     data: dict[str, object]
 
 
+class VerificationContextProof(VerificationPayload):
+    source_job_id: int = Field(gt=0)
+    version: int = Field(default=1, ge=1)
+    digest: str = Field(pattern=r"^[0-9a-f]{64}$")
+
+
 class VerificationItemUpdateSubmission(VerificationPayload):
     status: str = Field(pattern=r"^(pending|completed)$")
     context: VerificationTask
+    context_proof: VerificationContextProof
 
 
 class VerificationItemJobSubmission(VerificationItemUpdateSubmission):
@@ -50,6 +57,7 @@ class VerificationItemJobSubmission(VerificationItemUpdateSubmission):
 
 class VerificationTaskOperationSubmission(VerificationPayload):
     context: VerificationTask
+    context_proof: VerificationContextProof
 
 
 class VerificationActionSubmission(VerificationTaskOperationSubmission):

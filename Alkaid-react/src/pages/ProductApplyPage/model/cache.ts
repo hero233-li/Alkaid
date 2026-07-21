@@ -1,4 +1,8 @@
-import type { ProductApplicationConfig, ProductApplicationFormValues, ProductApplicationResult } from './types';
+import type {
+  ProductApplicationConfig,
+  ProductApplicationFormValues,
+  ProductApplicationResult,
+} from './types';
 
 const FORM_CACHE_PREFIX = 'alioth:product-application-form:';
 const RESULT_CACHE_LIMIT = 30;
@@ -13,7 +17,12 @@ export function resultCacheKey(pageInstanceKey: string) {
 
 export function clearStaleFormCaches(pageInstanceKey: string, activeKey: string) {
   Object.keys(sessionStorage)
-    .filter((key) => key.startsWith(FORM_CACHE_PREFIX) && key.endsWith(`:${pageInstanceKey}`) && key !== activeKey)
+    .filter(
+      (key) =>
+        key.startsWith(FORM_CACHE_PREFIX) &&
+        key.endsWith(`:${pageInstanceKey}`) &&
+        key !== activeKey,
+    )
     .forEach((key) => sessionStorage.removeItem(key));
 }
 
@@ -21,19 +30,24 @@ export function readFormDraft(cacheKey: string): ProductApplicationFormValues {
   try {
     const value = JSON.parse(sessionStorage.getItem(cacheKey) || '{}');
     return value && typeof value === 'object' && !Array.isArray(value)
-      ? value as ProductApplicationFormValues
+      ? (value as ProductApplicationFormValues)
       : {};
   } catch {
     return {};
   }
 }
 
-export function safeFormDraft(config: ProductApplicationConfig, values: ProductApplicationFormValues) {
+export function safeFormDraft(
+  config: ProductApplicationConfig,
+  values: ProductApplicationFormValues,
+) {
   const persistableFields = new Set(
     config.fields.filter((field) => field.persistDraft).map((field) => field.name),
   );
   return Object.fromEntries(
-    Object.entries(values).filter(([name, value]) => persistableFields.has(name) && value !== undefined),
+    Object.entries(values).filter(
+      ([name, value]) => persistableFields.has(name) && value !== undefined,
+    ),
   ) as ProductApplicationFormValues;
 }
 
@@ -61,7 +75,13 @@ export function readResultSummaries(cacheKey: string): ProductApplicationResult[
       .filter((item) => item && typeof item === 'object' && typeof item.id === 'number')
       .map((item) => ({
         ...item,
-        stage: item.stage || (item.status === 'success' ? 'completed' : item.status === 'failed' ? 'failed' : 'submitted'),
+        stage:
+          item.stage ||
+          (item.status === 'success'
+            ? 'completed'
+            : item.status === 'failed'
+              ? 'failed'
+              : 'submitted'),
         payload: {},
         logs: [],
         traceId: item.traceId || '',

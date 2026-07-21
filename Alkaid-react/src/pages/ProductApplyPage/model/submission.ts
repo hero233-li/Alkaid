@@ -16,15 +16,14 @@ export function buildProductSubmission(
   }
   const payload = Object.fromEntries(
     activeFields
-      .filter((field) => (
-        field.submit !== false
-        && values[field.name] !== undefined
-      ))
+      .filter((field) => field.submit !== false && values[field.name] !== undefined)
       .map((field) => [field.name, values[field.name]]),
   );
   const companyName = String(values.companyName || '').trim();
   payload.customerType = companyName
-    ? values.legalPerson === false ? 'shareholder' : 'legal_person'
+    ? values.legalPerson === false
+      ? 'shareholder'
+      : 'legal_person'
     : 'farmer';
   const productField = activeFields.find((field) => field.name === 'product');
   const productLabel = getOptionLabel(productField, productCode);

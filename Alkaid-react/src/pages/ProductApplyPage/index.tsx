@@ -31,7 +31,11 @@ export default function ProductApplyPage({ pageInstanceKey }: ProductApplyPagePr
               showIcon
               message="产品申请配置加载失败"
               description={configQuery.error}
-              action={<Button size="small" onClick={configQuery.retry}>重新加载</Button>}
+              action={
+                <Button size="small" onClick={configQuery.retry}>
+                  重新加载
+                </Button>
+              }
             />
           ) : (
             <div className="product-config-loading">
@@ -61,7 +65,11 @@ export default function ProductApplyPage({ pageInstanceKey }: ProductApplyPagePr
           onCancel={(result) => void jobs.cancel(result)}
         />
       </div>
-      <JobDetailOverlay result={jobs.selectedResult} onClose={jobs.closeDetail} presentation="drawer" />
+      <JobDetailOverlay
+        result={jobs.selectedResult}
+        onClose={jobs.closeDetail}
+        presentation="drawer"
+      />
       <ProductApplicationWorkflowModal active={jobs.submitting} />
     </div>
   );

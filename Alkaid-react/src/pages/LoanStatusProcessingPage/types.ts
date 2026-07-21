@@ -1,10 +1,158 @@
-export interface LoanRepaymentPlanItem{installmentNo:number;repaymentDate:string;principal:number;interest:number;totalAmount:number;status:'使用中'|'已结清'|'逾期'}
-export interface LoanVoucher{voucherNo:string;drawAmount:number;outstandingAmount:number;overdueAmount:number;nextRepaymentDate:string;dueDate?:string;status:'使用中'|'正常'|'逾期'|'已结清';repaidPrincipal:number;repaidInterest:number;outstandingPrincipal:number;outstandingInterest:number;repaymentPlan:LoanRepaymentPlanItem[]}
-export interface LoanContract{contractNo:string;quotaNo?:string;signDate?:string;organizationNo?:string;relationshipManager?:string;accountingDate?:string;graceDays?:number;coreRate?:number;generalAccountingDate?:string;parameterAccountingDate?:string;debt:number;overdueDebt:number;creditLimit:number;usedCredit:number;availableCredit:number;status:'未签署'|'已生效'|'已结束';freezeStatus:'是'|'否'|'-';overdueStatus:'是'|'否'|'-';vouchers?:LoanVoucher[]}
-export interface LoanCardRecord{environment:string;customerNo:string;customerName:string;certificateNo:string;phone:string;cardNo:string;balance:number;status:string;freezeStatus:'是'|'否';loans:LoanContract[];linkedLoan:string[];debt:number;overdueDebt:number;quotaNo:string}
-export interface LoanResultRecord{rowKey:string;environment:string;customerNo:string;customerName:string;certificateNo:string;phone:string;cardNo:string;balance:number;cardStatus:string;contractNo:string;loanStatus:'未签署'|'已生效'|'已结束'|'无关联合同信息';freezeStatus:'是'|'否'|'-';overdueStatus:'是'|'否'|'-';debt:number;overdueDebt:number;creditLimit:number;usedCredit:number;availableCredit:number;vouchers:LoanVoucher[];quotaNo:string;signDate:string;organizationNo:string;relationshipManager:string;accountingDate:string;graceDays:number;coreRate:number;generalAccountingDate:string;parameterAccountingDate:string}
-export interface LoanSearchValues{environment:string;customerNo:string}
-export type LoanAction='repayment'|'overdue-repayment'|'maturity-repayment'|'freeze'|'unfreeze'|'contract-sign'|'loan-draw'|'repayment-plan-query';
-export interface LoanActionValues{environment:string;customerNo:string;certificateNo:string;cardNo:string;tellerNo:string;quotaNo:string;amount?:number;contractNo?:string;voucherNo?:string;simulateFailure?:boolean;counterparty?:string;bankName?:string;counterpartyType?:string;counterpartyAccount?:string;counterpartyName?:string;drawTerm?:number}
-export interface LoanApiResponse<T>{ok:boolean;data:T;message?:string}export type LoanJobStatus='submitting'|'pending'|'running'|'retrying'|'success'|'failed'|'cancelled'|'timed_out';
-export interface LoanJob{id:number;status:LoanJobStatus;progress:number;currentStep?:string;result:Record<string,unknown>;errorMessage?:string}export interface LoanActivity{jobId?:number;label:string;status:LoanJobStatus;progress:number;currentStep?:string}export interface LoanInterruptedFlow{jobId:number;cardNo:string;action:LoanAction;currentStep?:string}
+export interface LoanRepaymentPlanItem {
+  installmentNo: number;
+  repaymentDate: string;
+  principal: number;
+  interest: number;
+  totalAmount: number;
+  status: '使用中' | '已结清' | '逾期';
+}
+export interface LoanVoucher {
+  voucherNo: string;
+  drawAmount: number;
+  outstandingAmount: number;
+  overdueAmount: number;
+  nextRepaymentDate: string;
+  dueDate?: string;
+  status: '使用中' | '正常' | '逾期' | '已结清';
+  repaidPrincipal: number;
+  repaidInterest: number;
+  outstandingPrincipal: number;
+  outstandingInterest: number;
+  repaymentPlan: LoanRepaymentPlanItem[];
+}
+export interface LoanContract {
+  contractNo: string;
+  quotaNo?: string;
+  signDate?: string;
+  organizationNo?: string;
+  relationshipManager?: string;
+  accountingDate?: string;
+  graceDays?: number;
+  coreRate?: number;
+  generalAccountingDate?: string;
+  parameterAccountingDate?: string;
+  debt: number;
+  overdueDebt: number;
+  creditLimit: number;
+  usedCredit: number;
+  availableCredit: number;
+  status: '未签署' | '已生效' | '已结束';
+  freezeStatus: '是' | '否' | '-';
+  overdueStatus: '是' | '否' | '-';
+  vouchers?: LoanVoucher[];
+}
+export interface LoanCardRecord {
+  environment: string;
+  customerNo: string;
+  customerName: string;
+  certificateNo: string;
+  phone: string;
+  cardNo: string;
+  balance: number;
+  status: string;
+  freezeStatus: '是' | '否';
+  loans: LoanContract[];
+  linkedLoan: string[];
+  debt: number;
+  overdueDebt: number;
+  quotaNo: string;
+}
+export interface LoanResultRecord {
+  rowKey: string;
+  environment: string;
+  customerNo: string;
+  customerName: string;
+  certificateNo: string;
+  phone: string;
+  cardNo: string;
+  balance: number;
+  cardStatus: string;
+  contractNo: string;
+  loanStatus: '未签署' | '已生效' | '已结束' | '无关联合同信息';
+  freezeStatus: '是' | '否' | '-';
+  overdueStatus: '是' | '否' | '-';
+  debt: number;
+  overdueDebt: number;
+  creditLimit: number;
+  usedCredit: number;
+  availableCredit: number;
+  vouchers: LoanVoucher[];
+  quotaNo: string;
+  signDate: string;
+  organizationNo: string;
+  relationshipManager: string;
+  accountingDate: string;
+  graceDays: number;
+  coreRate: number;
+  generalAccountingDate: string;
+  parameterAccountingDate: string;
+}
+export interface LoanSearchValues {
+  environment: string;
+  customerNo: string;
+}
+export type LoanAction =
+  | 'repayment'
+  | 'overdue-repayment'
+  | 'maturity-repayment'
+  | 'freeze'
+  | 'unfreeze'
+  | 'contract-sign'
+  | 'loan-draw'
+  | 'repayment-plan-query';
+export interface LoanActionValues {
+  environment: string;
+  customerNo: string;
+  certificateNo: string;
+  cardNo: string;
+  tellerNo: string;
+  quotaNo: string;
+  amount?: number;
+  contractNo?: string;
+  voucherNo?: string;
+  simulateFailure?: boolean;
+  counterparty?: string;
+  bankName?: string;
+  counterpartyType?: string;
+  counterpartyAccount?: string;
+  counterpartyName?: string;
+  drawTerm?: number;
+}
+export interface LoanApiResponse<T> {
+  ok: boolean;
+  data: T;
+  message?: string;
+}
+export type LoanJobStatus =
+  | 'submitting'
+  | 'pending'
+  | 'running'
+  | 'retrying'
+  | 'success'
+  | 'failed'
+  | 'cancelled'
+  | 'timed_out';
+export interface LoanJob {
+  id: number;
+  status: LoanJobStatus;
+  progress: number;
+  currentStep?: string;
+  result: {
+    cards?: LoanCardRecord[];
+    actionResult?: { card: LoanCardRecord; message: string };
+  };
+  errorMessage?: string;
+}
+export interface LoanActivity {
+  jobId?: number;
+  label: string;
+  status: LoanJobStatus;
+  progress: number;
+  currentStep?: string;
+}
+export interface LoanInterruptedFlow {
+  jobId: number;
+  cardNo: string;
+  action: LoanAction;
+  currentStep?: string;
+}

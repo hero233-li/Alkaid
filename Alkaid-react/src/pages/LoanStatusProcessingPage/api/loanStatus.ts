@@ -10,7 +10,11 @@ import type {
   LoanSearchValues,
 } from '../types';
 
-interface Submission { id: number; status: LoanJobStatus; progress: number }
+interface Submission {
+  id: number;
+  status: LoanJobStatus;
+  progress: number;
+}
 const requestConfig = { showGlobalProgress: false, useResponseDelay: false };
 const terminal = new Set<LoanJobStatus>(['success', 'failed', 'cancelled', 'timed_out']);
 
@@ -25,7 +29,9 @@ function workflowConfig() {
 
 export async function submitLoanSearch(values: LoanSearchValues) {
   const { data } = await apiClient.post<LoanApiResponse<Submission>>(
-    '/product-data/tools/loans/search', values, workflowConfig(),
+    '/product-data/tools/loans/search',
+    values,
+    workflowConfig(),
   );
   return unwrap(data, '查询提交失败');
 }
@@ -44,7 +50,10 @@ export async function submitLoanAction(
 }
 
 export class LoanJobError extends Error {
-  constructor(message: string, public job: LoanJob) {
+  constructor(
+    message: string,
+    public job: LoanJob,
+  ) {
     super(message);
   }
 }
@@ -56,9 +65,10 @@ export async function pollLoanJob(
 ) {
   return pollJobUntilTerminal({
     fetchJob: async (signal) => {
-      const { data } = await apiClient.get<LoanApiResponse<LoanJob>>(
-        `/jobs/${id}`, { ...requestConfig, signal },
-      );
+      const { data } = await apiClient.get<LoanApiResponse<LoanJob>>(`/jobs/${id}`, {
+        ...requestConfig,
+        signal,
+      });
       return unwrap(data, '获取 Job 失败');
     },
     onProgress,

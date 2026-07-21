@@ -34,6 +34,8 @@ export async function getHomeShortcutKeys() {
 }
 
 export async function saveHomeShortcutKeys(menuKeys: string[]) {
-  const { data } = await apiClient.put<ApiResponse<string[]>>('/portal/home-shortcuts', { menuKeys });
+  const { data } = await apiClient.put<ApiResponse<string[]>>('/portal/home-shortcuts', {
+    menuKeys,
+  });
   return unwrap(data, '保存首页入口失败');
 }

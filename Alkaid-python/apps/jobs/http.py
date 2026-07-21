@@ -52,7 +52,6 @@ def submit_async_job(
     timeout_seconds: int,
     snapshot: dict[str, Any] | None = None,
     snapshot_version: int = 1,
-    include_payload: bool = False,
 ) -> JsonResponse:
     """Create and enqueue one menu Job with consistent HTTP semantics."""
     try:
@@ -78,7 +77,7 @@ def submit_async_job(
     if created.created:
         transaction.on_commit(lambda: enqueue_job(created.job))
     return api_response(
-        serialize_job(created.job, include_payload=include_payload),
+        serialize_job(created.job),
         status=202 if created.created else 200,
     )
 

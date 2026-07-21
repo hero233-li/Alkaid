@@ -2,7 +2,12 @@ import type { JobDetail, JobStatus } from '../../../types/jobs';
 import type { ProductApplicationResult } from './types';
 
 export const terminalStatuses = new Set<JobStatus>(['success', 'failed', 'cancelled', 'timed_out']);
-export const activeStatuses = new Set<JobStatus>(['pending', 'running', 'retrying', 'cancel_requested']);
+export const activeStatuses = new Set<JobStatus>([
+  'pending',
+  'running',
+  'retrying',
+  'cancel_requested',
+]);
 
 export const statusMeta: Record<JobStatus, { label: string; color: string }> = {
   pending: { label: '等待执行', color: 'default' },
@@ -15,7 +20,10 @@ export const statusMeta: Record<JobStatus, { label: string; color: string }> = {
   timed_out: { label: '已超时', color: 'error' },
 };
 
-export function mergeJobDetail(result: ProductApplicationResult, detail: JobDetail): ProductApplicationResult {
+export function mergeJobDetail(
+  result: ProductApplicationResult,
+  detail: JobDetail,
+): ProductApplicationResult {
   return {
     ...result,
     name: detail.name || result.name,
@@ -32,5 +40,7 @@ export function mergeJobDetail(result: ProductApplicationResult, detail: JobDeta
 }
 
 export function formatDate(value: string) {
-  return new Intl.DateTimeFormat('zh-CN', { dateStyle: 'medium', timeStyle: 'medium' }).format(new Date(value));
+  return new Intl.DateTimeFormat('zh-CN', { dateStyle: 'medium', timeStyle: 'medium' }).format(
+    new Date(value),
+  );
 }

@@ -1,1 +1,24 @@
-.loan-status-page{display:flex;flex-direction:column;gap:16px}.loan-status-page .ant-form-item{margin-bottom:12px}.loan-status-actions{display:flex;justify-content:center;margin-top:8px}.loan-status-drawer-sections{display:flex;flex-direction:column;gap:16px}.loan-status-contract-actions,.loan-status-voucher-actions{display:flex;justify-content:center;margin-top:18px}
+.loan-status-page {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+.loan-status-page .ant-form-item {
+  margin-bottom: 12px;
+}
+.loan-status-actions {
+  display: flex;
+  justify-content: center;
+  margin-top: 8px;
+}
+.loan-status-drawer-sections {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+.loan-status-contract-actions,
+.loan-status-voucher-actions {
+  display: flex;
+  justify-content: center;
+  margin-top: 18px;
+}

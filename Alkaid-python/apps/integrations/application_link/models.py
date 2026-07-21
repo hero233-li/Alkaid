@@ -28,9 +28,7 @@ class GenerateApplicationLinkRequest(BaseModel):
             if name in self.payload and self.payload[name] != expected
         ]
         if conflicts:
-            raise ValueError(
-                "payload 与外层权威字段冲突：" + ", ".join(sorted(conflicts))
-            )
+            raise ValueError("payload 与外层权威字段冲突：" + ", ".join(sorted(conflicts)))
         return self
 
     def external_request(self) -> dict[str, Any]:

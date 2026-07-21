@@ -7,6 +7,7 @@ from apps.integrations.product_system.business_access import (
     query_business_access_notifications,
     search_business_access,
 )
+from apps.jobs.commands import parse_menu_command
 from apps.jobs.models import Job
 from apps.product_data.business_access.schemas import (
     BusinessAccessCommand,
@@ -26,12 +27,12 @@ def get_business_access_config() -> dict[str, object]:
 def execute_business_access(
     job: Job,
 ) -> dict[str, Any]:
-    if "operation" in job.payload:
-        command = BusinessAccessCommand.model_validate(job.payload)
-        operation, data = command.operation, command.data
-    else:
-        operation = BusinessAccessOperation(job.kind.removeprefix("business_access."))
-        data = job.payload
+    operation, data = parse_menu_command(
+        job,
+        prefix="business_access",
+        command_model=BusinessAccessCommand,
+        operation_enum=BusinessAccessOperation,
+    )
     if operation == BusinessAccessOperation.SEARCH:
         submission = BusinessAccessSearchSubmission.model_validate(data)
         if submission.environment not in BUSINESS_ACCESS_ENVIRONMENTS:

@@ -19,7 +19,8 @@ export default function GlobalApiProgress() {
       setProgress((current) => ({
         pending: detail.pending,
         delayMs: detail.delayMs,
-        sequence: detail.pending > 0 && current.pending === 0 ? current.sequence + 1 : current.sequence,
+        sequence:
+          detail.pending > 0 && current.pending === 0 ? current.sequence + 1 : current.sequence,
       }));
     };
 

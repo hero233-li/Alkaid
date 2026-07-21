@@ -59,6 +59,13 @@ export interface NotificationPushResult {
   message: string;
 }
 
+export interface BusinessAccessJobResult {
+  records?: BusinessAccessRecord[];
+  record?: BusinessAccessRecord;
+  notifications?: BusinessAccessNotification[];
+  pushResult?: NotificationPushResult;
+}
+
 export interface BusinessAccessJobSubmission {
   id: number;
   operation: BusinessAccessOperation;
@@ -74,7 +81,7 @@ export interface BusinessAccessJobDetail {
   status: BusinessAccessJobStatus;
   stage: string;
   progress: number;
-  result: Record<string, unknown>;
+  result: BusinessAccessJobResult;
   errorMessage?: string;
 }
 

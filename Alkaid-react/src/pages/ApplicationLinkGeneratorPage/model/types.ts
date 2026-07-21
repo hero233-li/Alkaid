@@ -72,7 +72,7 @@ export interface ApplicationLinkJob {
   id: number;
   status: ApplicationLinkJobStatus;
   progress: number;
-  result: Record<string, unknown>;
+  result: { links?: ApplicationLinkResult };
   errorMessage?: string;
 }
 

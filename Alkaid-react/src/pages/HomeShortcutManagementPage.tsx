@@ -37,7 +37,9 @@ export default function HomeShortcutManagementPage({ pages }: HomeShortcutManage
   const save = async () => {
     setLoading(true);
     try {
-      const orderedKeys = pages.filter((page) => selectedKeys.includes(page.key)).map((page) => page.key);
+      const orderedKeys = pages
+        .filter((page) => selectedKeys.includes(page.key))
+        .map((page) => page.key);
       setSelectedKeys(await saveHomeShortcutKeys(orderedKeys));
       window.dispatchEvent(new Event(PORTAL_CONTENT_CHANGED_EVENT));
       message.success('首页快速入口已更新');
@@ -55,7 +57,9 @@ export default function HomeShortcutManagementPage({ pages }: HomeShortcutManage
           <Typography.Title level={3}>首页入口管理</Typography.Title>
           <Typography.Text type="secondary">选择需要显示在首页“快速入口”中的页面</Typography.Text>
         </div>
-        <Button type="primary" loading={loading} icon={<Save size={16} />} onClick={save}>保存</Button>
+        <Button type="primary" loading={loading} icon={<Save size={16} />} onClick={save}>
+          保存
+        </Button>
       </div>
 
       <section className="shortcut-manage-list">
@@ -63,7 +67,10 @@ export default function HomeShortcutManagementPage({ pages }: HomeShortcutManage
           <div className="shortcut-manage-row" key={page.key}>
             <span className="shortcut-manage-icon">{page.icon}</span>
             <Typography.Text>{page.label}</Typography.Text>
-            <Switch checked={selectedKeys.includes(page.key)} onChange={(checked) => togglePage(page.key, checked)} />
+            <Switch
+              checked={selectedKeys.includes(page.key)}
+              onChange={(checked) => togglePage(page.key, checked)}
+            />
           </div>
         ))}
       </section>

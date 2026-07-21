@@ -16,9 +16,7 @@ interface Submission {
 }
 
 const requestConfig = { showGlobalProgress: false, useResponseDelay: false };
-const terminal = new Set<ApplicationDataJobStatus>([
-  'success', 'failed', 'cancelled', 'timed_out',
-]);
+const terminal = new Set<ApplicationDataJobStatus>(['success', 'failed', 'cancelled', 'timed_out']);
 
 function unwrap<T>(value: ApplicationDataApiResponse<T>, fallback: string) {
   if (!value.ok) throw new Error(value.message || fallback);
@@ -50,7 +48,8 @@ export async function pollApplicationData(
   return pollJobUntilTerminal({
     fetchJob: async (signal) => {
       const { data } = await apiClient.get<ApplicationDataApiResponse<ApplicationDataJob>>(
-        `/jobs/${id}`, { ...requestConfig, signal },
+        `/jobs/${id}`,
+        { ...requestConfig, signal },
       );
       return unwrap(data, '获取申请数据 Job 失败');
     },

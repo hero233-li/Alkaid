@@ -96,6 +96,7 @@ def test_product_application_freezes_catalog_and_runs_mock_external_flow(
         )
 
     assert response.status_code == 202
+    assert "payload" not in response.json()["data"]
     job = Job.objects.get(id=response.json()["data"]["id"])
     assert job.status == JobStatus.SUCCESS
     assert job.execution_config_snapshot["product_code"] == "product-b"

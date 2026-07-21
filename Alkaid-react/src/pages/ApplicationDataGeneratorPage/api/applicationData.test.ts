@@ -2,7 +2,11 @@ import dayjs from 'dayjs';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { apiClient } from '../../../api/client';
-import { getApplicationDataConfig, pollApplicationData, submitApplicationData } from './applicationData';
+import {
+  getApplicationDataConfig,
+  pollApplicationData,
+  submitApplicationData,
+} from './applicationData';
 
 describe('application data API', () => {
   afterEach(() => vi.restoreAllMocks());
@@ -33,14 +37,18 @@ describe('application data API', () => {
 
   it('loads backend config and stops polling when aborted', async () => {
     const get = vi.spyOn(apiClient, 'get').mockResolvedValue({
-      data: { ok: true, data: { environments: ['环境1'], genders: ['男', '女'], companyTypes: [], maxCount: 1000 } },
+      data: {
+        ok: true,
+        data: { environments: ['环境1'], genders: ['男', '女'], companyTypes: [], maxCount: 1000 },
+      },
     });
     expect((await getApplicationDataConfig()).maxCount).toBe(1000);
 
     const controller = new AbortController();
     controller.abort();
-    await expect(pollApplicationData(1, vi.fn(), { signal: controller.signal }))
-      .rejects.toMatchObject({ name: 'AbortError' });
+    await expect(
+      pollApplicationData(1, vi.fn(), { signal: controller.signal }),
+    ).rejects.toMatchObject({ name: 'AbortError' });
     expect(get).toHaveBeenCalledTimes(1);
   });
 });

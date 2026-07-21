@@ -22,7 +22,7 @@ export default function CardStatusProcessingPage() {
     await state.search(values);
   };
   const execute = async (values: CardActionValues) => {
-    if (selected && action && await state.execute(selected, action, values)) close();
+    if (selected && action && (await state.execute(selected, action, values))) close();
   };
 
   return (
@@ -35,7 +35,12 @@ export default function CardStatusProcessingPage() {
         onSelect={(record) => setSelectedCardNo(record?.cardNo ?? null)}
         onAction={setAction}
       />
-      <CardActionModal card={selected} action={action} onClose={close} onSubmit={(values) => void execute(values)} />
+      <CardActionModal
+        card={selected}
+        action={action}
+        onClose={close}
+        onSubmit={(values) => void execute(values)}
+      />
       <PasswordResultModal password={state.password} onClose={() => state.setPassword('')} />
       <CardWorkflowModal activity={state.activity} />
     </div>

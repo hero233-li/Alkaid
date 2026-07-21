@@ -20,7 +20,7 @@ export interface JobLog {
   createdAt: string;
 }
 
-export interface JobDetail {
+export interface JobDetail<TResult = Record<string, unknown>> {
   id: number;
   name: string;
   workflowId: string;
@@ -28,7 +28,7 @@ export interface JobDetail {
   stage: string;
   progress: number;
   payload?: Record<string, unknown>;
-  result: Record<string, unknown>;
+  result: TResult;
   errorMessage?: string;
   traceId: string;
   idempotencyKey: string;

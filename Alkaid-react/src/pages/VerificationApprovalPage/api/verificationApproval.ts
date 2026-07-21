@@ -4,6 +4,7 @@ import { createWorkflowHeaders } from '../../../utils/requestId';
 import { pollJobUntilTerminal } from '../../../utils/jobPolling';
 import type {
   VerificationApprovalConfig,
+  VerificationContextProof,
   VerificationItemStatus,
   VerificationJobDetail,
   VerificationJobSubmission,
@@ -48,28 +49,37 @@ export async function searchVerificationTask(submission: VerificationSearchSubmi
   return unwrap(data, '查询核实审批任务失败');
 }
 
-export async function claimVerificationTask(task: VerificationTask) {
+export async function claimVerificationTask(
+  task: VerificationTask,
+  contextProof: VerificationContextProof,
+) {
   const { data } = await apiClient.post<ApiResponse<VerificationJobSubmission>>(
     `/product-data/verification-approval/${encodeURIComponent(task.id)}/claim`,
-    { context: task },
+    { context: task, contextProof },
     workflowRequestConfig(),
   );
   return unwrap(data, '领取核实审批任务失败');
 }
 
-export async function returnVerificationTask(task: VerificationTask) {
+export async function returnVerificationTask(
+  task: VerificationTask,
+  contextProof: VerificationContextProof,
+) {
   const { data } = await apiClient.post<ApiResponse<VerificationJobSubmission>>(
     `/product-data/verification-approval/${encodeURIComponent(task.id)}/return`,
-    { context: task },
+    { context: task, contextProof },
     workflowRequestConfig(),
   );
   return unwrap(data, '退回核实审批任务失败');
 }
 
-export async function refreshVerificationTask(task: VerificationTask) {
+export async function refreshVerificationTask(
+  task: VerificationTask,
+  contextProof: VerificationContextProof,
+) {
   const { data } = await apiClient.post<ApiResponse<VerificationJobSubmission>>(
     `/product-data/verification-approval/${encodeURIComponent(task.id)}/refresh`,
-    { context: task },
+    { context: task, contextProof },
     workflowRequestConfig(),
   );
   return unwrap(data, '刷新核实审批任务失败');
@@ -77,12 +87,13 @@ export async function refreshVerificationTask(task: VerificationTask) {
 
 export async function updateVerificationItem(
   task: VerificationTask,
+  contextProof: VerificationContextProof,
   itemId: string,
   status: VerificationItemStatus,
 ) {
   const { data } = await apiClient.post<ApiResponse<VerificationJobSubmission>>(
     `/product-data/verification-approval/${encodeURIComponent(task.id)}/items/${encodeURIComponent(itemId)}`,
-    { status, context: task },
+    { status, context: task, contextProof },
     workflowRequestConfig(),
   );
   return unwrap(data, '更新核实项失败');
@@ -90,21 +101,22 @@ export async function updateVerificationItem(
 
 export async function submitVerificationAction(
   task: VerificationTask,
+  contextProof: VerificationContextProof,
   action: VerificationQuickAction,
 ) {
   const { data } = await apiClient.post<ApiResponse<VerificationJobSubmission>>(
     `/product-data/verification-approval/${encodeURIComponent(task.id)}/actions/${action}`,
-    { action, context: task },
+    { action, context: task, contextProof },
     workflowRequestConfig(),
   );
   return unwrap(data, '提交核实审批操作失败');
 }
 
 export async function getVerificationJob(id: number, signal?: AbortSignal) {
-  const { data } = await apiClient.get<ApiResponse<VerificationJobDetail>>(
-    `/jobs/${id}`,
-    { ...requestConfig, signal },
-  );
+  const { data } = await apiClient.get<ApiResponse<VerificationJobDetail>>(`/jobs/${id}`, {
+    ...requestConfig,
+    signal,
+  });
   return unwrap(data, '获取核实审批 Job 进度失败');
 }
 

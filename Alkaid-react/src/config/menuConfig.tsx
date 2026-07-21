@@ -1,4 +1,4 @@
-import type { ReactNode } from 'react';
+import { lazy, Suspense, type ReactNode } from 'react';
 import type { MenuProps } from 'antd';
 import {
   CalendarClock,
@@ -17,21 +17,23 @@ import {
   GraduationCap,
   Workflow,
 } from 'lucide-react';
-import InterfaceWorkbenchPage from '../pages/InterfaceWorkbenchPage';
-import BusinessAccessPage from '../pages/BusinessAccessPage';
-import HomeShortcutManagementPage from '../pages/HomeShortcutManagementPage';
 import PlaceholderPage from '../pages/PlaceholderPage';
-import ProductApplyPage from '../pages/ProductApplyPage';
-import ReleaseManagementPage from '../pages/ReleaseManagementPage';
-import SystemSettingsPage from '../pages/SystemSettingsPage';
-import WelcomePage from '../pages/WelcomePage';
-import WorkflowLearningPage from '../pages/WorkflowLearningPage';
-import ApplicationLinkGeneratorPage from '../pages/ApplicationLinkGeneratorPage';
-import VerificationApprovalPage from '../pages/VerificationApprovalPage';
-import ApplicationDataGeneratorPage from '../pages/ApplicationDataGeneratorPage';
-import CardStatusProcessingPage from '../pages/CardStatusProcessingPage';
-import LoanStatusProcessingPage from '../pages/LoanStatusProcessingPage';
-import HighFrequencyTransactionPage from '../pages/HighFrequencyTransactionPage';
+import { ENABLE_HIGH_FREQUENCY } from './runtimeConfig';
+
+const InterfaceWorkbenchPage = lazy(() => import('../pages/InterfaceWorkbenchPage'));
+const BusinessAccessPage = lazy(() => import('../pages/BusinessAccessPage'));
+const HomeShortcutManagementPage = lazy(() => import('../pages/HomeShortcutManagementPage'));
+const ProductApplyPage = lazy(() => import('../pages/ProductApplyPage'));
+const ReleaseManagementPage = lazy(() => import('../pages/ReleaseManagementPage'));
+const SystemSettingsPage = lazy(() => import('../pages/SystemSettingsPage'));
+const WelcomePage = lazy(() => import('../pages/WelcomePage'));
+const WorkflowLearningPage = lazy(() => import('../pages/WorkflowLearningPage'));
+const ApplicationLinkGeneratorPage = lazy(() => import('../pages/ApplicationLinkGeneratorPage'));
+const VerificationApprovalPage = lazy(() => import('../pages/VerificationApprovalPage'));
+const ApplicationDataGeneratorPage = lazy(() => import('../pages/ApplicationDataGeneratorPage'));
+const CardStatusProcessingPage = lazy(() => import('../pages/CardStatusProcessingPage'));
+const LoanStatusProcessingPage = lazy(() => import('../pages/LoanStatusProcessingPage'));
+const HighFrequencyTransactionPage = lazy(() => import('../pages/HighFrequencyTransactionPage'));
 
 export const DEFAULT_MENU_KEY = 'home';
 export const DEFAULT_OPEN_MENU_KEYS = ['product-data', 'automation', 'system'];
@@ -58,7 +60,9 @@ export const appMenuTree: AppMenuNode[] = [
     route: '/',
     icon: <Home size={18} />,
     closable: false,
-    render: ({ onNavigate }) => <WelcomePage shortcuts={getHomeShortcutCandidates()} onNavigate={onNavigate} />,
+    render: ({ onNavigate }) => (
+      <WelcomePage shortcuts={getHomeShortcutCandidates()} onNavigate={onNavigate} />
+    ),
   },
   {
     key: 'product-data',
@@ -114,20 +118,24 @@ export const appMenuTree: AppMenuNode[] = [
         icon: <Database size={18} />,
         render: () => <LoanStatusProcessingPage />,
       },
-      {
-        key: 'post-loan-processing',
-        label: '高频交易',
-        icon: <Workflow size={18} />,
-        children: [
-          {
-            key: 'high-frequency-transaction',
-            label: 'RIsk050009',
-            route: '/product-data/high-frequency/risk050009',
-            icon: <Database size={18} />,
-            render: () => <HighFrequencyTransactionPage />,
-          },
-        ],
-      },
+      ...(ENABLE_HIGH_FREQUENCY
+        ? [
+            {
+              key: 'post-loan-processing',
+              label: '高频交易',
+              icon: <Workflow size={18} />,
+              children: [
+                {
+                  key: 'high-frequency-transaction',
+                  label: 'Risk050009',
+                  route: '/product-data/high-frequency/risk050009',
+                  icon: <Database size={18} />,
+                  render: () => <HighFrequencyTransactionPage />,
+                },
+              ],
+            },
+          ]
+        : []),
     ],
   },
   {
@@ -217,14 +225,15 @@ export const appMenuTree: AppMenuNode[] = [
         label: '系统设置',
         route: '/system/settings',
         icon: <Settings size={18} />,
-        render: () =>
+        render: () => (
           <SystemSettingsPage
             pages={appMenuLeafNodes.map((item) => ({
               key: item.key,
               label: item.label,
               configurable: item.closable !== false,
             }))}
-          />,
+          />
+        ),
       },
     ],
   },
@@ -308,7 +317,8 @@ export function getMenuRoute(key: string) {
 
 export function getMenuKeyByRoute(route: string) {
   const normalizedRoute = normalizeRoute(route);
-  return appMenuLeafNodes.find((item) => normalizeRoute(item.route || '/') === normalizedRoute)?.key;
+  return appMenuLeafNodes.find((item) => normalizeRoute(item.route || '/') === normalizedRoute)
+    ?.key;
 }
 
 export function isMenuLeaf(key: string) {
@@ -317,8 +327,6 @@ export function isMenuLeaf(key: string) {
 
 export function renderMenuPage(key: string, context: MenuRenderContext) {
   const node = appMenuNodeMap.get(key);
-  if (node?.render) {
-    return node.render(context);
-  }
-  return <PlaceholderPage title={node?.label || key} />;
+  const page = node?.render ? node.render(context) : <PlaceholderPage title={node?.label || key} />;
+  return <Suspense fallback={<div className="page-surface">正在加载页面...</div>}>{page}</Suspense>;
 }

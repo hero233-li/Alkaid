@@ -19,7 +19,9 @@ interface SystemSettingsPageProps {
 }
 
 export default function SystemSettingsPage({ pages }: SystemSettingsPageProps) {
-  const [preferences, setPreferences] = useState<PageMultiOpenPreferences>(readPageMultiOpenPreferences);
+  const [preferences, setPreferences] = useState<PageMultiOpenPreferences>(
+    readPageMultiOpenPreferences,
+  );
 
   useEffect(() => {
     const handleChange = (event: Event) => {

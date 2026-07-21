@@ -26,6 +26,19 @@ class ApplicationLinkConfigurationError(ValueError):
     pass
 
 
+# Public entry points
+def execute_application_link(job: Job) -> dict[str, object]:
+    submission = ApplicationLinkSubmission.model_validate(job.payload)
+    if job.execution_config_snapshot:
+        snapshot = ApplicationLinkExecutionSnapshot.model_validate(job.execution_config_snapshot)
+    else:
+        submission = normalize_submission(submission)
+        snapshot = resolve_execution_snapshot(submission)
+    validate_submission(submission, snapshot)
+    result = generate_application_links(job, submission, snapshot=snapshot)
+    return {"links": result.model_dump(mode="json")}
+
+
 def normalize_submission(
     submission: ApplicationLinkSubmission,
 ) -> ApplicationLinkSubmission:
@@ -166,6 +179,7 @@ def _has_submission_field(submission: ApplicationLinkSubmission, name: str) -> b
     return bool(value)
 
 
+# Main workflow
 def generate_application_links(
     job: Job,
     submission: ApplicationLinkSubmission,
@@ -201,15 +215,3 @@ def generate_application_links(
         externalUrl=links.external_url,
         generatedAt=timezone.now().isoformat(),
     )
-
-
-def execute_application_link(job: Job) -> dict[str, object]:
-    submission = ApplicationLinkSubmission.model_validate(job.payload)
-    if job.execution_config_snapshot:
-        snapshot = ApplicationLinkExecutionSnapshot.model_validate(job.execution_config_snapshot)
-    else:
-        submission = normalize_submission(submission)
-        snapshot = resolve_execution_snapshot(submission)
-    validate_submission(submission, snapshot)
-    result = generate_application_links(job, submission, snapshot=snapshot)
-    return {"links": result.model_dump(mode="json")}

@@ -10,7 +10,9 @@ import type { VerificationSearchValues } from '../types';
 
 export function useVerificationApprovalForm() {
   const [form] = Form.useForm<VerificationSearchValues>();
-  const [config, setConfig] = useState<Awaited<ReturnType<typeof getVerificationApprovalConfig>> | null>(null);
+  const [config, setConfig] = useState<Awaited<
+    ReturnType<typeof getVerificationApprovalConfig>
+  > | null>(null);
   const [configLoading, setConfigLoading] = useState(true);
   const [configError, setConfigError] = useState<string | null>(null);
   const initialValues = useMemo(() => getInitialVerificationSearchValues(config), [config]);
@@ -39,9 +41,10 @@ export function useVerificationApprovalForm() {
     };
   }, [form]);
 
-  const createSubmission = useCallback((values: VerificationSearchValues) => (
-    buildVerificationSearchSubmission(values)
-  ), []);
+  const createSubmission = useCallback(
+    (values: VerificationSearchValues) => buildVerificationSearchSubmission(values),
+    [],
+  );
 
   const reset = useCallback(() => {
     form.resetFields();

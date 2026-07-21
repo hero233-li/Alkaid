@@ -21,6 +21,19 @@ class ProductConfigurationError(ValueError):
     pass
 
 
+# Public entry point
+def execute_product_application(job: Job) -> dict[str, Any]:
+    submission = ProductApplicationSubmission(
+        name=job.name,
+        product=job.product,
+        payload=job.payload,
+    )
+    snapshot = resolve_product_snapshot(job, job.product)
+    validate_submission(submission, execution_snapshot=snapshot)
+    return run_product_application(job, submission, snapshot=snapshot)
+
+
+# Validation
 def validate_submission(
     submission: ProductApplicationSubmission,
     execution_snapshot: ProductExecutionSnapshot,
@@ -100,6 +113,7 @@ def resolve_product_snapshot(job: Job, product_code: str) -> ProductExecutionSna
     return load_product_catalog().snapshot(product_code)
 
 
+# Main workflow
 def run_product_application(
     job: Job,
     submission: ProductApplicationSubmission,
@@ -112,18 +126,39 @@ def run_product_application(
     result = dict(job.result or {})
     if "links" not in result:
         links = generate_application_link(job, build_link_request(submission))
-        save_job_step(job, "links", links.model_dump(mode="json"))
+        save_job_step(
+            job,
+            "links",
+            links.model_dump(mode="json"),
+            stage="links_completed",
+            progress=35,
+            message="申请链接生成完成",
+        )
         result = dict(job.result)
 
     if "application" not in result or "followup" not in result:
         with ProductApplicationSession(job) as session:
             if "application" not in result:
                 application = submit_product_application(session, submission, snapshot)
-                save_job_step(job, "application", application)
+                save_job_step(
+                    job,
+                    "application",
+                    application,
+                    stage="application_completed",
+                    progress=80,
+                    message="产品申请提交完成",
+                )
                 result = dict(job.result)
             if "followup" not in result:
                 session.audit(session.request_head())
-                save_job_step(job, "followup", {"status": "success"})
+                save_job_step(
+                    job,
+                    "followup",
+                    {"status": "success"},
+                    stage="followup_completed",
+                    progress=95,
+                    message="产品申请后续审计完成",
+                )
                 result = dict(job.result)
 
     application = result["application"]
@@ -145,17 +180,7 @@ def run_product_application(
     }
 
 
-def execute_product_application(job: Job) -> dict[str, Any]:
-    submission = ProductApplicationSubmission(
-        name=job.name,
-        product=job.product,
-        payload=job.payload,
-    )
-    snapshot = resolve_product_snapshot(job, job.product)
-    validate_submission(submission, execution_snapshot=snapshot)
-    return run_product_application(job, submission, snapshot=snapshot)
-
-
+# Request builder
 def build_link_request(
     submission: ProductApplicationSubmission,
 ) -> GenerateApplicationLinkRequest:

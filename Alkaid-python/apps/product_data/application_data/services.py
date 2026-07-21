@@ -3,10 +3,12 @@ import logging
 
 from django.conf import settings
 
+from apps.jobs.commands import parse_menu_command
 from apps.jobs.models import Job
 from apps.mock_data.application_generator import generate_application_record
 from apps.product_data.application_data.schemas import (
     ApplicationDataCommand,
+    ApplicationDataOperation,
     ApplicationDataRecord,
     ApplicationDataSubmission,
 )
@@ -16,11 +18,13 @@ APPLICATION_DATA_ENVIRONMENTS = ("环境1", "环境2", "环境3")
 
 
 def execute_application_data_generation(job: Job) -> dict[str, object]:
-    if "operation" in job.payload:
-        command = ApplicationDataCommand.model_validate(job.payload)
-        submission = ApplicationDataSubmission.model_validate(command.data)
-    else:  # Compatibility with already persisted Jobs.
-        submission = ApplicationDataSubmission.model_validate(job.payload)
+    _, data = parse_menu_command(
+        job,
+        prefix="application_data",
+        command_model=ApplicationDataCommand,
+        operation_enum=ApplicationDataOperation,
+    )
+    submission = ApplicationDataSubmission.model_validate(data)
     if submission.environment not in APPLICATION_DATA_ENVIRONMENTS:
         raise ValueError("申请数据生成环境无效")
     start = job.id * 100_000

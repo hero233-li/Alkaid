@@ -8,27 +8,11 @@ from django.utils.module_loading import import_string
 
 from apps.jobs.models import Job
 from apps.jobs.services import add_job_log, mark_job_failed
+from apps.jobs.specs import JOB_SPECS, job_spec
 
 logger = logging.getLogger(__name__)
 
-TASK_REGISTRY = {
-    "product_application": (
-        "apps.product_data.product_applications.tasks.execute_product_application"
-    ),
-    "application_link": "apps.product_data.application_links.tasks.execute_application_link",
-    "business_access": "apps.product_data.business_access.tasks.execute_business_access_task",
-    "verification_approval": (
-        "apps.product_data.verification_approval.tasks.execute_verification_approval_task"
-    ),
-    "application_data": "apps.product_data.application_data.tasks.execute_application_data_task",
-    "card_status": "apps.product_data.card_status.tasks.execute_card_status_task",
-    "loan_status": "apps.product_data.loan_status.tasks.execute_loan_status_task",
-}
-
-LEGACY_KIND_ALIASES = {
-    "application_link_generation": "application_link",
-    "application_data.generate": "application_data",
-}
+TASK_REGISTRY = {kind: spec.task for kind, spec in JOB_SPECS.items()}
 
 
 def enqueue_job(job: Job) -> None:
@@ -75,8 +59,4 @@ def _allow_sync_fallback() -> bool:
 
 
 def _task_for_kind(kind: str) -> Any:
-    canonical = LEGACY_KIND_ALIASES.get(kind, kind.split(".", 1)[0])
-    path = TASK_REGISTRY.get(canonical)
-    if not path:
-        raise ValueError(f"不支持的任务类型：{kind}")
-    return import_string(path)
+    return import_string(job_spec(kind).task)

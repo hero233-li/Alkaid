@@ -6,6 +6,8 @@ import pytest
 import apps.integrations.product_system.verification_approval as verification_module
 from apps.integrations.http import HttpClient, HttpClientConfig
 from apps.jobs.models import ApiCallStatus, Job, JobStatus
+from apps.jobs.services import create_job, mark_job_success
+from apps.product_data.verification_approval.services import _context_digest
 
 
 def _client(handler) -> HttpClient:
@@ -48,10 +50,26 @@ def _submit_action(client, capture, *, key: str) -> Job:
         "productName": "产品 B",
         "items": [{"id": "identity", "title": "身份核实", "status": "completed"}],
     }
+    source = create_job(
+        kind="verification_approval",
+        name="核实审批上下文",
+        product="产品数据",
+        payload={"operation": "search"},
+        trace_id=f"{key}-source-trace",
+        idempotency_key=f"{key}-source",
+        timeout_seconds=30,
+    ).job
+    proof = {
+        "sourceJobId": source.id,
+        "version": 1,
+        "digest": _context_digest(source.id, 1, task),
+    }
+    mark_job_success(source.id, {"task": task, "contextProof": proof})
+
     with capture(execute=True):
         response = client.post(
             "/api/product-data/verification-approval/VERIFY-FAILURE/actions/submit",
-            data=json.dumps({"action": "submit", "context": task}),
+            data=json.dumps({"action": "submit", "context": task, "contextProof": proof}),
             content_type="application/json",
             HTTP_X_IDEMPOTENCY_KEY=key,
         )

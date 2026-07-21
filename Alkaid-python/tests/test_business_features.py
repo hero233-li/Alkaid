@@ -107,6 +107,7 @@ def test_verification_approval_data_and_mutations_run_as_jobs(
     assert search_job.payload["operation"] == "search"
     assert search_job.api_calls.count() == 1
     task = search_job.result["task"]
+    proof = search_job.result["contextProof"]
     assert task["ownershipStatus"] == "unclaimed"
     assert len(task["items"]) == 6
 
@@ -115,11 +116,12 @@ def test_verification_approval_data_and_mutations_run_as_jobs(
         django_capture_on_commit_callbacks,
         f"/api/product-data/verification-approval/{task['id']}/claim",
         key="verify-claim",
-        body={"context": task},
+        body={"context": task, "contextProof": proof},
     )
     assert claim_job.payload["data"]["context"]["tellerNo"] == task["tellerNo"]
     assert claim_job.payload["data"]["context"]["organizationNo"] == task["organizationNo"]
     task = claim_job.result["task"]
+    proof = claim_job.result["contextProof"]
     assert task["ownershipStatus"] == "claimed"
     assert task["tellerNo"] == "T1027"
     assert task["organizationNo"] == "510001"
@@ -129,20 +131,23 @@ def test_verification_approval_data_and_mutations_run_as_jobs(
         django_capture_on_commit_callbacks,
         f"/api/product-data/verification-approval/{task['id']}/items/identity",
         key="verify-item-complete",
-        body={"status": "completed", "context": task},
+        body={"status": "completed", "context": task, "contextProof": proof},
     )
     task = item_job.result["task"]
+    proof = item_job.result["contextProof"]
     assert task["items"][0]["status"] == "completed"
     refresh_context = copy.deepcopy(task)
+    refresh_proof = copy.deepcopy(proof)
 
     cancel_item_job = _execute_job_request(
         client,
         django_capture_on_commit_callbacks,
         f"/api/product-data/verification-approval/{task['id']}/items/identity",
         key="verify-item-cancel",
-        body={"status": "pending", "context": task},
+        body={"status": "pending", "context": task, "contextProof": proof},
     )
     task = cancel_item_job.result["task"]
+    proof = cancel_item_job.result["contextProof"]
     assert task["items"][0]["status"] == "pending"
 
     supplement_job = _execute_job_request(
@@ -150,11 +155,12 @@ def test_verification_approval_data_and_mutations_run_as_jobs(
         django_capture_on_commit_callbacks,
         f"/api/product-data/verification-approval/{task['id']}/actions/supplement",
         key="verify-supplement",
-        body={"action": "supplement", "context": task},
+        body={"action": "supplement", "context": task, "contextProof": proof},
     )
     assert supplement_job.payload["data"]["context"]["tellerNo"] == task["tellerNo"]
     assert supplement_job.payload["data"]["context"]["organizationNo"] == task["organizationNo"]
     task = supplement_job.result["task"]
+    proof = supplement_job.result["contextProof"]
     assert task["taskStatus"] == "待补件"
 
     refresh_job = _execute_job_request(
@@ -162,9 +168,10 @@ def test_verification_approval_data_and_mutations_run_as_jobs(
         django_capture_on_commit_callbacks,
         f"/api/product-data/verification-approval/{task['id']}/refresh",
         key="verify-refresh",
-        body={"context": refresh_context},
+        body={"context": refresh_context, "contextProof": refresh_proof},
     )
     task = refresh_job.result["task"]
+    proof = refresh_job.result["contextProof"]
     assert task["ownershipStatus"] == "claimed"
     assert refresh_job.payload["data"]["context"]["items"][0]["status"] == "completed"
     assert task["items"][0]["status"] == "pending"
@@ -174,9 +181,10 @@ def test_verification_approval_data_and_mutations_run_as_jobs(
         django_capture_on_commit_callbacks,
         f"/api/product-data/verification-approval/{task['id']}/actions/complete",
         key="verify-complete",
-        body={"action": "complete", "context": task},
+        body={"action": "complete", "context": task, "contextProof": proof},
     )
     task = complete_job.result["task"]
+    proof = complete_job.result["contextProof"]
     assert all(value["status"] == "completed" for value in task["items"])
 
     approval_submit_job = _execute_job_request(
@@ -184,9 +192,10 @@ def test_verification_approval_data_and_mutations_run_as_jobs(
         django_capture_on_commit_callbacks,
         f"/api/product-data/verification-approval/{task['id']}/actions/approval-submit",
         key="verify-approval-submit",
-        body={"action": "approval-submit", "context": task},
+        body={"action": "approval-submit", "context": task, "contextProof": proof},
     )
     task = approval_submit_job.result["task"]
+    proof = approval_submit_job.result["contextProof"]
     assert task["taskStatus"] == "审批已提交"
 
     submit_job = _execute_job_request(
@@ -194,9 +203,10 @@ def test_verification_approval_data_and_mutations_run_as_jobs(
         django_capture_on_commit_callbacks,
         f"/api/product-data/verification-approval/{task['id']}/actions/submit",
         key="verify-submit",
-        body={"action": "submit", "context": task},
+        body={"action": "submit", "context": task, "contextProof": proof},
     )
     task = submit_job.result["task"]
+    proof = submit_job.result["contextProof"]
     assert task["taskStatus"] == "已提交"
 
     return_job = _execute_job_request(
@@ -204,7 +214,7 @@ def test_verification_approval_data_and_mutations_run_as_jobs(
         django_capture_on_commit_callbacks,
         f"/api/product-data/verification-approval/{task['id']}/return",
         key="verify-return",
-        body={"context": task},
+        body={"context": task, "contextProof": proof},
     )
     assert return_job.result["task"]["ownershipStatus"] == "unclaimed"
 

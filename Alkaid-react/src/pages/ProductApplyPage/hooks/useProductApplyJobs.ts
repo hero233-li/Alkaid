@@ -3,42 +3,36 @@ import { message } from 'antd';
 import { cancelJob, getJobDetail, retryJob, streamJobLogs } from '../../../api/jobs';
 import { executeProductApplication } from '../api/productApplicationApi';
 import type { ProductApplicationResult, ProductApplicationSubmission } from '../model/types';
-import {
-  activeStatuses,
-  mergeJobDetail,
-  terminalStatuses,
-} from '../model/jobModel';
-import {
-  persistResultSummaries,
-  readResultSummaries,
-  resultCacheKey,
-} from '../model/cache';
+import { activeStatuses, mergeJobDetail, terminalStatuses } from '../model/jobModel';
+import { persistResultSummaries, readResultSummaries, resultCacheKey } from '../model/cache';
 
 export function useProductApplyJobs(pageInstanceKey: string) {
   const cacheKey = resultCacheKey(pageInstanceKey);
-  const [results, setResults] = useState<ProductApplicationResult[]>(() => readResultSummaries(cacheKey));
+  const [results, setResults] = useState<ProductApplicationResult[]>(() =>
+    readResultSummaries(cacheKey),
+  );
   const [selectedResult, setSelectedResult] = useState<ProductApplicationResult | null>(null);
   const [submitting, setSubmitting] = useState(false);
 
-  const updateResult = useCallback((
-    id: number,
-    updater: (current: ProductApplicationResult) => ProductApplicationResult,
-  ) => {
-    setResults((currentResults) => {
-      const nextResults = currentResults.map((item) => (item.id === id ? updater(item) : item));
-      persistResultSummaries(cacheKey, nextResults);
-      return nextResults;
-    });
-    setSelectedResult((current) => (current?.id === id ? updater(current) : current));
-  }, [cacheKey]);
+  const updateResult = useCallback(
+    (id: number, updater: (current: ProductApplicationResult) => ProductApplicationResult) => {
+      setResults((currentResults) => {
+        const nextResults = currentResults.map((item) => (item.id === id ? updater(item) : item));
+        persistResultSummaries(cacheKey, nextResults);
+        return nextResults;
+      });
+      setSelectedResult((current) => (current?.id === id ? updater(current) : current));
+    },
+    [cacheKey],
+  );
 
   useEffect(() => {
     const cachedResults = readResultSummaries(cacheKey);
     setResults(cachedResults);
     setSelectedResult(null);
     let active = true;
-    void Promise.all(cachedResults.map((result) => getJobDetail(result.id).catch(() => null)))
-      .then((details) => {
+    void Promise.all(cachedResults.map((result) => getJobDetail(result.id).catch(() => null))).then(
+      (details) => {
         if (!active) {
           return;
         }
@@ -47,7 +41,8 @@ export function useProductApplyJobs(pageInstanceKey: string) {
             updateResult(detail.id, (current) => mergeJobDetail(current, detail));
           }
         });
-      });
+      },
+    );
     return () => {
       active = false;
     };
@@ -68,7 +63,9 @@ export function useProductApplyJobs(pageInstanceKey: string) {
       if (document.visibilityState !== 'visible') {
         return;
       }
-      const details = await Promise.all(activeJobIds.map((id) => getJobDetail(id).catch(() => null)));
+      const details = await Promise.all(
+        activeJobIds.map((id) => getJobDetail(id).catch(() => null)),
+      );
       if (!active) {
         return;
       }
@@ -127,16 +124,18 @@ export function useProductApplyJobs(pageInstanceKey: string) {
                   return { ...current, logs: [...current.logs, log] };
                 });
               },
-              onStatus: (status) => updateResult(selectedId, (current) => ({
-                ...current,
-                status: status.status,
-                progress: status.progress,
-                stage: status.status === 'success'
-                  ? 'completed'
-                  : terminalStatuses.has(status.status)
-                    ? status.status
-                    : current.stage,
-              })),
+              onStatus: (status) =>
+                updateResult(selectedId, (current) => ({
+                  ...current,
+                  status: status.status,
+                  progress: status.progress,
+                  stage:
+                    status.status === 'success'
+                      ? 'completed'
+                      : terminalStatuses.has(status.status)
+                        ? status.status
+                        : current.stage,
+                })),
             },
             controller.signal,
           );
@@ -161,43 +160,52 @@ export function useProductApplyJobs(pageInstanceKey: string) {
     return () => controller.abort();
   }, [selectedResult?.id, updateResult]);
 
-  const submit = useCallback(async (submission: ProductApplicationSubmission) => {
-    setSubmitting(true);
-    try {
-      const result = await executeProductApplication(submission);
-      setResults((currentResults) => {
-        const nextResults = [result, ...currentResults];
-        persistResultSummaries(cacheKey, nextResults);
-        return nextResults;
-      });
-      setSelectedResult(result);
-      message.success('产品申请已提交，正在后台执行');
-    } catch (submitError) {
-      message.error(submitError instanceof Error ? submitError.message : '产品申请执行失败');
-    } finally {
-      setSubmitting(false);
-    }
-  }, [cacheKey]);
+  const submit = useCallback(
+    async (submission: ProductApplicationSubmission) => {
+      setSubmitting(true);
+      try {
+        const result = await executeProductApplication(submission);
+        setResults((currentResults) => {
+          const nextResults = [result, ...currentResults];
+          persistResultSummaries(cacheKey, nextResults);
+          return nextResults;
+        });
+        setSelectedResult(result);
+        message.success('产品申请已提交，正在后台执行');
+      } catch (submitError) {
+        message.error(submitError instanceof Error ? submitError.message : '产品申请执行失败');
+      } finally {
+        setSubmitting(false);
+      }
+    },
+    [cacheKey],
+  );
 
-  const retry = useCallback(async (result: ProductApplicationResult) => {
-    try {
-      const detail = await retryJob(result.id);
-      updateResult(result.id, (current) => mergeJobDetail(current, detail));
-      message.success(`已提交第 ${detail.attemptCount} 次执行`);
-    } catch (retryError) {
-      message.error(retryError instanceof Error ? retryError.message : '重试失败');
-    }
-  }, [updateResult]);
+  const retry = useCallback(
+    async (result: ProductApplicationResult) => {
+      try {
+        const detail = await retryJob(result.id);
+        updateResult(result.id, (current) => mergeJobDetail(current, detail));
+        message.success(`已提交第 ${detail.attemptCount} 次执行`);
+      } catch (retryError) {
+        message.error(retryError instanceof Error ? retryError.message : '重试失败');
+      }
+    },
+    [updateResult],
+  );
 
-  const cancel = useCallback(async (result: ProductApplicationResult) => {
-    try {
-      const detail = await cancelJob(result.id);
-      updateResult(result.id, (current) => mergeJobDetail(current, detail));
-      message.success('Job 已取消');
-    } catch (cancelError) {
-      message.error(cancelError instanceof Error ? cancelError.message : '取消失败');
-    }
-  }, [updateResult]);
+  const cancel = useCallback(
+    async (result: ProductApplicationResult) => {
+      try {
+        const detail = await cancelJob(result.id);
+        updateResult(result.id, (current) => mergeJobDetail(current, detail));
+        message.success('Job 已取消');
+      } catch (cancelError) {
+        message.error(cancelError instanceof Error ? cancelError.message : '取消失败');
+      }
+    },
+    [updateResult],
+  );
 
   return {
     results,
