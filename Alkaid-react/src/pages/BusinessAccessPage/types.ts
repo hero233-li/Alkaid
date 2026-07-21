@@ -1,16 +1,7 @@
 export type BusinessAccessStatus = 'valid' | 'invalid';
 export type NotificationVersionType = 'latest' | 'previous';
 export type BusinessAccessOperation = 'search' | 'invalidate' | 'notifications' | 'push';
-export type BusinessAccessJobStatus =
-  | 'submitting'
-  | 'pending'
-  | 'running'
-  | 'retrying'
-  | 'success'
-  | 'failed'
-  | 'cancel_requested'
-  | 'cancelled'
-  | 'timed_out';
+export type BusinessAccessJobStatus = JobActivityStatus;
 
 export interface BusinessAccessSearchValues {
   environment?: string;
@@ -66,23 +57,15 @@ export interface BusinessAccessJobResult {
   pushResult?: NotificationPushResult;
 }
 
-export interface BusinessAccessJobSubmission {
-  id: number;
+export interface BusinessAccessJobSubmission extends JobSubmission {
   operation: BusinessAccessOperation;
-  status: BusinessAccessJobStatus;
   stage: string;
-  progress: number;
   traceId: string;
 }
 
-export interface BusinessAccessJobDetail {
-  id: number;
+export interface BusinessAccessJobDetail extends JobSnapshot<BusinessAccessJobResult> {
   workflowId: string;
-  status: BusinessAccessJobStatus;
   stage: string;
-  progress: number;
-  result: BusinessAccessJobResult;
-  errorMessage?: string;
 }
 
 export interface BusinessAccessWorkflowActivity {
@@ -92,3 +75,4 @@ export interface BusinessAccessWorkflowActivity {
   status: BusinessAccessJobStatus;
   progress: number;
 }
+import type { JobActivityStatus, JobSnapshot, JobSubmission } from '../../types/jobs';

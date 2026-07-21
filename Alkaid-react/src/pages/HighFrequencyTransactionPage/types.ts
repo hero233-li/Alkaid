@@ -1,4 +1,9 @@
 import type { Dayjs } from 'dayjs';
+import type {
+  JobActivityStatus,
+  JobSnapshot,
+  JobSubmission as SharedJobSubmission,
+} from '../../types/jobs';
 
 export interface HighFrequencySearchValues {
   environment: string;
@@ -49,31 +54,9 @@ export interface ApiResponse<T> {
   message?: string;
 }
 
-export type JobStatus =
-  | 'submitting'
-  | 'pending'
-  | 'running'
-  | 'retrying'
-  | 'success'
-  | 'failed'
-  | 'cancel_requested'
-  | 'cancelled'
-  | 'timed_out';
-
-export interface JobSubmission {
-  id: number;
-  status: JobStatus;
-  progress: number;
-}
-
-export interface WorkflowJob {
-  id: number;
-  status: JobStatus;
-  progress: number;
-  currentStep?: string;
-  result: { queryResult?: DynamicQueryResult };
-  errorMessage?: string;
-}
+export type JobStatus = JobActivityStatus;
+export type JobSubmission = SharedJobSubmission;
+export type WorkflowJob = JobSnapshot<{ queryResult?: DynamicQueryResult }>;
 
 export interface WorkflowActivity {
   jobId?: number;

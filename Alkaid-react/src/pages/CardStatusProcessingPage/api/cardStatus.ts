@@ -1,6 +1,7 @@
 import { apiClient } from '../../../api/client';
 import { createWorkflowHeaders } from '../../../utils/requestId';
 import { pollJobUntilTerminal } from '../../../utils/jobPolling';
+import type { JobSubmission } from '../../../types/jobs';
 import type {
   CardAction,
   CardActionValues,
@@ -10,11 +11,6 @@ import type {
   CardSearchValues,
 } from '../types';
 
-interface Submission {
-  id: number;
-  status: CardJobStatus;
-  progress: number;
-}
 const requestConfig = { showGlobalProgress: false, useResponseDelay: false };
 const terminal = new Set<CardJobStatus>(['success', 'failed', 'cancelled', 'timed_out']);
 
@@ -28,7 +24,7 @@ function workflowConfig() {
 }
 
 export async function submitCardSearch(values: CardSearchValues) {
-  const { data } = await apiClient.post<CardApiResponse<Submission>>(
+  const { data } = await apiClient.post<CardApiResponse<JobSubmission>>(
     '/product-data/tools/cards/search',
     values,
     workflowConfig(),
@@ -41,7 +37,7 @@ export async function submitCardAction(
   action: CardAction,
   values: CardActionValues,
 ) {
-  const { data } = await apiClient.post<CardApiResponse<Submission>>(
+  const { data } = await apiClient.post<CardApiResponse<JobSubmission>>(
     `/product-data/tools/cards/${encodeURIComponent(cardNo)}/actions/${action}`,
     values,
     workflowConfig(),

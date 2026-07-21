@@ -30,6 +30,8 @@ Alkaid-python/.venv/
 
 # Build output
 Alkaid-react/dist/
+Alkaid-react/playwright-report/
+Alkaid-react/test-results/
 .vite/
 *.tsbuildinfo
 Alkaid-python/staticfiles/
@@ -41,6 +43,7 @@ __pycache__/
 *.py[cod]
 .pytest_cache/
 .ruff_cache/
+.mypy_cache/
 .coverage
 *.sqlite3
 Alkaid-python/db.sqlite3

@@ -1,18 +1,11 @@
+import type { JobActivityStatus, JobSnapshot, JobSubmission } from '../../types/jobs';
+
 export type VerificationOwnershipStatus = 'unclaimed' | 'claimed';
 export type VerificationItemStatus = 'pending' | 'completed';
 export type VerificationQuickAction = 'complete' | 'supplement' | 'submit' | 'approval-submit';
 export type VerificationOperation =
   'search' | 'claim' | 'return' | 'refresh' | 'item-update' | 'action';
-export type VerificationJobStatus =
-  | 'submitting'
-  | 'pending'
-  | 'running'
-  | 'retrying'
-  | 'success'
-  | 'failed'
-  | 'cancel_requested'
-  | 'cancelled'
-  | 'timed_out';
+export type VerificationJobStatus = JobActivityStatus;
 
 export interface VerificationSearchValues {
   environment?: string;
@@ -62,20 +55,12 @@ export interface VerificationActionDefinition {
   description: string;
 }
 
-export interface VerificationJobSubmission {
-  id: number;
-  status: VerificationJobStatus;
-  stage: string;
-  progress: number;
-}
+export type VerificationJobSubmission = JobSubmission;
 
-export interface VerificationJobDetail extends VerificationJobSubmission {
-  result: {
-    task?: VerificationTask | null;
-    contextProof?: VerificationContextProof | null;
-  };
-  errorMessage?: string;
-}
+export type VerificationJobDetail = JobSnapshot<{
+  task?: VerificationTask | null;
+  contextProof?: VerificationContextProof | null;
+}>;
 
 export interface VerificationWorkflowActivity {
   jobId?: number;

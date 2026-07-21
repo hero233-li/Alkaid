@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   Alert,
   Button,
@@ -96,8 +96,15 @@ export default function WorkflowLearningPage() {
   const [guide, setGuide] = useState<WorkflowLabGuide | null>(null);
   const [runtime, setRuntime] = useState<WorkflowRuntimeSnapshot | null>(null);
   const [job, setJob] = useState<LabExecution | null>(null);
+  const jobRef = useRef<LabExecution | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [guideError, setGuideError] = useState('');
+  const jobId = job?.id;
+  const jobStatus = job?.status;
+
+  useEffect(() => {
+    jobRef.current = job;
+  }, [job]);
 
   useEffect(() => {
     getWorkflowLabGuide()
@@ -120,12 +127,12 @@ export default function WorkflowLearningPage() {
   }, []);
 
   useEffect(() => {
-    if (!job || !activeStatuses.has(job.status)) {
+    if (!jobId || !jobStatus || !activeStatuses.has(jobStatus)) {
       return;
     }
     let active = true;
     const refresh = () =>
-      getJobDetail(job.id)
+      getJobDetail(jobId)
         .then((detail) => {
           if (active) {
             setJob((current) =>
@@ -140,23 +147,23 @@ export default function WorkflowLearningPage() {
       active = false;
       window.clearInterval(timer);
     };
-  }, [job?.id, job?.status]);
+  }, [jobId, jobStatus]);
 
   useEffect(() => {
-    if (!job) {
+    if (!jobId) {
       return;
     }
     const controller = new AbortController();
-    const afterId = Math.max(0, ...job.logs.map((log) => log.id || 0));
+    const afterId = Math.max(0, ...(jobRef.current?.logs ?? []).map((log) => log.id || 0));
     void streamJobLogs(
-      job.id,
+      jobId,
       afterId,
       {
         onLog: (log) =>
           setJob((current) => {
             if (
               !current ||
-              current.id !== job.id ||
+              current.id !== jobId ||
               (log.id && current.logs.some((item) => item.id === log.id))
             ) {
               return current;
@@ -165,7 +172,7 @@ export default function WorkflowLearningPage() {
           }),
         onStatus: (status) =>
           setJob((current) =>
-            current?.id === job.id
+            current?.id === jobId
               ? { ...current, status: status.status, progress: status.progress }
               : current,
           ),
@@ -173,7 +180,7 @@ export default function WorkflowLearningPage() {
       controller.signal,
     ).catch(() => undefined);
     return () => controller.abort();
-  }, [job?.id]);
+  }, [jobId]);
 
   const submit = async (values: LabFormValues) => {
     setSubmitting(true);

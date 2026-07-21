@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { message } from 'antd';
 import { cancelJob, getJobDetail, retryJob, streamJobLogs } from '../../../api/jobs';
 import { executeProductApplication } from '../api/productApplicationApi';
@@ -12,7 +12,12 @@ export function useProductApplyJobs(pageInstanceKey: string) {
     readResultSummaries(cacheKey),
   );
   const [selectedResult, setSelectedResult] = useState<ProductApplicationResult | null>(null);
+  const selectedResultRef = useRef<ProductApplicationResult | null>(null);
   const [submitting, setSubmitting] = useState(false);
+
+  useEffect(() => {
+    selectedResultRef.current = selectedResult;
+  }, [selectedResult]);
 
   const updateResult = useCallback(
     (id: number, updater: (current: ProductApplicationResult) => ProductApplicationResult) => {
@@ -53,9 +58,11 @@ export function useProductApplyJobs(pageInstanceKey: string) {
     [results],
   );
   const activeJobKey = activeJobIds.join(',');
+  const selectedResultId = selectedResult?.id;
 
   useEffect(() => {
-    if (!activeJobIds.length) {
+    const jobIds = activeJobKey.split(',').filter(Boolean).map(Number);
+    if (!jobIds.length) {
       return;
     }
     let active = true;
@@ -63,9 +70,7 @@ export function useProductApplyJobs(pageInstanceKey: string) {
       if (document.visibilityState !== 'visible') {
         return;
       }
-      const details = await Promise.all(
-        activeJobIds.map((id) => getJobDetail(id).catch(() => null)),
-      );
+      const details = await Promise.all(jobIds.map((id) => getJobDetail(id).catch(() => null)));
       if (!active) {
         return;
       }
@@ -84,11 +89,11 @@ export function useProductApplyJobs(pageInstanceKey: string) {
   }, [activeJobKey, updateResult]);
 
   useEffect(() => {
-    if (!selectedResult) {
+    if (!selectedResultId) {
       return;
     }
     let active = true;
-    void getJobDetail(selectedResult.id)
+    void getJobDetail(selectedResultId)
       .then((detail) => {
         if (active) {
           updateResult(detail.id, (current) => mergeJobDetail(current, detail));
@@ -98,16 +103,18 @@ export function useProductApplyJobs(pageInstanceKey: string) {
     return () => {
       active = false;
     };
-  }, [selectedResult?.id, updateResult]);
+  }, [selectedResultId, updateResult]);
 
   useEffect(() => {
-    if (!selectedResult) {
+    if (!selectedResultId) {
       return;
     }
-    const selectedId = selectedResult.id;
+    const selectedId = selectedResultId;
     const controller = new AbortController();
-    const afterId = Math.max(0, ...selectedResult.logs.map((log) => log.id || 0));
-    let lastLogId = afterId;
+    let lastLogId = Math.max(
+      0,
+      ...(selectedResultRef.current?.logs ?? []).map((log) => log.id || 0),
+    );
     const connect = async () => {
       for (let attempt = 1; attempt <= 3 && !controller.signal.aborted; attempt += 1) {
         try {
@@ -158,7 +165,7 @@ export function useProductApplyJobs(pageInstanceKey: string) {
     };
     void connect();
     return () => controller.abort();
-  }, [selectedResult?.id, updateResult]);
+  }, [selectedResultId, updateResult]);
 
   const submit = useCallback(
     async (submission: ProductApplicationSubmission) => {

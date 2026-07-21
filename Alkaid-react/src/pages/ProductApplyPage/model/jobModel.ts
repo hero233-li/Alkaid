@@ -32,6 +32,7 @@ export function mergeJobDetail(
     progress: detail.progress,
     payload: detail.payload ?? result.payload,
     errorMessage: detail.errorMessage,
+    errorCode: detail.errorCode,
     traceId: detail.traceId,
     idempotencyKey: detail.idempotencyKey,
     attemptCount: detail.attemptCount,

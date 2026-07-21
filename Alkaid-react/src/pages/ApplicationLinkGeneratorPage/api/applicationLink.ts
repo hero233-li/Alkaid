@@ -6,15 +6,10 @@ import type {
   ApplicationLinkApiResponse,
   ApplicationLinkBackendConfig,
   ApplicationLinkJob,
-  ApplicationLinkJobStatus,
   ApplicationLinkSubmission,
 } from '../model/types';
+import type { JobSubmission } from '../../../types/jobs';
 
-interface JobSubmission {
-  id: number;
-  status: ApplicationLinkJobStatus;
-  progress: number;
-}
 const requestConfig = { showGlobalProgress: false, useResponseDelay: false };
 
 function unwrap<T>(response: ApplicationLinkApiResponse<T>, fallback: string) {

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef } from 'react';
+import { useCallback, useEffect, useRef } from 'react';
 import { Form, message } from 'antd';
 import {
   buildProductApplicationFields,
@@ -15,12 +15,9 @@ export function useProductApplicationForm(
 ) {
   const [form] = Form.useForm<ProductApplicationFormValues>();
   const previousCompanyName = useRef('');
-  const watchedValues = Form.useWatch([], form) || {};
+  const watchedValues = Form.useWatch([], form);
   const cacheKey = config ? formCacheKey(pageInstanceKey, config.version) : '';
-  const fields = useMemo(
-    () => (config ? buildProductApplicationFields(config, watchedValues) : []),
-    [config, watchedValues],
-  );
+  const fields = config ? buildProductApplicationFields(config, watchedValues || {}) : [];
 
   useEffect(() => {
     if (!config || !cacheKey) {

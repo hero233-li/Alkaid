@@ -1,4 +1,5 @@
 import type { Dayjs } from 'dayjs';
+import type { JobActivityStatus, JobSnapshot } from '../../types/jobs';
 
 export interface ApplicationDataFormValues {
   environment: string;
@@ -38,22 +39,8 @@ export interface ApplicationDataApiResponse<T> {
   data: T;
   message?: string;
 }
-export type ApplicationDataJobStatus =
-  | 'submitting'
-  | 'pending'
-  | 'running'
-  | 'retrying'
-  | 'success'
-  | 'failed'
-  | 'cancelled'
-  | 'timed_out';
-export interface ApplicationDataJob {
-  id: number;
-  status: ApplicationDataJobStatus;
-  progress: number;
-  result: { records?: ApplicationDataRecord[] };
-  errorMessage?: string;
-}
+export type ApplicationDataJobStatus = JobActivityStatus;
+export type ApplicationDataJob = JobSnapshot<{ records?: ApplicationDataRecord[] }>;
 export interface ApplicationDataActivity {
   jobId?: number;
   status: ApplicationDataJobStatus;

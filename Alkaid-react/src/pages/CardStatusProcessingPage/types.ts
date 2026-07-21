@@ -1,3 +1,5 @@
+import type { JobActivityStatus, JobSnapshot } from '../../types/jobs';
+
 export interface CardRecord {
   environment: string;
   customerNo: string;
@@ -26,26 +28,12 @@ export interface CardApiResponse<T> {
   data: T;
   message?: string;
 }
-export type CardJobStatus =
-  | 'submitting'
-  | 'pending'
-  | 'running'
-  | 'retrying'
-  | 'success'
-  | 'failed'
-  | 'cancelled'
-  | 'timed_out';
-export interface CardJob {
-  id: number;
-  status: CardJobStatus;
-  progress: number;
-  currentStep?: string;
-  result: {
-    cards?: CardRecord[];
-    actionResult?: { card: CardRecord; message: string; password?: string };
-  };
-  errorMessage?: string;
+export type CardJobStatus = JobActivityStatus;
+export interface CardJobResult {
+  cards?: CardRecord[];
+  actionResult?: { card: CardRecord; message: string; password?: string };
 }
+export type CardJob = JobSnapshot<CardJobResult>;
 export interface CardActivity {
   jobId?: number;
   label: string;

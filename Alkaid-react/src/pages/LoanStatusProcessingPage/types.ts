@@ -1,3 +1,5 @@
+import type { JobActivityStatus, JobSnapshot } from '../../types/jobs';
+
 export interface LoanRepaymentPlanItem {
   installmentNo: number;
   repaymentDate: string;
@@ -123,26 +125,12 @@ export interface LoanApiResponse<T> {
   data: T;
   message?: string;
 }
-export type LoanJobStatus =
-  | 'submitting'
-  | 'pending'
-  | 'running'
-  | 'retrying'
-  | 'success'
-  | 'failed'
-  | 'cancelled'
-  | 'timed_out';
-export interface LoanJob {
-  id: number;
-  status: LoanJobStatus;
-  progress: number;
-  currentStep?: string;
-  result: {
-    cards?: LoanCardRecord[];
-    actionResult?: { card: LoanCardRecord; message: string };
-  };
-  errorMessage?: string;
+export type LoanJobStatus = JobActivityStatus;
+export interface LoanJobResult {
+  cards?: LoanCardRecord[];
+  actionResult?: { card: LoanCardRecord; message: string };
 }
+export type LoanJob = JobSnapshot<LoanJobResult>;
 export interface LoanActivity {
   jobId?: number;
   label: string;

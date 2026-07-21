@@ -63,6 +63,7 @@ export interface ProductApplicationResult {
   payload: Record<string, unknown>;
   logs: JobLog[];
   errorMessage?: string;
+  errorCode?: string;
   traceId: string;
   idempotencyKey: string;
   attemptCount: number;

@@ -1,3 +1,5 @@
+import type { JobActivityStatus, JobSnapshot } from '../../../types/jobs';
+
 export type LinkCategory = '太阳码' | '动态链接';
 
 export interface ApplicationLinkApiResponse<T> {
@@ -58,23 +60,8 @@ export interface ApplicationLinkResult {
   generatedAt: string;
 }
 
-export type ApplicationLinkJobStatus =
-  | 'submitting'
-  | 'pending'
-  | 'running'
-  | 'retrying'
-  | 'success'
-  | 'failed'
-  | 'cancelled'
-  | 'timed_out';
-
-export interface ApplicationLinkJob {
-  id: number;
-  status: ApplicationLinkJobStatus;
-  progress: number;
-  result: { links?: ApplicationLinkResult };
-  errorMessage?: string;
-}
+export type ApplicationLinkJobStatus = JobActivityStatus;
+export type ApplicationLinkJob = JobSnapshot<{ links?: ApplicationLinkResult }>;
 
 export interface ApplicationLinkActivity {
   jobId?: number;
