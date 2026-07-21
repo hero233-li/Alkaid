@@ -32,7 +32,7 @@ def search_verification(request: HttpRequest) -> JsonResponse:
     try:
         submission = VerificationSearchSubmission.model_validate_json(request.body)
     except ValidationError as exc:
-        return api_error(f"核实审批查询参数无效：{exc}", status=400)
+        return api_error(f"核实审批查询参数无效：{exc}", status=400, code="invalid_submission")
     return _submit_job(
         request,
         operation=VerificationOperation.SEARCH,
@@ -47,7 +47,7 @@ def claim_verification(request: HttpRequest, task_id: str) -> JsonResponse:
     try:
         submission = VerificationTaskOperationSubmission.model_validate_json(request.body)
     except ValidationError as exc:
-        return api_error(f"核实任务上下文无效：{exc}", status=400)
+        return api_error(f"核实任务上下文无效：{exc}", status=400, code="invalid_submission")
     if submission.context.id != task_id:
         return api_error("核实任务上下文与请求路径不一致", status=400)
     return _submit_job(
@@ -64,7 +64,7 @@ def return_verification(request: HttpRequest, task_id: str) -> JsonResponse:
     try:
         submission = VerificationTaskOperationSubmission.model_validate_json(request.body)
     except ValidationError as exc:
-        return api_error(f"核实任务上下文无效：{exc}", status=400)
+        return api_error(f"核实任务上下文无效：{exc}", status=400, code="invalid_submission")
     if submission.context.id != task_id:
         return api_error("核实任务上下文与请求路径不一致", status=400)
     return _submit_job(
@@ -81,7 +81,7 @@ def refresh_verification(request: HttpRequest, task_id: str) -> JsonResponse:
     try:
         submission = VerificationTaskOperationSubmission.model_validate_json(request.body)
     except ValidationError as exc:
-        return api_error(f"核实任务上下文无效：{exc}", status=400)
+        return api_error(f"核实任务上下文无效：{exc}", status=400, code="invalid_submission")
     if submission.context.id != task_id:
         return api_error("核实任务上下文与请求路径不一致", status=400)
     return _submit_job(
@@ -102,7 +102,7 @@ def update_verification_item_status(
     try:
         submission = VerificationItemUpdateSubmission.model_validate_json(request.body)
     except ValidationError as exc:
-        return api_error(f"核实项参数无效：{exc}", status=400)
+        return api_error(f"核实项参数无效：{exc}", status=400, code="invalid_submission")
     if submission.context.id != task_id:
         return api_error("核实任务上下文与请求路径不一致", status=400)
     job_submission = VerificationItemJobSubmission(
@@ -130,7 +130,7 @@ def submit_verification_action(
         parsed_action = VerificationAction(action)
         submission = VerificationActionSubmission.model_validate_json(request.body)
     except ValidationError as exc:
-        return api_error(f"核实审批操作上下文无效：{exc}", status=400)
+        return api_error(f"核实审批操作上下文无效：{exc}", status=400, code="invalid_submission")
     except ValueError:
         return api_error("核实审批操作无效", status=400)
     if submission.action != parsed_action.value:

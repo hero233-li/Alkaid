@@ -1,5 +1,6 @@
 from typing import Any
 
+from apps.core.errors import InvalidSubmission
 from apps.integrations.application_link.models import GenerateApplicationLinkRequest
 from apps.integrations.mock_product.models import ProductCheckInput, ProductSubmissionInput
 from apps.integrations.product_system.application_link import generate_application_link
@@ -17,7 +18,7 @@ from apps.product_data.product_applications.schemas import (
 )
 
 
-class ProductConfigurationError(ValueError):
+class ProductConfigurationError(InvalidSubmission):
     pass
 
 

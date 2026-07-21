@@ -7,11 +7,11 @@ from django.db import transaction
 from django.http import HttpRequest, JsonResponse
 from django.utils import timezone
 
+from apps.core.errors import DomainError
 from apps.core.responses import api_error, api_response
 from apps.jobs.dispatch import enqueue_job
 from apps.jobs.models import ApiCallStatus, Job, JobApiCall
 from apps.jobs.services import (
-    JobConflict,
     add_job_log,
     create_job,
     resolve_job_identifiers,
@@ -70,10 +70,8 @@ def submit_async_job(
             execution_config_version=snapshot_version,
             execution_config_snapshot=snapshot or {},
         )
-    except JobConflict as exc:
-        return api_error(str(exc), status=409)
-    except ValueError as exc:
-        return api_error(str(exc), status=400)
+    except DomainError as exc:
+        return api_error(str(exc), status=exc.status_code, code=exc.code)
     if created.created:
         transaction.on_commit(lambda: enqueue_job(created.job))
     return api_response(

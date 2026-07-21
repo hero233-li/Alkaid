@@ -2,12 +2,18 @@ import json
 
 import httpx
 import pytest
+from django.test import override_settings
 
 import apps.integrations.product_system.verification_approval as verification_module
+from apps.core.errors import ContextIntegrityError
 from apps.integrations.http import HttpClient, HttpClientConfig
+from apps.integrations.verification_approval.models import VerificationTask
 from apps.jobs.models import ApiCallStatus, Job, JobStatus
-from apps.jobs.services import create_job, mark_job_success
-from apps.product_data.verification_approval.services import _context_digest
+from apps.jobs.services import create_job, mark_job_running, mark_job_success
+from apps.product_data.verification_approval.context_proof import (
+    build_context_proof,
+    validate_context_proof,
+)
 
 
 def _client(handler) -> HttpClient:
@@ -18,6 +24,48 @@ def _client(handler) -> HttpClient:
         ),
         transport=httpx.MockTransport(handler),
     )
+
+
+@pytest.mark.django_db
+def test_context_proof_uses_independent_key_and_rejects_tampering() -> None:
+    task = VerificationTask.model_validate(
+        {
+            "id": "VERIFY-PROOF",
+            "contractNo": "HT-PROOF",
+            "ownershipStatus": "claimed",
+            "taskStatus": "待核实",
+            "node": "核实",
+            "tellerNo": "T1",
+            "organizationNo": "ORG1",
+            "productName": "产品 B",
+            "items": [],
+        }
+    )
+    source = create_job(
+        kind="verification_approval",
+        name="proof source",
+        product="verification-approval",
+        payload={"operation": "search"},
+        trace_id="proof-trace",
+        idempotency_key="proof-source",
+        timeout_seconds=30,
+    ).job
+    proof = build_context_proof(source, task)
+    mark_job_running(source.id, "proof-worker")
+    mark_job_success(
+        source.id,
+        {
+            "task": task.model_dump(mode="json", by_alias=True),
+            "contextProof": proof.model_dump(mode="json", by_alias=True),
+        },
+    )
+
+    with override_settings(SECRET_KEY="rotated-django-key"):
+        validate_context_proof(proof, task)
+
+    tampered = task.model_copy(update={"teller_no": "TAMPERED"})
+    with pytest.raises(ContextIntegrityError, match="校验失败"):
+        validate_context_proof(proof, tampered)
 
 
 def _submit_search(client, capture, *, key: str) -> Job:
@@ -59,11 +107,10 @@ def _submit_action(client, capture, *, key: str) -> Job:
         idempotency_key=f"{key}-source",
         timeout_seconds=30,
     ).job
-    proof = {
-        "sourceJobId": source.id,
-        "version": 1,
-        "digest": _context_digest(source.id, 1, task),
-    }
+    proof = build_context_proof(source, VerificationTask.model_validate(task)).model_dump(
+        mode="json", by_alias=True
+    )
+    mark_job_running(source.id, f"{key}-source-task")
     mark_job_success(source.id, {"task": task, "contextProof": proof})
 
     with capture(execute=True):

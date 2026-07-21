@@ -4,10 +4,12 @@ from functools import lru_cache
 from pathlib import Path
 from typing import Any
 
+from apps.core.errors import ConfigurationError
+
 MESSAGE_ROOT = Path(__file__).with_name("raw_messages")
 
 
-class ExternalMessageConfigurationError(ValueError):
+class ExternalMessageConfigurationError(ConfigurationError):
     pass
 
 

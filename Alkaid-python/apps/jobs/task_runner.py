@@ -4,6 +4,7 @@ from typing import Any
 from celery.exceptions import SoftTimeLimitExceeded
 from django.utils import timezone
 
+from apps.core.errors import DomainError
 from apps.jobs.models import Job
 from apps.jobs.services import (
     InvalidJobTransition,
@@ -40,5 +41,6 @@ def run_menu_task(
     except Exception as exc:
         if on_error is not None:
             on_error(job, exc)
-        mark_job_failed(job.id, f"{type(exc).__name__}: {exc}")
+        error_code = exc.code if isinstance(exc, DomainError) else "internal_error"
+        mark_job_failed(job.id, f"{type(exc).__name__}: {exc}", error_code=error_code)
         raise

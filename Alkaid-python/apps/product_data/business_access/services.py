@@ -1,5 +1,6 @@
 from typing import Any
 
+from apps.core.errors import InvalidSubmission
 from apps.integrations.business_access.models import SearchBusinessAccessRequest
 from apps.integrations.product_system.business_access import (
     invalidate_business_access,
@@ -36,7 +37,7 @@ def execute_business_access(
     if operation == BusinessAccessOperation.SEARCH:
         submission = BusinessAccessSearchSubmission.model_validate(data)
         if submission.environment not in BUSINESS_ACCESS_ENVIRONMENTS:
-            raise ValueError("业务准入环境无效")
+            raise InvalidSubmission("业务准入环境无效")
         records = search_business_access(
             job,
             SearchBusinessAccessRequest(
@@ -66,7 +67,7 @@ def execute_business_access(
         )
         return {"pushResult": _dump(result)}
 
-    raise ValueError(f"不支持的业务准入操作：{operation}")
+    raise InvalidSubmission(f"不支持的业务准入操作：{operation}")
 
 
 def _dump(value: Any) -> dict[str, Any]:

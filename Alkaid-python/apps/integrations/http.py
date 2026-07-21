@@ -1,16 +1,15 @@
-import json
 import logging
 import time
 import uuid
 from collections.abc import Callable, Mapping
-from datetime import datetime, timezone
-from email.utils import parsedate_to_datetime
 from typing import Any, Protocol
 
 import httpx
 from pydantic import BaseModel, ConfigDict, Field
 
 from apps.integrations.contracts import BusinessResponseError, HttpResult, ResponseModel
+from apps.integrations.http_payload import response_body, serialize_form
+from apps.integrations.retry_policy import retry_delay
 
 logger = logging.getLogger(__name__)
 
@@ -143,7 +142,7 @@ class HttpClient:
         response_handle: object | None = None
         attempt_started = started
         request_json = body.model_dump(mode="json", exclude_none=True) if body else None
-        request_form = _serialize_form(form_data) if form_data is not None else None
+        request_form = serialize_form(form_data) if form_data is not None else None
         audit_body = (
             {"query": dict(params or {}), "form": dict(form_data or {})}
             if form_data is not None
@@ -186,7 +185,7 @@ class HttpClient:
                         response_handle,
                         status_code=response.status_code,
                         headers=dict(response.headers),
-                        response_body=_response_body(response),
+                        response_body=response_body(response),
                         duration_ms=round((time.monotonic() - attempt_started) * 1000),
                         error=ExternalServiceError(
                             "external service temporarily unavailable",
@@ -225,7 +224,7 @@ class HttpClient:
                     response_handle,
                     status_code=response.status_code,
                     headers=dict(response.headers),
-                    response_body=_response_body(response),
+                    response_body=response_body(response),
                     duration_ms=round((time.monotonic() - attempt_started) * 1000),
                     error=exc,
                 )
@@ -238,7 +237,7 @@ class HttpClient:
                     response_handle,
                     status_code=response.status_code,
                     headers=dict(response.headers),
-                    response_body=_response_body(response),
+                    response_body=response_body(response),
                     duration_ms=round((time.monotonic() - attempt_started) * 1000),
                     error=exc,
                 )
@@ -251,7 +250,7 @@ class HttpClient:
                     response_handle,
                     status_code=response.status_code,
                     headers=dict(response.headers),
-                    response_body=_response_body(response),
+                    response_body=response_body(response),
                     duration_ms=round((time.monotonic() - attempt_started) * 1000),
                     error=exc,
                 )
@@ -261,7 +260,7 @@ class HttpClient:
                 response_handle,
                 status_code=response.status_code,
                 headers=dict(response.headers),
-                response_body=_response_body(response),
+                response_body=response_body(response),
                 duration_ms=round((time.monotonic() - attempt_started) * 1000),
                 error=None,
             )
@@ -269,15 +268,16 @@ class HttpClient:
             data=result,
             status_code=response.status_code,
             headers=dict(response.headers),
-            body=_response_body(response),
+            body=response_body(response),
         )
 
     def _retry_delay(self, attempt: int, response: httpx.Response | None) -> float:
-        retry_after = _retry_after_seconds(response)
-        if retry_after is not None:
-            return min(retry_after, self.config.retry_max_backoff_seconds)
-        exponential = self.config.retry_backoff_seconds * (2**attempt)
-        return min(exponential, self.config.retry_max_backoff_seconds)
+        return retry_delay(
+            attempt,
+            response,
+            backoff_seconds=self.config.retry_backoff_seconds,
+            max_backoff_seconds=self.config.retry_max_backoff_seconds,
+        )
 
     @staticmethod
     def _log(
@@ -299,44 +299,3 @@ class HttpClient:
                 "attempts": attempts,
             },
         )
-
-
-def _response_body(response: httpx.Response) -> Any:
-    try:
-        return response.json()
-    except ValueError:
-        return response.text
-
-
-def _serialize_form(form_data: Mapping[str, Any] | None) -> dict[str, str] | None:
-    if form_data is None:
-        return None
-    serialized: dict[str, str] = {}
-    for name, value in form_data.items():
-        if value is None:
-            continue
-        if isinstance(value, (dict, list, tuple)):
-            serialized[name] = json.dumps(value, ensure_ascii=False, separators=(",", ":"))
-        elif isinstance(value, bool):
-            serialized[name] = "true" if value else "false"
-        else:
-            serialized[name] = str(value)
-    return serialized
-
-
-def _retry_after_seconds(response: httpx.Response | None) -> float | None:
-    if response is None:
-        return None
-    value = response.headers.get("Retry-After", "").strip()
-    if not value:
-        return None
-    try:
-        return max(0.0, float(value))
-    except ValueError:
-        try:
-            retry_at = parsedate_to_datetime(value)
-        except (TypeError, ValueError, OverflowError):
-            return None
-        if retry_at.tzinfo is None:
-            retry_at = retry_at.replace(tzinfo=timezone.utc)
-        return max(0.0, (retry_at - datetime.now(timezone.utc)).total_seconds())

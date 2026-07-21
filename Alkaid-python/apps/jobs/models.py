@@ -40,6 +40,7 @@ class Job(models.Model):
     execution_config_version = models.PositiveIntegerField(default=1)
     execution_config_snapshot = models.JSONField(default=dict)
     error_message = models.TextField(blank=True, default="")
+    error_code = models.CharField(max_length=64, blank=True, default="")
     trace_id = models.CharField(max_length=128, db_index=True)
     idempotency_key = models.CharField(max_length=128, unique=True)
     attempt_count = models.PositiveIntegerField(default=1)

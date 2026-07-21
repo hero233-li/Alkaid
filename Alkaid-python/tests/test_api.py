@@ -199,6 +199,7 @@ def test_oversized_request_identifier_returns_400_before_job_creation(client) ->
     )
 
     assert response.status_code == 400
+    assert response.json()["code"] == "invalid_submission"
     assert Job.objects.count() == 0
 
 

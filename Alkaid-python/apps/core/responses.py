@@ -16,5 +16,14 @@ def api_response(
     )
 
 
-def api_error(message: str, *, status: int, data: Any = None) -> JsonResponse:
-    return api_response(data, message=message, status=status, ok=False)
+def api_error(
+    message: str,
+    *,
+    status: int,
+    code: str = "request_error",
+    data: Any = None,
+) -> JsonResponse:
+    return JsonResponse(
+        {"ok": False, "code": code, "message": message, "data": data},
+        status=status,
+    )

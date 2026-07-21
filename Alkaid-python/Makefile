@@ -1,4 +1,4 @@
-.PHONY: install lock migrate run worker beat test lint format check
+.PHONY: install lock migrate run worker beat test lint typecheck format check
 
 PYTHON_BOOTSTRAP ?= python3.10
 VENV_DIR ?= ../.venv
@@ -36,6 +36,9 @@ test:
 lint:
 	$(PYTHON) -m ruff check .
 
+typecheck:
+	$(PYTHON) -m mypy
+
 format:
 	$(PYTHON) -m ruff format .
 
@@ -47,3 +50,4 @@ check:
 	$(TEST_ENV) $(PYTHON) -m pytest
 	$(PYTHON) -m ruff check .
 	$(PYTHON) -m ruff format --check .
+	$(PYTHON) -m mypy

@@ -1,5 +1,6 @@
 from typing import Any
 
+from apps.core.errors import InvalidSubmission
 from apps.integrations.product_system.loan_status import apply_loan_action, search_loans
 from apps.jobs.commands import parse_menu_command
 from apps.jobs.models import Job
@@ -32,7 +33,7 @@ def execute_loan_status(job: Job) -> dict[str, Any]:
             submission.integration_payload(),
         )
         return {"actionResult": result}
-    raise ValueError(f"不支持的贷款状态操作：{operation}")
+    raise InvalidSubmission(f"不支持的贷款状态操作：{operation}")
 
 
 def get_loan_status_config() -> dict[str, object]:

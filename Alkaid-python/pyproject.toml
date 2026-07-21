@@ -14,6 +14,7 @@ dependencies = [
 
 [project.optional-dependencies]
 dev = [
+    "mypy>=1.15,<2",
     "pytest>=8.3,<9",
     "pytest-django>=4.11,<5",
     "ruff>=0.12,<1",
@@ -23,6 +24,24 @@ dev = [
 DJANGO_SETTINGS_MODULE = "config.settings.test"
 python_files = ["test_*.py"]
 addopts = "-q"
+
+[tool.mypy]
+python_version = "3.10"
+plugins = ["pydantic.mypy"]
+strict = true
+show_error_codes = true
+files = [
+    "apps/jobs/specs.py",
+    "apps/jobs/commands.py",
+    "apps/integrations/contracts.py",
+    "apps/integrations/*/models.py",
+    "apps/product_data/*/schemas.py",
+]
+
+[[tool.mypy.overrides]]
+module = ["apps.jobs.models"]
+follow_imports = "skip"
+ignore_errors = true
 
 [tool.ruff]
 target-version = "py310"

@@ -2,6 +2,7 @@ import logging
 
 from django.utils import timezone
 
+from apps.core.errors import InvalidSubmission
 from apps.integrations.application_link.models import (
     GenerateApplicationLinkRequest,
 )
@@ -22,7 +23,7 @@ from apps.product_data.catalog import ProductCatalog, ProductCatalogError, load_
 logger = logging.getLogger(__name__)
 
 
-class ApplicationLinkConfigurationError(ValueError):
+class ApplicationLinkConfigurationError(InvalidSubmission):
     pass
 
 

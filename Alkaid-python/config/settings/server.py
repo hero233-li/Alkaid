@@ -27,6 +27,8 @@ if missing_external_settings:
     )
 if MOCK_FIXED_SYSTEM_TOKEN == "mock-fixed-token":  # noqa: F405
     raise ImproperlyConfigured("MOCK_FIXED_SYSTEM_TOKEN must be set for server mode")
+if VERIFICATION_CONTEXT_SIGNING_KEY == "local-only-verification-context-key":  # noqa: F405
+    raise ImproperlyConfigured("VERIFICATION_CONTEXT_SIGNING_KEY must be set for server mode")
 
 SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
 SESSION_COOKIE_SECURE = True

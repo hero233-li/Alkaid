@@ -25,7 +25,7 @@ def application_link_config(request: HttpRequest) -> JsonResponse:
     try:
         config = get_application_link_config()
     except ProductCatalogError as exc:
-        return api_error(f"申请链接配置无效：{exc}", status=500)
+        return api_error(f"申请链接配置无效：{exc}", status=exc.status_code, code=exc.code)
     return api_response(config.model_dump(mode="json"))
 
 
@@ -38,7 +38,7 @@ def generate_application_link(request: HttpRequest) -> JsonResponse:
         )
         execution_snapshot = resolve_execution_snapshot(submission)
     except (ValidationError, ApplicationLinkConfigurationError, ValueError) as exc:
-        return api_error(f"申请链接参数无效：{exc}", status=400)
+        return api_error(f"申请链接参数无效：{exc}", status=400, code="invalid_submission")
 
     return submit_async_job(
         request,

@@ -1,5 +1,7 @@
 from typing import Any, NamedTuple
 
+from apps.jobs.compatibility import ensure_legacy_job_compatibility
+
 
 class JobSpec(NamedTuple):
     task: str
@@ -44,7 +46,13 @@ LEGACY_KIND_ALIASES = {
 
 
 def canonical_job_kind(kind: str) -> str:
-    return LEGACY_KIND_ALIASES.get(kind, kind.split(".", 1)[0])
+    if kind in LEGACY_KIND_ALIASES:
+        ensure_legacy_job_compatibility()
+        return LEGACY_KIND_ALIASES[kind]
+    if "." in kind:
+        ensure_legacy_job_compatibility()
+        return kind.split(".", 1)[0]
+    return kind
 
 
 def job_spec(kind: str) -> JobSpec:

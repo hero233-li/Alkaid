@@ -3,6 +3,7 @@ import logging
 
 from django.conf import settings
 
+from apps.core.errors import InvalidSubmission
 from apps.jobs.commands import parse_menu_command
 from apps.jobs.models import Job
 from apps.mock_data.application_generator import generate_application_record
@@ -26,7 +27,7 @@ def execute_application_data_generation(job: Job) -> dict[str, object]:
     )
     submission = ApplicationDataSubmission.model_validate(data)
     if submission.environment not in APPLICATION_DATA_ENVIRONMENTS:
-        raise ValueError("申请数据生成环境无效")
+        raise InvalidSubmission("申请数据生成环境无效")
     start = job.id * 100_000
     logger.info(
         "application_data_generation_started",
@@ -50,7 +51,7 @@ def execute_application_data_generation(job: Job) -> dict[str, object]:
             json.dumps(record, ensure_ascii=False, separators=(",", ":")).encode("utf-8")
         ) + (1 if records else 0)
         if result_bytes > settings.APPLICATION_DATA_MAX_RESULT_BYTES:
-            raise ValueError("申请数据生成结果超过安全大小限制，请减少生成数量")
+            raise InvalidSubmission("申请数据生成结果超过安全大小限制，请减少生成数量")
         records.append(record)
     return {"records": records}
 

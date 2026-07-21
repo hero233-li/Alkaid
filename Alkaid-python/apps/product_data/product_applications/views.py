@@ -25,7 +25,7 @@ def product_application_config(request: HttpRequest) -> JsonResponse:
     try:
         config = load_product_ui_config()
     except ProductCatalogError as exc:
-        return api_error(str(exc), status=500)
+        return api_error(str(exc), status=exc.status_code, code=exc.code)
     return api_response(config.model_dump(mode="json"))
 
 
@@ -45,14 +45,10 @@ def create_product_application(request: HttpRequest) -> JsonResponse:
             execution_snapshot=execution_snapshot,
             catalog=catalog,
         )
-    except (
-        ValidationError,
-        ProductConfigurationError,
-        ProductCatalogError,
-        ValueError,
-        json.JSONDecodeError,
-    ) as exc:
-        return api_error(f"产品申请参数无效：{exc}", status=400)
+    except ProductCatalogError as exc:
+        return api_error(str(exc), status=exc.status_code, code=exc.code)
+    except (ValidationError, ProductConfigurationError, ValueError, json.JSONDecodeError) as exc:
+        return api_error(f"产品申请参数无效：{exc}", status=400, code="invalid_submission")
 
     return submit_async_job(
         request,

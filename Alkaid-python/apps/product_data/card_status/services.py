@@ -1,5 +1,6 @@
 from typing import Any
 
+from apps.core.errors import InvalidSubmission
 from apps.integrations.product_system.card_status import apply_card_action, search_cards
 from apps.jobs.commands import parse_menu_command
 from apps.jobs.models import Job
@@ -34,7 +35,7 @@ def execute_card_status(job: Job) -> dict[str, Any]:
             target_card=submission.target_card,
         )
         return {"actionResult": result.model_dump(mode="json", by_alias=True, exclude_none=True)}
-    raise ValueError(f"不支持的卡状态操作：{operation}")
+    raise InvalidSubmission(f"不支持的卡状态操作：{operation}")
 
 
 def get_card_status_config() -> dict[str, object]:

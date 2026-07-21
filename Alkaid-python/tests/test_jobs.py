@@ -1,8 +1,10 @@
-from datetime import timedelta
+from datetime import date, timedelta
 
 import pytest
 from django.utils import timezone
 
+from apps.core.errors import ContextIntegrityError, InvalidSubmission
+from apps.jobs.compatibility import ensure_legacy_job_compatibility
 from apps.jobs.http import sanitize
 from apps.jobs.models import JobStatus
 from apps.jobs.services import (
@@ -18,6 +20,7 @@ from apps.jobs.services import (
     request_job_retry,
     resolve_job_identifiers,
 )
+from apps.jobs.task_runner import run_menu_task
 
 
 def _create_job(*, key: str = "key-1", kind: str = "test"):
@@ -62,7 +65,7 @@ def test_job_creation_is_idempotent_and_detects_conflicts() -> None:
 def test_request_identifiers_are_bounded_before_database_write() -> None:
     generated_key, generated_trace = resolve_job_identifiers(None, None)
     assert generated_key and generated_trace
-    with pytest.raises(ValueError, match="最长"):
+    with pytest.raises(InvalidSubmission, match="最长"):
         resolve_job_identifiers("x" * 129, "trace")
 
 
@@ -105,6 +108,61 @@ def test_late_worker_result_does_not_overwrite_terminal_timeout() -> None:
 
     job.refresh_from_db()
     assert job.status == JobStatus.TIMED_OUT
+
+
+@pytest.mark.django_db
+def test_success_and_timeout_race_preserves_first_terminal_result() -> None:
+    job = _create_job(key="timeout-success-race")
+    mark_job_running(job.id, "worker-timeout-race")
+    mark_job_timed_out(job.id)
+    mark_job_success(job.id, {"late": "success"})
+
+    job.refresh_from_db()
+    assert job.status == JobStatus.TIMED_OUT
+    assert job.result == {}
+
+
+@pytest.mark.django_db
+def test_cancel_and_success_race_allows_inflight_worker_to_finish() -> None:
+    job = _create_job(key="cancel-success-race")
+    mark_job_running(job.id, "worker-cancel-race")
+    request_job_cancel(job.id)
+    mark_job_success(job.id, {"externalWrite": "completed"})
+
+    job.refresh_from_db()
+    assert job.status == JobStatus.SUCCESS
+    assert job.result == {"externalWrite": "completed"}
+
+
+@pytest.mark.django_db
+def test_completed_job_cannot_be_claimed_by_another_worker() -> None:
+    job = _create_job(key="completed-worker-race")
+    mark_job_running(job.id, "worker-first")
+    mark_job_success(job.id, {"done": True})
+
+    assert mark_job_running(job.id, "worker-second") is None
+    job.refresh_from_db()
+    assert job.status == JobStatus.SUCCESS
+
+
+@pytest.mark.django_db
+def test_domain_error_code_is_persisted_on_failed_job() -> None:
+    job = _create_job(key="domain-error-code")
+
+    def fail_with_domain_error(_job):
+        raise ContextIntegrityError("核实任务上下文已经过期，请重新查询")
+
+    with pytest.raises(ContextIntegrityError):
+        run_menu_task(
+            job_id=job.id,
+            celery_task_id="worker-domain-error",
+            queue_timeout_message="queue timeout",
+            execute=fail_with_domain_error,
+        )
+
+    job.refresh_from_db()
+    assert job.status == JobStatus.FAILED
+    assert job.error_code == "context_integrity_error"
 
 
 @pytest.mark.django_db
@@ -221,3 +279,10 @@ def test_http_audit_sanitizer_masks_nested_sensitive_values() -> None:
     result = sanitize({"REQ_BODY": {"request": {"idtyNo": "1234567890", "normal": "ok"}}})
     assert result["REQ_BODY"]["request"]["idtyNo"] == "12***90"
     assert result["REQ_BODY"]["request"]["normal"] == "ok"
+
+
+def test_legacy_job_contract_has_an_explicit_removal_date() -> None:
+    ensure_legacy_job_compatibility(today=date(2026, 10, 31))
+
+    with pytest.raises(InvalidSubmission, match="兼容期已结束"):
+        ensure_legacy_job_compatibility(today=date(2026, 11, 1))

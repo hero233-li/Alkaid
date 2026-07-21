@@ -52,7 +52,7 @@ def retry_job(request: HttpRequest, job_id: int) -> JsonResponse:
     try:
         job = request_job_retry(job_id)
     except InvalidJobTransition as exc:
-        return api_error(str(exc), status=409)
+        return api_error(str(exc), status=exc.status_code, code=exc.code)
     transaction.on_commit(lambda: enqueue_job(job))
     return api_response(serialize_job(job))
 
@@ -66,7 +66,7 @@ def cancel_job(request: HttpRequest, job_id: int) -> JsonResponse:
     try:
         job = request_job_cancel(job_id)
     except InvalidJobTransition as exc:
-        return api_error(str(exc), status=409)
+        return api_error(str(exc), status=exc.status_code, code=exc.code)
     if job.celery_task_id:
         try:
             current_app.control.revoke(job.celery_task_id, terminate=False)
