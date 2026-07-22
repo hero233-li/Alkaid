@@ -105,7 +105,7 @@ catalogVersion
 
 ```typescript
 产品A
-环境1
+UAT1
 ```
 
 提交时直接把产品显示名称发送给后端。
@@ -122,7 +122,7 @@ catalogVersion
 环境也已经有：
 
 ```json
-{"label": "环境1", "value": "env-1"}
+{"label": "UAT1", "value": "UAT1"}
 ```
 
 但 Catalog 为兼容旧入口，同时接受：
@@ -156,23 +156,23 @@ Mock 可以兼容，不代表真实接口可以兼容。
 ```text
 UI 显示：
 产品A
-环境1
+UAT1
 
 表单真实值：
 product-a
-env-1
+UAT1
 
 Job：
 product-a
-env-1
+UAT1
 
 Snapshot：
 product-a
-env-1
+UAT1
 
 外系统：
 product-a
-env-1
+UAT1
 ```
 
 前端 Select 改为：
@@ -322,7 +322,7 @@ serialize_job(
 
 ```json
 {
-  "environment": "环境1",
+  "environment": "UAT1",
   "category": "动态链接",
   "requiredFields": [...]
 }
@@ -342,8 +342,8 @@ GET /api/product-data/tools/application-links/config
 {
   "environments": [
     {
-      "label": "环境1",
-      "value": "env-1"
+      "label": "UAT1",
+      "value": "UAT1"
     }
   ],
   "products": [
@@ -352,7 +352,7 @@ GET /api/product-data/tools/application-links/config
       "value": "product-a",
       "routes": [
         {
-          "environment": "env-1",
+          "environment": "UAT1",
           "category": "动态链接"
         }
       ]
@@ -645,7 +645,7 @@ Handler Registry
 
 3. 前后端统一：
    product-a
-   env-1
+   UAT1
 
 4. 确认真实外系统请求/响应协议
 
@@ -696,15 +696,15 @@ Handler Registry
 
 ## P0-2：接受，已实施
 
-真实代码验证：产品申请已经使用 `product-b`、`env-1`，但申请链接页面和产品目录中的申请链接路由仍混用“产品B”“环境1”等显示名称；旧后端又同时允许产品 code 和 name。
+真实代码验证：产品申请已经使用 `product-b`、`UAT1`，但申请链接页面和产品目录中的申请链接路由仍混用“产品B”“UAT1”等显示名称；旧后端又同时允许产品 code 和 name。
 
 理由：显示名称会变化，不应作为 Job payload、快照和外部请求中的稳定标识。
 
 实施结果：
 
-- 产品目录的申请链接 route 环境统一改为 `env-1`、`env-2`、`env-3`。
-- 前端选择框显示 label，但提交 `product-a` / `env-1` 等 value。
-- HTTP 边界增加兼容归一化：旧调用方仍可提交“产品A”“环境1”，进入 Job 前会转换为稳定 code。
+- 产品目录的申请链接 route 环境统一改为 `UAT1`、`UAT2`、`UATC`。
+- 前端选择框显示 label，但提交 `product-a` / `UAT1` 等 value。
+- HTTP 边界增加兼容归一化：旧调用方仍可提交“产品A”“UAT1”，进入 Job 前会转换为稳定 code。
 - 新 Job 的 `product`、`payload` 和 `execution_config_snapshot` 均保存稳定 code。
 - 产品目录加载时新增环境 code 引用校验，错误配置会在启动/加载阶段失败。
 

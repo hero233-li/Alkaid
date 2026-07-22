@@ -1,5 +1,3 @@
-import time
-
 from django.conf import settings
 from django.http import HttpRequest, JsonResponse
 from django.views.decorators.csrf import csrf_exempt
@@ -22,7 +20,6 @@ from apps.product_data.verification_approval.services import get_verification_co
 
 @require_GET
 def verification_config(request: HttpRequest) -> JsonResponse:
-    _debug_delay()
     return api_response(get_verification_config())
 
 
@@ -161,9 +158,3 @@ def _submit_job(
         timeout_seconds=settings.VERIFICATION_APPROVAL_TIMEOUT_SECONDS,
         snapshot={"operation": operation.value, "version": 1},
     )
-
-
-def _debug_delay() -> None:
-    delay_seconds = max(0.0, settings.VERIFICATION_APPROVAL_DEBUG_DELAY_SECONDS)
-    if delay_seconds:
-        time.sleep(delay_seconds)

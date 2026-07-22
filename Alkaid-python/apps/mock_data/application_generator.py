@@ -49,7 +49,7 @@ def generate_application_record(
     if sequence < 0:
         raise ValueError("sequence 不能为负数")
     certificate_no = generate_identity_number(sequence, birth_date, gender)
-    credit_code = generate_social_credit_code(sequence)
+    credit_code = generate_social_credit_code(sequence, company_type=company_type)
     return GeneratedApplicationData(
         environment=environment,
         customer_no=f"C{sequence:012d}",
@@ -98,7 +98,11 @@ def generate_company_name(sequence: int, company_type: str) -> str:
     second = (
         PLACE_LEFT[second_index % len(PLACE_LEFT)] + PLACE_RIGHT[second_index // len(PLACE_LEFT)]
     )
-    suffix = "公司" if company_type == "91" else "个体"
+    suffix = {
+        "91": "公司",
+        "92": "个体",
+        "51": "社会团体",
+    }[company_type]
     return first + second + suffix
 
 
@@ -131,9 +135,10 @@ def _luhn_check_digit(body: str) -> str:
     return str((10 - total % 10) % 10)
 
 
-def generate_social_credit_code(sequence: int) -> str:
-    registration_authority = "9"
-    entity_type = "123"[sequence % 3]
+def generate_social_credit_code(sequence: int, *, company_type: str = "91") -> str:
+    if company_type not in {"91", "92", "51"}:
+        raise ValueError("不支持的主体类型")
+    registration_authority, entity_type = company_type
     region = REGION_CODES[sequence % len(REGION_CODES)]
     organization = _encode_base31(sequence, 9)
     body = registration_authority + entity_type + region + organization

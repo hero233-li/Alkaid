@@ -7,6 +7,7 @@ PIP ?= $(PYTHON) -m pip
 PIP_INSTALL_ARGS ?=
 UPGRADE_PIP ?= false
 LOCAL_ENV ?= DJANGO_SETTINGS_MODULE=config.settings.local DB_ENGINE=mysql MYSQL_HOST=$${MYSQL_HOST:-127.0.0.1} MYSQL_PORT=$${MYSQL_PORT:-3306} MYSQL_DATABASE=$${MYSQL_DATABASE:-alkaid_dev} MYSQL_USER=$${MYSQL_USER:-workflow} MYSQL_PASSWORD=$${MYSQL_PASSWORD:-workflow} MYSQL_SSL_DISABLED=$${MYSQL_SSL_DISABLED:-true} CELERY_BROKER_URL=$${CELERY_BROKER_URL:-amqp://workflow:workflow@127.0.0.1:5672//} CELERY_QUEUE=$${CELERY_QUEUE:-alkaid-local} CELERY_TASK_ALWAYS_EAGER=$${CELERY_TASK_ALWAYS_EAGER:-false}
+DEV_BIND_ADDRESS ?= 0.0.0.0
 TEST_ENV ?= DJANGO_SETTINGS_MODULE=config.settings.test CELERY_TASK_ALWAYS_EAGER=true
 
 install:
@@ -22,7 +23,7 @@ migrate:
 	$(LOCAL_ENV) $(PYTHON) manage.py migrate
 
 run:
-	$(LOCAL_ENV) $(PYTHON) -m uvicorn config.asgi:application --host 127.0.0.1 --port 8000 --reload
+	$(LOCAL_ENV) $(PYTHON) -m uvicorn config.asgi:application --host $(DEV_BIND_ADDRESS) --port 8000 --reload
 
 worker:
 	$(LOCAL_ENV) $(PYTHON) -m celery -A config worker --loglevel=INFO --pool=solo --queues=$${CELERY_QUEUE:-alkaid-local}

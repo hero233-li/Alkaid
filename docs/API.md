@@ -124,7 +124,7 @@
   "name": "产品A-产品申请",
   "product": "product-a",
   "payload": {
-    "environment": "env-1",
+    "environment": "UAT1",
     "product": "product-a",
     "location": "广东省广州市",
     "branch": "广东省机构",
@@ -175,7 +175,7 @@
 
 ```json
 {
-  "env": "env-1",
+  "env": "UAT1",
   "product": "product-b",
   "category": "太阳码",
   "cooperationProjectId": "PROJECT-001",

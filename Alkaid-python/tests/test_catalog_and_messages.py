@@ -18,7 +18,10 @@ def test_catalog_is_cached_and_derives_execution_and_ui_views() -> None:
     assert load_product_catalog() is catalog
     assert set(catalog.products) == {"product-a", "product-b", "product-c"}
     assert catalog.snapshot("product-a", "dynamic").required_fields
-    assert {product.value for product in load_product_ui_config().products} == set(catalog.products)
+    assert {product.value for product in load_product_ui_config().products} == {
+        "product-b",
+        "product-c",
+    }
     validate_product_endpoint_coverage(set(catalog.products))
 
 

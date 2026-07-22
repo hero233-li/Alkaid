@@ -54,7 +54,7 @@ def test_application_link_real_mode_requires_confirmed_protocol() -> None:
         generate_application_link(
             job,
             GenerateApplicationLinkRequest(
-                env="env-1",
+                env="UAT1",
                 product="product-a",
                 category="太阳码",
                 payload={},

@@ -39,3 +39,15 @@ export async function saveHomeShortcutKeys(menuKeys: string[]) {
   });
   return unwrap(data, '保存首页入口失败');
 }
+
+export async function getHiddenMenuKeys() {
+  const { data } = await apiClient.get<ApiResponse<string[]>>('/portal/hidden-menus');
+  return unwrap(data, '获取菜单显示设置失败');
+}
+
+export async function saveHiddenMenuKeys(menuKeys: string[]) {
+  const { data } = await apiClient.put<ApiResponse<string[]>>('/portal/hidden-menus', {
+    menuKeys,
+  });
+  return unwrap(data, '保存菜单显示设置失败');
+}

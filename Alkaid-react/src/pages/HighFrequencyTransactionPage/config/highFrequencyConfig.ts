@@ -1,5 +1,5 @@
 export const highFrequencyConfig = {
-  environments: ['环境1', '环境2', '环境3'],
+  environments: ['UAT1', 'UAT2', 'UATC'],
   functionCodes: [
     { value: 'risk050009', label: 'risk050009 - 高频交易' },
     { value: 'risk050010', label: 'risk050010 - 账户频繁变更' },

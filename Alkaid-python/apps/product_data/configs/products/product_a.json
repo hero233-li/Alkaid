@@ -4,7 +4,7 @@
   "productType": "whitelist_product",
   "switchField": "whitelistEnabled",
   "defaultApplicationMethod": "normal",
-  "environments": ["env-1", "env-2", "env-3"],
+  "environments": ["UAT1", "UAT2", "UATC"],
   "locations": [
     {
       "label": "广东省广州市",
@@ -45,10 +45,11 @@
     {"name": "extraReason", "expose": false, "enabledFor": ["extra"], "requiredFor": ["extra"]}
   ],
   "features": {
+    "productApplication": false,
     "applicationLinks": [
-      {"environment": "env-1", "category": "动态链接", "requiredFields": ["customerName", "customerPhone", "customerCertificateNo", "customerCompanyName", "customerCompanyCode"]},
-      {"environment": "env-2", "category": "动态链接", "requiredFields": ["customerName", "customerPhone", "customerCertificateNo", "customerCompanyName", "customerCompanyCode"]},
-      {"environment": "env-3", "category": "太阳码"}
+      {"environment": "UAT1", "category": "动态链接", "requiredFields": ["customerName", "customerPhone", "customerCertificateNo", "customerCompanyName", "customerCompanyCode"]},
+      {"environment": "UAT2", "category": "动态链接", "requiredFields": ["customerName", "customerPhone", "customerCertificateNo", "customerCompanyName", "customerCompanyCode"]},
+      {"environment": "UATC", "category": "太阳码"}
     ]
   }
 }

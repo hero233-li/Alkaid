@@ -17,6 +17,8 @@ GitLab 分支、提交、发布和文件上传规范见
 
 ## 本机 DEV
 
+本机接口工作台默认启用；如需临时关闭，可设置 `WORKBENCH_ENABLED=false`。服务端配置默认关闭接口工作台，只有显式设置 `WORKBENCH_ENABLED=true` 才会显示和开放对应菜单。
+
 后端本机开发使用 MySQL 5.7。`npm run dev` 默认会同时启动前端、Django 和 Celery worker；
 如果暂时没有 RabbitMQ，可以在 `.env.local` 里把 `CELERY_TASK_ALWAYS_EAGER=true`，脚本会跳过
 worker，任务改为同步执行。
@@ -64,6 +66,8 @@ macOS   -> scripts/macos/dev-start.command
 
 脚本会在缺少后端 `.venv` 或前端 `node_modules` 时自动安装依赖。默认只使用一个窗口，
 前端、后端和 Celery worker 的日志都会实时显示在当前终端，不再额外写入开发日志文件。
+Windows 单窗口模式使用项目内的安全轮询监管器重启 Uvicorn 子进程，保存 Python 文件时不会
+再通过控制台 Ctrl+C 连带终止 Vite、Celery 或启动 PowerShell。
 
 单独启动 worker：
 
@@ -91,8 +95,9 @@ set NPM_INSTALL_CMD=npm ci --prefer-offline
 npm run dev
 ```
 
-- 前端：<http://127.0.0.1:5174>
-- 后端：<http://127.0.0.1:8000>
+- 本机前端：<http://127.0.0.1:5174>
+- 本机后端：<http://127.0.0.1:8000>
+- 内网访问：启动日志会自动打印 `LAN frontend` 和 `LAN backend` 地址
 - 存活检查：<http://127.0.0.1:8000/health/>
 - 就绪检查：<http://127.0.0.1:8000/health/ready/>
 

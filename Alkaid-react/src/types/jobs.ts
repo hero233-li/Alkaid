@@ -36,8 +36,31 @@ export interface JobLog {
   createdAt: string;
 }
 
+export interface JobApiCall {
+  id: number;
+  jobId: number;
+  taskId?: string;
+  attempt: number;
+  step?: string;
+  method: string;
+  url: string;
+  requestHeaders: Record<string, unknown>;
+  requestBody?: unknown;
+  responseStatus?: number;
+  responseHeaders: Record<string, unknown>;
+  responseBody?: unknown;
+  responseTruncated: boolean;
+  durationMs?: number;
+  status: 'running' | 'success' | 'failed';
+  errorType?: string;
+  errorMessage?: string;
+  startedAt: string;
+  finishedAt?: string;
+}
+
 export interface JobDetail<TResult = Record<string, unknown>> extends JobSnapshot<TResult> {
   name: string;
+  product: string;
   workflowId: string;
   stage: string;
   payload?: Record<string, unknown>;
@@ -47,6 +70,9 @@ export interface JobDetail<TResult = Record<string, unknown>> extends JobSnapsho
   timeoutSeconds: number;
   deadlineAt?: string;
   createdAt: string;
+  logs?: JobLog[];
+  apiCalls?: JobApiCall[];
+  apiCallCount: number;
 }
 
 export interface JobStreamStatus {

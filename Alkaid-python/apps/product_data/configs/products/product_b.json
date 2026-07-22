@@ -4,7 +4,7 @@
   "productType": "red_shield_product",
   "switchField": "redShieldEnabled",
   "defaultApplicationMethod": "normal",
-  "environments": ["env-1", "env-2", "env-3"],
+  "environments": ["UAT1", "UAT2", "UATC"],
   "locations": [
     {
       "label": "示例地区",
@@ -43,9 +43,9 @@
   ],
   "features": {
     "applicationLinks": [
-      {"environment": "env-1", "category": "太阳码"},
-      {"environment": "env-2", "category": "太阳码"},
-      {"environment": "env-3", "category": "太阳码"}
+      {"environment": "UAT1", "category": "太阳码"},
+      {"environment": "UAT2", "category": "太阳码"},
+      {"environment": "UATC", "category": "太阳码"}
     ]
   }
 }

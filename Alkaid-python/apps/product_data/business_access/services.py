@@ -18,7 +18,7 @@ from apps.product_data.business_access.schemas import (
     BusinessAccessSearchSubmission,
 )
 
-BUSINESS_ACCESS_ENVIRONMENTS = ("环境1", "环境2", "环境3")
+BUSINESS_ACCESS_ENVIRONMENTS = ("UAT1", "UAT2", "UATC")
 
 
 def get_business_access_config() -> dict[str, object]:

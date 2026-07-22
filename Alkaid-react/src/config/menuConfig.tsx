@@ -8,8 +8,6 @@ import {
   Home,
   Layers,
   Link2,
-  Megaphone,
-  MousePointerClick,
   PackagePlus,
   SendHorizontal,
   Search,
@@ -22,9 +20,7 @@ import { ENABLE_HIGH_FREQUENCY } from './runtimeConfig';
 
 const InterfaceWorkbenchPage = lazy(() => import('../pages/InterfaceWorkbenchPage'));
 const BusinessAccessPage = lazy(() => import('../pages/BusinessAccessPage'));
-const HomeShortcutManagementPage = lazy(() => import('../pages/HomeShortcutManagementPage'));
 const ProductApplyPage = lazy(() => import('../pages/ProductApplyPage'));
-const ReleaseManagementPage = lazy(() => import('../pages/ReleaseManagementPage'));
 const SystemSettingsPage = lazy(() => import('../pages/SystemSettingsPage'));
 const WelcomePage = lazy(() => import('../pages/WelcomePage'));
 const WorkflowLearningPage = lazy(() => import('../pages/WorkflowLearningPage'));
@@ -34,6 +30,7 @@ const ApplicationDataGeneratorPage = lazy(() => import('../pages/ApplicationData
 const CardStatusProcessingPage = lazy(() => import('../pages/CardStatusProcessingPage'));
 const LoanStatusProcessingPage = lazy(() => import('../pages/LoanStatusProcessingPage'));
 const HighFrequencyTransactionPage = lazy(() => import('../pages/HighFrequencyTransactionPage'));
+const TaskCenterPage = lazy(() => import('../pages/TaskCenterPage'));
 
 export const DEFAULT_MENU_KEY = 'home';
 export const DEFAULT_OPEN_MENU_KEYS = ['product-data', 'automation', 'system'];
@@ -41,6 +38,7 @@ export const DEFAULT_OPEN_MENU_KEYS = ['product-data', 'automation', 'system'];
 export interface MenuRenderContext {
   onNavigate: (menuKey: string) => void;
   tabKey: string;
+  unavailableMenuKeys: string[];
 }
 
 export interface AppMenuNode {
@@ -49,6 +47,7 @@ export interface AppMenuNode {
   route?: string;
   icon?: ReactNode;
   closable?: boolean;
+  visibilityConfigurable?: boolean;
   children?: AppMenuNode[];
   render?: (context: MenuRenderContext) => ReactNode;
 }
@@ -60,8 +59,11 @@ export const appMenuTree: AppMenuNode[] = [
     route: '/',
     icon: <Home size={18} />,
     closable: false,
-    render: ({ onNavigate }) => (
-      <WelcomePage shortcuts={getHomeShortcutCandidates()} onNavigate={onNavigate} />
+    render: ({ onNavigate, unavailableMenuKeys }) => (
+      <WelcomePage
+        shortcuts={getHomeShortcutCandidates(unavailableMenuKeys)}
+        onNavigate={onNavigate}
+      />
     ),
   },
   {
@@ -162,7 +164,7 @@ export const appMenuTree: AppMenuNode[] = [
         label: '任务中心',
         route: '/automation/jobs',
         icon: <ClipboardList size={18} />,
-        render: () => <PlaceholderPage title="任务中心" />,
+        render: () => <TaskCenterPage />,
       },
       {
         key: 'batch',
@@ -207,33 +209,31 @@ export const appMenuTree: AppMenuNode[] = [
         render: () => <InterfaceWorkbenchPage />,
       },
       {
-        key: 'release-management',
-        label: '版本管理',
-        route: '/system/releases',
-        icon: <Megaphone size={18} />,
-        render: () => <ReleaseManagementPage />,
-      },
-      {
-        key: 'home-shortcut-management',
-        label: '首页入口管理',
-        route: '/system/home-shortcuts',
-        icon: <MousePointerClick size={18} />,
-        render: () => <HomeShortcutManagementPage pages={getHomeShortcutCandidates()} />,
-      },
-      {
         key: 'settings',
         label: '系统设置',
         route: '/system/settings',
         icon: <Settings size={18} />,
-        render: () => (
-          <SystemSettingsPage
-            pages={appMenuLeafNodes.map((item) => ({
-              key: item.key,
-              label: item.label,
-              configurable: item.closable !== false,
-            }))}
-          />
-        ),
+        visibilityConfigurable: false,
+        render: ({ unavailableMenuKeys }) => {
+          const unavailableKeys = new Set(unavailableMenuKeys);
+          const shortcutKeys = new Set(
+            getHomeShortcutCandidates(unavailableMenuKeys).map((item) => item.key),
+          );
+          return (
+            <SystemSettingsPage
+              pages={appMenuLeafNodes
+                .filter((item) => !unavailableKeys.has(item.key))
+                .map((item) => ({
+                  key: item.key,
+                  label: item.label,
+                  icon: item.icon,
+                  configurable:
+                    item.visibilityConfigurable !== false && item.key !== DEFAULT_MENU_KEY,
+                  homeShortcutConfigurable: shortcutKeys.has(item.key),
+                }))}
+            />
+          );
+        },
       },
     ],
   },
@@ -280,16 +280,26 @@ export const appMenuLeafNodes = menuIndex.leafNodes;
 export const appMenuNodeMap = menuIndex.nodeMap;
 export const appMenuParentMap = menuIndex.parentMap;
 
-const HOME_SHORTCUT_EXCLUDED_KEYS = new Set([
-  'home',
-  'release-management',
-  'home-shortcut-management',
-  'settings',
-]);
+export function getVisibleMenuItems(
+  hiddenMenuKeys: string[],
+  unavailableMenuKeys: string[] = [],
+): MenuProps['items'] {
+  const hiddenKeys = new Set([...hiddenMenuKeys, ...unavailableMenuKeys]);
+  const filterNodes = (nodes: AppMenuNode[]): AppMenuNode[] =>
+    nodes.flatMap((node) => {
+      if (!node.children?.length) return hiddenKeys.has(node.key) ? [] : [node];
+      const children = filterNodes(node.children);
+      return children.length ? [{ ...node, children }] : [];
+    });
+  return toAntdMenuItems(filterNodes(appMenuTree));
+}
 
-export function getHomeShortcutCandidates() {
+const HOME_SHORTCUT_EXCLUDED_KEYS = new Set(['home', 'settings']);
+
+export function getHomeShortcutCandidates(unavailableMenuKeys: string[] = []) {
+  const unavailableKeys = new Set(unavailableMenuKeys);
   return appMenuLeafNodes
-    .filter((item) => !HOME_SHORTCUT_EXCLUDED_KEYS.has(item.key))
+    .filter((item) => !HOME_SHORTCUT_EXCLUDED_KEYS.has(item.key) && !unavailableKeys.has(item.key))
     .map((item) => ({ key: item.key, label: item.label, icon: item.icon }));
 }
 
@@ -327,6 +337,12 @@ export function isMenuLeaf(key: string) {
 
 export function renderMenuPage(key: string, context: MenuRenderContext) {
   const node = appMenuNodeMap.get(key);
-  const page = node?.render ? node.render(context) : <PlaceholderPage title={node?.label || key} />;
+  const page = context.unavailableMenuKeys.includes(key) ? (
+    <PlaceholderPage title={`${node?.label || key}（当前部署不可用）`} />
+  ) : node?.render ? (
+    node.render(context)
+  ) : (
+    <PlaceholderPage title={node?.label || key} />
+  );
   return <Suspense fallback={<div className="page-surface">正在加载页面...</div>}>{page}</Suspense>;
 }

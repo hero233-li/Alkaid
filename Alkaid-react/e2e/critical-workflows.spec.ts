@@ -4,14 +4,14 @@ const productConfig = {
   id: 'e2e-products',
   version: 1,
   environments: [
-    { label: '测试环境一', value: 'env-1' },
-    { label: '测试环境二', value: 'env-2' },
+    { label: '测试环境一', value: 'UAT1' },
+    { label: '测试环境二', value: 'UAT2' },
   ],
   products: [
     {
       label: '测试产品',
       value: 'product-a',
-      environments: ['env-1', 'env-2'],
+      environments: ['UAT1', 'UAT2'],
       locations: [
         {
           label: '测试地区',
@@ -189,9 +189,10 @@ test('核实审批操作复用查询返回的完整上下文', async ({ page }) 
     ),
   );
 
-  await page.route('**/api/product-data/verification-approval/config', (route) =>
-    route.fulfill({ json: ok({ environments: ['测试环境'], categories: ['贷款'] }) }),
-  );
+  await page.route('**/api/product-data/verification-approval/config', async (route) => {
+    await new Promise((resolve) => setTimeout(resolve, 250));
+    await route.fulfill({ json: ok({ environments: ['测试环境'], categories: ['贷款'] }) });
+  });
   await page.route('**/api/product-data/verification-approval/search', (route) =>
     route.fulfill({ json: ok(jobSubmission(201)) }),
   );
@@ -219,6 +220,7 @@ test('核实审批操作复用查询返回的完整上下文', async ({ page }) 
   });
 
   await page.goto('/#/product-data/verification-approval');
+  await expect(page.getByRole('dialog', { name: '核实审批处理中' })).toHaveCount(0);
   await page.getByLabel('合同号').fill('HT-E2E-001');
   await page.getByRole('button', { name: '搜索' }).click();
   await expect(page.getByText('柜员号：TELLER-007')).toBeVisible();
@@ -254,13 +256,7 @@ test('核实审批操作复用查询返回的完整上下文', async ({ page }) 
   });
 });
 
-test('同一菜单多标签切换时隔离并恢复表单缓存', async ({ page }) => {
-  await page.addInitScript(() => {
-    localStorage.setItem(
-      'alioth_page_multi_open_by_menu',
-      JSON.stringify({ 'product-application': true }),
-    );
-  });
+test('重复点击同一菜单时复用标签并保留表单缓存', async ({ page }) => {
   await mockProductConfig(page);
   await page.goto('/#/product-data/product-application');
 
@@ -269,16 +265,27 @@ test('同一菜单多标签切换时隔离并恢复表单缓存', async ({ page 
   await page.getByText('测试环境二', { exact: true }).last().click();
   await page.getByText('产品申请', { exact: true }).first().click();
 
-  await expect(page.getByRole('tab', { name: '产品申请-1' })).toBeVisible();
-  await expect(page.getByRole('tab', { name: '产品申请-2' })).toBeVisible();
-  await expect(page.locator('.ant-tabs-tabpane-active [title="测试环境一"]')).toBeVisible();
-
-  await page.getByRole('tab', { name: '产品申请-1' }).click();
+  await expect(page.getByRole('tab', { name: '产品申请' })).toHaveCount(1);
   await expect(page.locator('.ant-tabs-tabpane-active [title="测试环境二"]')).toBeVisible();
   const cachedDrafts = await page.evaluate(() =>
     Object.keys(sessionStorage)
       .filter((key) => key.startsWith('alioth:product-application-form:'))
       .map((key) => sessionStorage.getItem(key)),
   );
-  expect(cachedDrafts.some((value) => value?.includes('env-2'))).toBe(true);
+  expect(cachedDrafts.some((value) => value?.includes('UAT2'))).toBe(true);
+});
+
+test('刷新时等待菜单配置完成后一次性显示最终菜单', async ({ page }) => {
+  await page.route('**/api/portal/hidden-menus', async (route) => {
+    await new Promise((resolve) => setTimeout(resolve, 350));
+    await route.fulfill({ json: ok(['card-status-processing']) });
+  });
+
+  await page.goto('/#/product-data/product-application');
+
+  await expect(page.locator('.app-sider .ant-menu')).toHaveCount(0);
+  await expect(page.getByText('产品申请', { exact: true }).first()).toBeVisible();
+  await expect(page.locator('.app-sider .ant-menu')).not.toHaveCount(0);
+  await expect(page.getByText('卡状态处理', { exact: true })).toHaveCount(0);
+  await expect(page.locator('.global-api-progress')).toHaveCount(0);
 });

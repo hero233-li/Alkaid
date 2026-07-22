@@ -17,7 +17,7 @@ describe('application data API', () => {
     });
 
     await submitApplicationData({
-      environment: '环境1',
+      environment: 'UAT1',
       currentDate: dayjs('2026-07-14'),
       birthDate: '1986-07-14',
       age: 40,
@@ -39,7 +39,7 @@ describe('application data API', () => {
     const get = vi.spyOn(apiClient, 'get').mockResolvedValue({
       data: {
         ok: true,
-        data: { environments: ['环境1'], genders: ['男', '女'], companyTypes: [], maxCount: 1000 },
+        data: { environments: ['UAT1'], genders: ['男', '女'], companyTypes: [], maxCount: 1000 },
       },
     });
     expect((await getApplicationDataConfig()).maxCount).toBe(1000);

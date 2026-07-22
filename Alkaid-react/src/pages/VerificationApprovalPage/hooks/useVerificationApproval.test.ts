@@ -65,7 +65,7 @@ describe('useVerificationApproval', () => {
 
     await act(() =>
       result.current.search({
-        environment: '环境1',
+        environment: 'UAT1',
         category: '合同核实',
         contractNo: 'HT-1',
       }),
@@ -97,7 +97,7 @@ describe('useVerificationApproval', () => {
 
     await act(() =>
       result.current.search({
-        environment: '环境1',
+        environment: 'UAT1',
         category: '合同核实',
         contractNo: 'HT-1',
       }),

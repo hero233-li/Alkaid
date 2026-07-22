@@ -18,7 +18,7 @@ class ApplicationDataSubmission(BaseModel):
     birth_date: date
     gender: str = Field(pattern=r"^(男|女)$")
     teller_no: str = Field(min_length=1, max_length=32)
-    company_type: str = Field(pattern=r"^(91|92)$")
+    company_type: str = Field(pattern=r"^(91|92|51)$")
     count: int = Field(ge=1, le=1_000)
 
     @field_validator("environment", "teller_no")

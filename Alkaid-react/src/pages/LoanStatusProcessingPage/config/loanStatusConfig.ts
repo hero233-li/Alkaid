@@ -1,6 +1,6 @@
 import type { LoanAction } from '../types';
 export const loanStatusConfig = {
-  environments: ['环境1', '环境2', '环境3'],
+  environments: ['UAT1', 'UAT2', 'UATC'],
   defaultTellerNo: '310310',
   counterparties: ['交易对手A', '交易对手B'],
   banks: ['交通银行', '工商银行', '建设银行'],

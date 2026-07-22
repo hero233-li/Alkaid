@@ -39,6 +39,11 @@ npm run dev:env
 默认只使用一个命令窗口：前端、后端和 Celery worker 的日志都会实时显示在当前窗口，
 不再额外写入开发日志文件。
 
+单窗口模式不会直接使用 Uvicorn 的 Windows `--reload`。项目通过
+`Alkaid-python\scripts\run_dev_server.py` 监测 Python 源文件，并且只重启后端子进程，避免
+Uvicorn 的 `CTRL_C_EVENT` 在保存 Python 文件时连带终止 Vite、Celery 和启动 PowerShell。
+前端仍由 Vite 自己热更新；生产启动方式不受影响。
+
 默认启动前会清理 `DEV_BACKEND_PORT` 和 `DEV_FRONTEND_PORT` 上的遗留监听进程，退出时按
 进程树停止后端和 Worker 并等待端口释放。若只想检测端口占用而不自动清理，在 `.env.local`
 设置 `DEV_CLEAN_STALE_PORTS=false`。权限不足时请使用管理员终端或手工停止日志中显示的 PID。
@@ -66,10 +71,14 @@ CELERY_QUEUE=alkaid-local
 npm run dev:split
 ```
 
-开发默认端口：
+开发默认监听 `0.0.0.0`，启动日志会同时打印本机地址和自动识别的局域网 IPv4 地址。其他内网
+电脑使用日志中的 `LAN frontend` 地址访问，例如 `http://192.168.1.20:5174`。端口仍为：
 
-- 前端：`http://127.0.0.1:5174`
-- 后端：`http://127.0.0.1:8000`
+- 前端：`5174`
+- 后端：`8000`
+
+可通过 `DEV_BIND_ADDRESS` 或 `DEV_LAN_IP` 覆盖监听地址和日志展示地址；Windows 防火墙首次询问
+时需要允许专用网络访问。
 
 当前本机 MySQL 配置写在项目根目录 `.env.local`。如需换库，直接改这个文件即可。
 
@@ -167,9 +176,9 @@ Alkaid-runtime\prod-start.bat
 不要把开发目录里的 `scripts\windows\prod-start.bat` 放入开机启动项。否则以后脚本本身改到一半，
 也可能影响开机。
 
-生产默认端口：
+生产默认监听 `0.0.0.0:9000`，启动日志会打印本机和局域网入口地址。可通过
+`WEB_BIND_ADDRESS`、`ALKAID_LAN_IP` 和 `DJANGO_ALLOWED_HOSTS` 覆盖。
 
-- 入口地址：`http://127.0.0.1:9000`
 - 生产数据库：`alkaid_prod`
 
 生产默认 MySQL：

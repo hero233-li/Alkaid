@@ -1,8 +1,5 @@
 import axios from 'axios';
 import { API_RESPONSE_DELAY_MS } from '../config/runtimeConfig';
-import { emitApiProgress } from './progress';
-
-let pendingApiRequests = 0;
 
 declare module 'axios' {
   export interface AxiosRequestConfig {
@@ -17,12 +14,29 @@ function wait(ms: number) {
   });
 }
 
-function updateApiProgress(delta: number) {
-  pendingApiRequests = Math.max(0, pendingApiRequests + delta);
-  emitApiProgress({
-    pending: pendingApiRequests,
-    delayMs: API_RESPONSE_DELAY_MS,
-  });
+export class ApiError extends Error {
+  status?: number;
+  code?: string;
+  traceId?: string;
+  retryable: boolean;
+  details?: unknown;
+
+  constructor(options: {
+    message: string;
+    status?: number;
+    code?: string;
+    traceId?: string;
+    retryable?: boolean;
+    details?: unknown;
+  }) {
+    super(options.message);
+    this.name = 'ApiError';
+    this.status = options.status;
+    this.code = options.code;
+    this.traceId = options.traceId;
+    this.retryable = options.retryable ?? false;
+    this.details = options.details;
+  }
 }
 
 function getErrorMessage(error: unknown): string {
@@ -49,16 +63,33 @@ function getErrorMessage(error: unknown): string {
   return error instanceof Error ? error.message : '请求失败';
 }
 
+export function toApiError(error: unknown): ApiError {
+  if (error instanceof ApiError) return error;
+  if (!axios.isAxiosError(error)) {
+    return new ApiError({ message: getErrorMessage(error), details: error });
+  }
+  const status = error.response?.status;
+  const data = error.response?.data;
+  const body = data && typeof data === 'object' ? (data as Record<string, unknown>) : undefined;
+  const traceHeader = error.response?.headers?.['x-trace-id'];
+  return new ApiError({
+    message: getErrorMessage(error),
+    status,
+    code: typeof body?.code === 'string' ? body.code : error.code,
+    traceId:
+      typeof body?.traceId === 'string'
+        ? body.traceId
+        : typeof traceHeader === 'string'
+          ? traceHeader
+          : undefined,
+    retryable: !status || status === 408 || status === 429 || status >= 500,
+    details: body?.data,
+  });
+}
+
 export const apiClient = axios.create({
   baseURL: '/api',
   timeout: 15000,
-});
-
-apiClient.interceptors.request.use((config) => {
-  if (config.showGlobalProgress !== false) {
-    updateApiProgress(1);
-  }
-  return config;
 });
 
 apiClient.interceptors.response.use(
@@ -66,19 +97,13 @@ apiClient.interceptors.response.use(
     if (response.config.useResponseDelay !== false && API_RESPONSE_DELAY_MS > 0) {
       await wait(API_RESPONSE_DELAY_MS);
     }
-    if (response.config.showGlobalProgress !== false) {
-      updateApiProgress(-1);
-    }
     return response;
   },
   async (error) => {
     if (error.config?.useResponseDelay !== false && API_RESPONSE_DELAY_MS > 0) {
       await wait(API_RESPONSE_DELAY_MS);
     }
-    if (error.config?.showGlobalProgress !== false) {
-      updateApiProgress(-1);
-    }
     if (axios.isCancel(error)) return Promise.reject(error);
-    return Promise.reject(new Error(getErrorMessage(error)));
+    return Promise.reject(toApiError(error));
   },
 );

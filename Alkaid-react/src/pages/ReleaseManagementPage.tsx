@@ -23,7 +23,11 @@ function formatDate(value: string) {
     : '-';
 }
 
-export default function ReleaseManagementPage() {
+interface ReleaseManagementPageProps {
+  embedded?: boolean;
+}
+
+export default function ReleaseManagementPage({ embedded = false }: ReleaseManagementPageProps) {
   const [form] = Form.useForm<ReleaseFormValues>();
   const [items, setItems] = useState<ReleaseNote[]>([]);
   const [loading, setLoading] = useState(false);
@@ -95,10 +99,10 @@ export default function ReleaseManagementPage() {
   };
 
   return (
-    <div className="page-surface">
+    <div className={embedded ? 'settings-embedded-page' : 'page-surface'}>
       <div className="page-title-row">
         <div>
-          <Typography.Title level={3}>版本管理</Typography.Title>
+          <Typography.Title level={embedded ? 5 : 3}>版本管理</Typography.Title>
           <Typography.Text type="secondary">维护首页展示的版本更新说明</Typography.Text>
         </div>
         <Button type="primary" icon={<Plus size={16} />} onClick={openCreateModal}>

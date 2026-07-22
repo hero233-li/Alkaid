@@ -9,6 +9,9 @@ if EXTERNAL_SYSTEM_MODE != "real":  # noqa: F405
 if CELERY_TASK_ALWAYS_EAGER:  # noqa: F405
     raise ImproperlyConfigured("server settings forbid CELERY_TASK_ALWAYS_EAGER=true")
 
+# The interface workbench is a local debugging tool. Server deployments must opt in.
+WORKBENCH_ENABLED = env_bool("WORKBENCH_ENABLED", False)  # noqa: F405
+
 required_external_settings = {
     "MOCK_PRODUCT_BASE_URL": MOCK_PRODUCT_BASE_URL,  # noqa: F405
     "APPLICATION_LINK_BASE_URL": APPLICATION_LINK_BASE_URL,  # noqa: F405

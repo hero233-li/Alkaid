@@ -65,18 +65,9 @@ export default function VerificationApprovalPage() {
         onCancel={approval.closeAction}
       />
       <VerificationWorkflowModal
-        active={
-          approvalForm.configLoading ||
-          approval.searching ||
-          approval.refreshing ||
-          approval.updating
-        }
-        label={
-          approvalForm.configLoading
-            ? '正在加载核实审批配置'
-            : (approval.activity?.label ?? '正在处理核实审批任务')
-        }
-        progress={approvalForm.configLoading ? 5 : (approval.activity?.progress ?? 5)}
+        active={approval.searching || approval.refreshing || approval.updating}
+        label={approval.activity?.label ?? '正在处理核实审批任务'}
+        progress={approval.activity?.progress ?? 5}
       />
     </div>
   );

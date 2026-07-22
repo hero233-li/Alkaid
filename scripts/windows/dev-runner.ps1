@@ -70,6 +70,25 @@ function Stop-ProcessTree($Process, $Name) {
 
 $DevBackendPort = Get-EnvOrDefault "DEV_BACKEND_PORT" "8000"
 $DevFrontendPort = Get-EnvOrDefault "DEV_FRONTEND_PORT" "5174"
+$DevBindAddress = Get-EnvOrDefault "DEV_BIND_ADDRESS" "0.0.0.0"
+$DevLanIp = Get-EnvOrDefault "DEV_LAN_IP" ""
+if ([string]::IsNullOrWhiteSpace($DevLanIp)) {
+    try {
+        $network = Get-NetIPConfiguration | Where-Object {
+            $_.IPv4DefaultGateway -and $_.NetAdapter.Status -eq "Up"
+        } | Select-Object -First 1
+        if ($network) {
+            $DevLanIp = $network.IPv4Address.IPAddress
+        }
+    }
+    catch {
+        $DevLanIp = ""
+    }
+}
+if ([string]::IsNullOrWhiteSpace($DevLanIp)) {
+    $DevLanIp = "127.0.0.1"
+}
+$DjangoAllowedHosts = Get-EnvOrDefault "DJANGO_ALLOWED_HOSTS" "localhost,127.0.0.1,$DevLanIp"
 $MysqlHost = Get-EnvOrDefault "MYSQL_HOST" "127.0.0.1"
 $MysqlPort = Get-EnvOrDefault "MYSQL_PORT" "3306"
 $MysqlDatabase = Get-EnvOrDefault "MYSQL_DATABASE" "alkaid_dev"
@@ -115,12 +134,16 @@ $env:MYSQL_SSL_DISABLED = $MysqlSslDisabled
 $env:CELERY_BROKER_URL = $CeleryBrokerUrl
 $env:CELERY_QUEUE = $CeleryQueue
 $env:CELERY_TASK_ALWAYS_EAGER = $CeleryAlwaysEager
+$env:DJANGO_ALLOWED_HOSTS = $DjangoAllowedHosts
 
 Write-Host "Runtime config:"
 Write-Host "  Python: $BackendPython"
 Write-Host "  Django settings: $env:DJANGO_SETTINGS_MODULE"
-Write-Host "  Backend: http://127.0.0.1:$DevBackendPort"
-Write-Host "  Frontend: http://127.0.0.1:$DevFrontendPort"
+Write-Host "  Bind address: $DevBindAddress"
+Write-Host "  Local backend: http://127.0.0.1:$DevBackendPort"
+Write-Host "  Local frontend: http://127.0.0.1:$DevFrontendPort"
+Write-Host "  LAN backend: http://$($DevLanIp):$DevBackendPort"
+Write-Host "  LAN frontend: http://$($DevLanIp):$DevFrontendPort"
 Write-Host "  Celery broker: $(Protect-UrlSecret $CeleryBrokerUrl)"
 Write-Host "  Celery queue: $CeleryQueue"
 Write-Host "  Celery eager: $CeleryAlwaysEager"
@@ -156,14 +179,12 @@ if ((Test-Truthy $DevStartWorker) -and -not (Test-Truthy $CeleryAlwaysEager)) {
     Write-Host "Celery worker started: pid=$($worker.Id)"
 }
 
-Write-Host "Starting backend on http://127.0.0.1:$DevBackendPort"
+Write-Host "Starting backend on http://$($DevLanIp):$DevBackendPort"
 
 $backendArgs = @(
-    "-m", "uvicorn",
-    "config.asgi:application",
-    "--host", "127.0.0.1",
-    "--port", $DevBackendPort,
-    "--reload"
+    "scripts\run_dev_server.py",
+    "--host", $DevBindAddress,
+    "--port", $DevBackendPort
 )
 
 $backend = Start-Process `
@@ -176,9 +197,9 @@ Write-Host "Backend started: pid=$($backend.Id)"
 
 try {
     $env:ALIOTH_API_TARGET = "http://127.0.0.1:$DevBackendPort"
-    Write-Host "Starting frontend on http://127.0.0.1:$DevFrontendPort"
+    Write-Host "Starting frontend on http://$($DevLanIp):$DevFrontendPort"
     Push-Location $FrontendDir
-    & npm run dev -- --port $DevFrontendPort
+    & npm run dev -- --host $DevBindAddress --port $DevFrontendPort
     $code = $LASTEXITCODE
     Pop-Location
     exit $code

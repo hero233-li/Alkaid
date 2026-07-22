@@ -8,6 +8,7 @@ from django.http import FileResponse, Http404, JsonResponse
 from django.utils.module_loading import import_string
 from django.views.decorators.http import require_GET
 
+from apps.core.responses import api_response
 from apps.integrations.mock_product.api import validate_product_endpoint_coverage
 from apps.integrations.mock_product.messages import validate_message_catalog
 from apps.product_data.catalog import load_product_catalog
@@ -52,6 +53,53 @@ def readiness(request):
         checks["error"] = type(exc).__name__
         return JsonResponse({"status": "not_ready", "checks": checks}, status=503)
     return JsonResponse({"status": "ready", "checks": checks})
+
+
+@require_GET
+def capabilities(request):
+    """Expose deployment capabilities without introducing an authentication requirement."""
+    real_mode = settings.EXTERNAL_SYSTEM_MODE == "real"
+    enabled = {
+        "product-application": True,
+        "business-access-query": True,
+        "application-link-generator": True,
+        "verification-approval": True,
+        "application-data-generator": True,
+        "card-status-processing": not real_mode,
+        "loan-status-processing": not real_mode,
+        "high-frequency-transaction": False,
+        "workflow-learning": False,
+        "workflow": False,
+        "jobs": True,
+        "batch": False,
+        "schedule": False,
+        "data": False,
+        "workbench": bool(getattr(settings, "WORKBENCH_ENABLED", settings.DEBUG)),
+        "settings": True,
+    }
+    reasons = {
+        "card-status-processing": "真实外系统操作尚未配置",
+        "loan-status-processing": "真实外系统操作尚未配置",
+        "high-frequency-transaction": "后端接口尚未实现",
+        "workflow-learning": "Workflow Lab 后端尚未启用",
+        "workflow": "功能尚未实现",
+        "batch": "功能尚未实现",
+        "schedule": "功能尚未实现",
+        "data": "功能尚未实现",
+        "workbench": "服务端部署默认关闭接口工作台",
+    }
+    return api_response(
+        {
+            "externalSystemMode": settings.EXTERNAL_SYSTEM_MODE,
+            "features": {
+                key: {
+                    "enabled": value,
+                    "reason": "" if value else reasons.get(key, "当前部署未启用"),
+                }
+                for key, value in enabled.items()
+            },
+        }
+    )
 
 
 def frontend(request, path: str = ""):

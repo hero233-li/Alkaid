@@ -74,7 +74,7 @@ def _submit_search(client, capture, *, key: str) -> Job:
             "/api/product-data/verification-approval/search",
             data=json.dumps(
                 {
-                    "environment": "环境1",
+                    "environment": "UAT1",
                     "category": "合同核实",
                     "contractNo": "HT-FAILURE",
                 }

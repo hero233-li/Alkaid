@@ -36,18 +36,20 @@ export function useProductApplyJobs(pageInstanceKey: string) {
     setResults(cachedResults);
     setSelectedResult(null);
     let active = true;
-    void Promise.all(cachedResults.map((result) => getJobDetail(result.id).catch(() => null))).then(
-      (details) => {
-        if (!active) {
-          return;
+    void Promise.all(
+      cachedResults.map((result) =>
+        getJobDetail(result.id, { includePayload: true }).catch(() => null),
+      ),
+    ).then((details) => {
+      if (!active) {
+        return;
+      }
+      details.forEach((detail) => {
+        if (detail) {
+          updateResult(detail.id, (current) => mergeJobDetail(current, detail));
         }
-        details.forEach((detail) => {
-          if (detail) {
-            updateResult(detail.id, (current) => mergeJobDetail(current, detail));
-          }
-        });
-      },
-    );
+      });
+    });
     return () => {
       active = false;
     };
@@ -66,6 +68,7 @@ export function useProductApplyJobs(pageInstanceKey: string) {
       return;
     }
     let active = true;
+    let timer: number | undefined;
     const refresh = async () => {
       if (document.visibilityState !== 'visible') {
         return;
@@ -80,11 +83,18 @@ export function useProductApplyJobs(pageInstanceKey: string) {
         }
       });
     };
-    void refresh();
-    const timer = window.setInterval(() => void refresh(), 1000);
+    const schedule = async () => {
+      await refresh();
+      if (active) {
+        timer = window.setTimeout(() => void schedule(), 1000);
+      }
+    };
+    void schedule();
     return () => {
       active = false;
-      window.clearInterval(timer);
+      if (timer !== undefined) {
+        window.clearTimeout(timer);
+      }
     };
   }, [activeJobKey, updateResult]);
 
@@ -93,7 +103,7 @@ export function useProductApplyJobs(pageInstanceKey: string) {
       return;
     }
     let active = true;
-    void getJobDetail(selectedResultId)
+    void getJobDetail(selectedResultId, { includePayload: true })
       .then((detail) => {
         if (active) {
           updateResult(detail.id, (current) => mergeJobDetail(current, detail));

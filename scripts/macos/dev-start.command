@@ -7,6 +7,7 @@ DEFAULT_BASE="$(cd "$PROJECT_ROOT/.." && pwd)"
 
 DEV_BACKEND_PORT="${DEV_BACKEND_PORT:-8000}"
 DEV_FRONTEND_PORT="${DEV_FRONTEND_PORT:-5174}"
+DEV_BIND_ADDRESS="${DEV_BIND_ADDRESS:-0.0.0.0}"
 ALKAID_RUNTIME_DIR="${ALKAID_RUNTIME_DIR:-$DEFAULT_BASE/Alkaid-runtime}"
 PYTHON_BOOTSTRAP="${PYTHON_BOOTSTRAP:-python3.10}"
 NPM_INSTALL_CMD="${NPM_INSTALL_CMD:-npm ci}"
@@ -21,6 +22,26 @@ MYSQL_SSL_DISABLED="${MYSQL_SSL_DISABLED:-true}"
 CELERY_BROKER_URL="${CELERY_BROKER_URL:-amqp://workflow:workflow@127.0.0.1:5672//}"
 CELERY_QUEUE="${CELERY_QUEUE:-alkaid-local}"
 CELERY_TASK_ALWAYS_EAGER="${CELERY_TASK_ALWAYS_EAGER:-false}"
+
+detect_lan_ip() {
+  local interface_name candidate
+  for interface_name in en0 en1 en2; do
+    candidate="$(ifconfig "$interface_name" 2>/dev/null | awk '/inet / && $2 != "127.0.0.1" { print $2; exit }')"
+    if [ -n "$candidate" ]; then
+      printf '%s' "$candidate"
+      return 0
+    fi
+  done
+  ifconfig 2>/dev/null | awk '
+    /inet / && $2 != "127.0.0.1" && $2 !~ /^169\.254\./ && $2 !~ /^198\.18\./ {
+      print $2
+      exit
+    }
+  '
+}
+
+DEV_LAN_IP="${DEV_LAN_IP:-$(detect_lan_ip)}"
+DJANGO_ALLOWED_HOSTS="${DJANGO_ALLOWED_HOSTS:-localhost,127.0.0.1${DEV_LAN_IP:+,$DEV_LAN_IP}}"
 
 is_truthy() {
   case "$(printf '%s' "$1" | tr '[:upper:]' '[:lower:]')" in
@@ -85,9 +106,10 @@ export MYSQL_SSL_DISABLED="$MYSQL_SSL_DISABLED"
 export CELERY_BROKER_URL="$CELERY_BROKER_URL"
 export CELERY_QUEUE="$CELERY_QUEUE"
 export CELERY_TASK_ALWAYS_EAGER="$CELERY_TASK_ALWAYS_EAGER"
+export DJANGO_ALLOWED_HOSTS="$DJANGO_ALLOWED_HOSTS"
 cd "$PROJECT_ROOT/Alkaid-python"
 "$BACKEND_PYTHON" manage.py migrate || exit 1
-"$BACKEND_PYTHON" -m uvicorn config.asgi:application --host 127.0.0.1 --port "$DEV_BACKEND_PORT" --reload
+"$BACKEND_PYTHON" -m uvicorn config.asgi:application --host "$DEV_BIND_ADDRESS" --port "$DEV_BACKEND_PORT" --reload
 EOF
 
   cat > "$WORKER_RUNNER" <<EOF
@@ -111,12 +133,12 @@ EOF
 #!/bin/zsh
 export ALIOTH_API_TARGET="http://127.0.0.1:$DEV_BACKEND_PORT"
 cd "$PROJECT_ROOT/Alkaid-react"
-npm run dev -- --port "$DEV_FRONTEND_PORT"
+npm run dev -- --host "$DEV_BIND_ADDRESS" --port "$DEV_FRONTEND_PORT"
 EOF
 
   chmod +x "$BACKEND_RUNNER" "$WORKER_RUNNER" "$FRONTEND_RUNNER"
 
-  echo "Starting dev backend on http://127.0.0.1:$DEV_BACKEND_PORT"
+  echo "Starting dev backend on http://${DEV_LAN_IP:-127.0.0.1}:$DEV_BACKEND_PORT"
   open -a Terminal "$BACKEND_RUNNER"
 
   if is_truthy "$DEV_START_WORKER" && ! is_truthy "$CELERY_TASK_ALWAYS_EAGER"; then
@@ -124,7 +146,7 @@ EOF
     open -a Terminal "$WORKER_RUNNER"
   fi
 
-  echo "Starting dev frontend on http://127.0.0.1:$DEV_FRONTEND_PORT"
+  echo "Starting dev frontend on http://${DEV_LAN_IP:-127.0.0.1}:$DEV_FRONTEND_PORT"
   open -a Terminal "$FRONTEND_RUNNER"
 
   echo "Dev services are starting in separate Terminal windows."
@@ -175,12 +197,18 @@ export MYSQL_SSL_DISABLED="$MYSQL_SSL_DISABLED"
 export CELERY_BROKER_URL="$CELERY_BROKER_URL"
 export CELERY_QUEUE="$CELERY_QUEUE"
 export CELERY_TASK_ALWAYS_EAGER="$CELERY_TASK_ALWAYS_EAGER"
+export DJANGO_ALLOWED_HOSTS="$DJANGO_ALLOWED_HOSTS"
 
 echo "Runtime config:"
 echo "  Python: $BACKEND_PYTHON"
 echo "  Django settings: $DJANGO_SETTINGS_MODULE"
-echo "  Backend: http://127.0.0.1:$DEV_BACKEND_PORT"
-echo "  Frontend: http://127.0.0.1:$DEV_FRONTEND_PORT"
+echo "  Bind address: $DEV_BIND_ADDRESS"
+echo "  Local frontend: http://127.0.0.1:$DEV_FRONTEND_PORT"
+echo "  Local backend: http://127.0.0.1:$DEV_BACKEND_PORT"
+if [ -n "$DEV_LAN_IP" ]; then
+  echo "  LAN frontend: http://$DEV_LAN_IP:$DEV_FRONTEND_PORT"
+  echo "  LAN backend: http://$DEV_LAN_IP:$DEV_BACKEND_PORT"
+fi
 echo "  Celery broker: $(mask_secret_url "$CELERY_BROKER_URL")"
 echo "  Celery queue: $CELERY_QUEUE"
 echo "  Celery eager: $CELERY_TASK_ALWAYS_EAGER"
@@ -207,13 +235,13 @@ fi
 
 (
   cd "$PROJECT_ROOT/Alkaid-python"
-  exec "$BACKEND_PYTHON" -m uvicorn config.asgi:application --host 127.0.0.1 --port "$DEV_BACKEND_PORT" --reload
+  exec "$BACKEND_PYTHON" -m uvicorn config.asgi:application --host "$DEV_BIND_ADDRESS" --port "$DEV_BACKEND_PORT" --reload
 ) &
 BACKEND_PID=$!
 
-echo "Starting dev backend on http://127.0.0.1:$DEV_BACKEND_PORT"
-echo "Starting dev frontend on http://127.0.0.1:$DEV_FRONTEND_PORT"
+echo "Starting dev backend on http://${DEV_LAN_IP:-127.0.0.1}:$DEV_BACKEND_PORT"
+echo "Starting dev frontend on http://${DEV_LAN_IP:-127.0.0.1}:$DEV_FRONTEND_PORT"
 
 export ALIOTH_API_TARGET="http://127.0.0.1:$DEV_BACKEND_PORT"
 cd "$PROJECT_ROOT/Alkaid-react"
-npm run dev -- --port "$DEV_FRONTEND_PORT"
+npm run dev -- --host "$DEV_BIND_ADDRESS" --port "$DEV_FRONTEND_PORT"

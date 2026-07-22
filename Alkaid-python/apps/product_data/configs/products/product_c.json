@@ -4,7 +4,7 @@
   "productType": "credit_product",
   "switchField": "creditEnabled",
   "defaultApplicationMethod": "normal",
-  "environments": ["env-1", "env-2", "env-3"],
+  "environments": ["UAT1", "UAT2", "UATC"],
   "locations": [
     {
       "label": "示例地区",
@@ -43,9 +43,9 @@
   ],
   "features": {
     "applicationLinks": [
-      {"environment": "env-1", "category": "动态链接", "requiredFields": ["customerName", "customerPhone", "customerCertificateNo", "customerCompanyName", "customerCompanyCode", "restoreStatus", "spcode"]},
-      {"environment": "env-2", "category": "动态链接", "requiredFields": ["customerName", "customerPhone", "customerCertificateNo", "customerCompanyName", "customerCompanyCode", "restoreStatus", "spcode"]},
-      {"environment": "env-3", "category": "动态链接", "requiredFields": ["customerName", "customerPhone", "customerCertificateNo", "customerCompanyName", "customerCompanyCode", "restoreStatus", "spcode"]}
+      {"environment": "UAT1", "category": "动态链接", "requiredFields": ["customerName", "customerPhone", "customerCertificateNo", "customerCompanyName", "customerCompanyCode", "restoreStatus", "spcode"]},
+      {"environment": "UAT2", "category": "动态链接", "requiredFields": ["customerName", "customerPhone", "customerCertificateNo", "customerCompanyName", "customerCompanyCode", "restoreStatus", "spcode"]},
+      {"environment": "UATC", "category": "动态链接", "requiredFields": ["customerName", "customerPhone", "customerCertificateNo", "customerCompanyName", "customerCompanyCode", "restoreStatus", "spcode"]}
     ]
   }
 }

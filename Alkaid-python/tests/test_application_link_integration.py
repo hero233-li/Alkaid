@@ -26,7 +26,7 @@ def _job():
 
 def _request(category: str) -> GenerateApplicationLinkRequest:
     return GenerateApplicationLinkRequest(
-        env="env-1",
+        env="UAT1",
         product="product-b",
         category=category,
         cooperation_project_id="PROJECT-001",
@@ -86,7 +86,7 @@ def test_generate_link_uses_one_five_field_form_and_returns_two_urls(
     assert form["REQ_MESSAGE"] == form["biz_content"]
     message = json.loads(form["REQ_MESSAGE"][0])
     assert message["REQ_BODY"]["request"] == {
-        "env": "env-1",
+        "env": "UAT1",
         "product": "product-b",
         "category": category,
         "cooperationProjectId": "PROJECT-001",
@@ -138,8 +138,8 @@ def test_generate_link_records_business_error(monkeypatch) -> None:
 def test_generate_link_rejects_conflicting_payload_authority() -> None:
     with pytest.raises(ValueError, match="payload.*env"):
         GenerateApplicationLinkRequest(
-            env="env-1",
+            env="UAT1",
             product="product-b",
             category="太阳码",
-            payload={"env": "env-2"},
+            payload={"env": "UAT2"},
         )

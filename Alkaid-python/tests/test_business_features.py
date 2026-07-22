@@ -38,14 +38,14 @@ def test_business_access_runs_search_invalidate_notifications_and_push(
 ) -> None:
     config = client.get("/api/product-data/business-access/config")
     assert config.status_code == 200
-    assert config.json()["data"]["environments"] == ["环境1", "环境2", "环境3"]
+    assert config.json()["data"]["environments"] == ["UAT1", "UAT2", "UATC"]
 
     search_job = _execute_job_request(
         client,
         django_capture_on_commit_callbacks,
         "/api/product-data/business-access/search",
         key="business-search",
-        body={"environment": "环境1", "name": "马凡"},
+        body={"environment": "UAT1", "name": "马凡"},
     )
     records = search_job.result["records"]
     assert len(records) == 2
@@ -98,7 +98,7 @@ def test_verification_approval_data_and_mutations_run_as_jobs(
         "/api/product-data/verification-approval/search",
         key="verify-search",
         body={
-            "environment": "环境1",
+            "environment": "UAT1",
             "category": "合同核实",
             "contractNo": "HT20260710001",
         },
@@ -240,6 +240,6 @@ def test_verification_search_can_return_no_external_task(
         django_capture_on_commit_callbacks,
         "/api/product-data/verification-approval/search",
         key="verify-search-empty",
-        body={"environment": "环境1", "category": "资料核实", "contractNo": "0"},
+        body={"environment": "UAT1", "category": "资料核实", "contractNo": "0"},
     )
     assert job.result["task"] is None

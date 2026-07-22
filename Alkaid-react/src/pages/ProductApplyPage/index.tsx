@@ -39,7 +39,9 @@ export default function ProductApplyPage({ pageInstanceKey }: ProductApplyPagePr
             />
           ) : (
             <div className="product-config-loading">
-              <Spin spinning={configQuery.loading} tip="正在加载产品配置..." />
+              <Spin spinning={configQuery.loading} tip="正在加载产品配置...">
+                <span aria-hidden="true" />
+              </Spin>
             </div>
           )}
         </Card>

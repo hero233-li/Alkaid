@@ -4,7 +4,7 @@
   "version": "0.1.0",
   "type": "module",
   "scripts": {
-    "dev": "vite --host 127.0.0.1",
+    "dev": "vite --host 0.0.0.0",
     "build": "tsc -b && vite build",
     "lint": "eslint src e2e playwright.config.ts --max-warnings=0",
     "format": "prettier --write src e2e vite.config.ts vitest.config.ts playwright.config.ts",

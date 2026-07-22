@@ -6,8 +6,8 @@
     "msg_id": "trace-application-link-contract",
     "sign": "<configured-by-python>",
     "timestamp": "20260714214500",
-    "REQ_MESSAGE": "{\"REQ_HEAD\":{\"traceno\":\"trace-application-link-contract\",\"starttime\":\"2026-07-14T13:45:00+00:00\",\"product\":\"product-a\"},\"REQ_BODY\":{\"request\":{\"env\":\"env-1\",\"product\":\"product-a\",\"category\":\"动态链接\",\"payload\":{\"loanType\":\"首贷\",\"customerName\":\"测试用户\",\"customerPhone\":\"13800138000\"},\"cooperationProjectId\":\"PROJECT-001\"}}}",
-    "biz_content": "{\"REQ_HEAD\":{\"traceno\":\"trace-application-link-contract\",\"starttime\":\"2026-07-14T13:45:00+00:00\",\"product\":\"product-a\"},\"REQ_BODY\":{\"request\":{\"env\":\"env-1\",\"product\":\"product-a\",\"category\":\"动态链接\",\"payload\":{\"loanType\":\"首贷\",\"customerName\":\"测试用户\",\"customerPhone\":\"13800138000\"},\"cooperationProjectId\":\"PROJECT-001\"}}}"
+    "REQ_MESSAGE": "{\"REQ_HEAD\":{\"traceno\":\"trace-application-link-contract\",\"starttime\":\"2026-07-14T13:45:00+00:00\",\"product\":\"product-a\"},\"REQ_BODY\":{\"request\":{\"env\":\"UAT1\",\"product\":\"product-a\",\"category\":\"动态链接\",\"payload\":{\"loanType\":\"首贷\",\"customerName\":\"测试用户\",\"customerPhone\":\"13800138000\"},\"cooperationProjectId\":\"PROJECT-001\"}}}",
+    "biz_content": "{\"REQ_HEAD\":{\"traceno\":\"trace-application-link-contract\",\"starttime\":\"2026-07-14T13:45:00+00:00\",\"product\":\"product-a\"},\"REQ_BODY\":{\"request\":{\"env\":\"UAT1\",\"product\":\"product-a\",\"category\":\"动态链接\",\"payload\":{\"loanType\":\"首贷\",\"customerName\":\"测试用户\",\"customerPhone\":\"13800138000\"},\"cooperationProjectId\":\"PROJECT-001\"}}}"
   },
   "successResponse": {
     "code": "0000",

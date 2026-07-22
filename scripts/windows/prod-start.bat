@@ -13,6 +13,12 @@ if not defined ALKAID_RUNTIME_DIR (
   )
 )
 if not defined ALKAID_PORT set "ALKAID_PORT=9000"
+if not defined WEB_BIND_ADDRESS set "WEB_BIND_ADDRESS=0.0.0.0"
+if not defined ALKAID_LAN_IP (
+  for /f "usebackq delims=" %%I in (`powershell -NoProfile -Command "$c = Get-NetIPConfiguration ^| Where-Object { $_.IPv4DefaultGateway -and $_.NetAdapter.Status -eq 'Up' } ^| Select-Object -First 1; if ($c) { $c.IPv4Address.IPAddress }"`) do set "ALKAID_LAN_IP=%%I"
+)
+if not defined ALKAID_LAN_IP set "ALKAID_LAN_IP=127.0.0.1"
+if not defined DJANGO_ALLOWED_HOSTS set "DJANGO_ALLOWED_HOSTS=localhost,127.0.0.1,%ALKAID_LAN_IP%"
 if not defined CELERY_QUEUE set "CELERY_QUEUE=alkaid-prod"
 if not defined MYSQL_HOST set "MYSQL_HOST=127.0.0.1"
 if not defined MYSQL_PORT set "MYSQL_PORT=3306"
@@ -108,10 +114,11 @@ echo   %RELEASE_DIR%
 echo MySQL:
 echo   %MYSQL_USER%@%MYSQL_HOST%:%MYSQL_PORT%/%MYSQL_DATABASE%
 echo URL:
-echo   http://127.0.0.1:%ALKAID_PORT%
+echo   Local: http://127.0.0.1:%ALKAID_PORT%
+echo   LAN:   http://%ALKAID_LAN_IP%:%ALKAID_PORT%
 
 pushd "%RELEASE_DIR%\Alkaid-python"
 "%PYTHON_EXE%" manage.py migrate --noinput
 if errorlevel 1 exit /b 1
-"%PYTHON_EXE%" scripts\run_server.py --host 127.0.0.1 --port %ALKAID_PORT% --queue %CELERY_QUEUE%
+"%PYTHON_EXE%" scripts\run_server.py --host %WEB_BIND_ADDRESS% --port %ALKAID_PORT% --queue %CELERY_QUEUE%
 popd

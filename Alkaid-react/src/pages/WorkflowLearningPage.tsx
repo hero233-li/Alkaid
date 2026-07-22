@@ -257,7 +257,9 @@ export default function WorkflowLearningPage() {
           {guideError ? (
             <Alert type="error" message={guideError} />
           ) : (
-            <Spin tip="正在加载 Workflow 指南..." />
+            <Spin tip="正在加载 Workflow 指南...">
+              <span aria-hidden="true" />
+            </Spin>
           )}
         </Card>
       </div>

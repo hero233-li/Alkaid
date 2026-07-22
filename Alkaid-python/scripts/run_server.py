@@ -21,7 +21,7 @@ def _command(*parts: str) -> list[str]:
 
 def main() -> int:
     parser = argparse.ArgumentParser(description="Run Alkaid server processes")
-    parser.add_argument("--host", default="127.0.0.1")
+    parser.add_argument("--host", default="0.0.0.0")
     parser.add_argument("--port", type=int, default=9000)
     parser.add_argument("--queue", default="alkaid-prod")
     parser.add_argument("--without-beat", action="store_true")

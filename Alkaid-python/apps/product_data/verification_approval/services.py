@@ -28,7 +28,7 @@ from apps.product_data.verification_approval.schemas import (
     VerificationTaskOperationSubmission,
 )
 
-VERIFICATION_ENVIRONMENTS = ("环境1", "环境2", "环境3")
+VERIFICATION_ENVIRONMENTS = ("UAT1", "UAT2", "UATC")
 VERIFICATION_CATEGORIES = ("合同核实", "资料核实", "放款核实")
 
 

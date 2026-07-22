@@ -10,9 +10,9 @@ describe('loan status API', () => {
     const post = vi.spyOn(apiClient, 'post').mockResolvedValue({
       data: { ok: true, data: { id: 1, status: 'pending', progress: 0 } },
     });
-    await submitLoanSearch({ environment: '环境1', customerNo: 'C0001' });
+    await submitLoanSearch({ environment: 'UAT1', customerNo: 'C0001' });
     await submitLoanAction('LN/001', 'freeze', {
-      environment: '环境1',
+      environment: 'UAT1',
       customerNo: 'C0001',
       certificateNo: 'ID1',
       cardNo: 'CARD1',

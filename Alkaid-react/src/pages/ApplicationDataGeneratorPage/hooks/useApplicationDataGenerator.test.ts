@@ -9,7 +9,7 @@ vi.mock('antd', () => ({ message: { success: vi.fn(), error: vi.fn() } }));
 vi.mock('../api/applicationData');
 
 const values = {
-  environment: '环境1',
+  environment: 'UAT1',
   currentDate: dayjs('2026-07-15'),
   age: 40,
   birthDate: '1986-07-14',
@@ -23,7 +23,7 @@ describe('useApplicationDataGenerator', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     vi.mocked(api.getApplicationDataConfig).mockResolvedValue({
-      environments: ['环境1'],
+      environments: ['UAT1'],
       genders: ['男'],
       companyTypes: [{ label: '公司', value: '91' }],
       maxCount: 1000,

@@ -24,7 +24,9 @@ INSTALLED_APPS = [
     "django.contrib.messages",
     "django.contrib.staticfiles",
     "apps.jobs",
+    "apps.portal",
     "apps.product_data",
+    "apps.workbench",
 ]
 
 MIDDLEWARE = [
@@ -100,6 +102,7 @@ JOB_MAX_HTTP_BODY_BYTES = int(os.getenv("JOB_MAX_HTTP_BODY_BYTES", "65536"))
 JOB_RECONCILE_BATCH_SIZE = int(os.getenv("JOB_RECONCILE_BATCH_SIZE", "500"))
 JOB_SSE_POLL_SECONDS = float(os.getenv("JOB_SSE_POLL_SECONDS", "1"))
 JOB_SSE_HEARTBEAT_SECONDS = float(os.getenv("JOB_SSE_HEARTBEAT_SECONDS", "15"))
+WORKBENCH_MAX_RESPONSE_CHARS = int(os.getenv("WORKBENCH_MAX_RESPONSE_CHARS", "1000000"))
 PRODUCT_APPLICATION_TIMEOUT_SECONDS = int(os.getenv("PRODUCT_APPLICATION_TIMEOUT_SECONDS", "300"))
 APPLICATION_LINK_TIMEOUT_SECONDS = int(os.getenv("APPLICATION_LINK_TIMEOUT_SECONDS", "120"))
 BUSINESS_ACCESS_TIMEOUT_SECONDS = int(os.getenv("BUSINESS_ACCESS_TIMEOUT_SECONDS", "120"))
@@ -127,10 +130,6 @@ VERIFICATION_CONTEXT_SIGNING_KEY = os.getenv(
     "VERIFICATION_CONTEXT_SIGNING_KEY", "local-only-verification-context-key"
 )
 VERIFICATION_CONTEXT_PROOF_VERSION = int(os.getenv("VERIFICATION_CONTEXT_PROOF_VERSION", "1"))
-# Kept at zero outside local development so production never sleeps in a view.
-VERIFICATION_APPROVAL_DEBUG_DELAY_SECONDS = float(
-    os.getenv("VERIFICATION_APPROVAL_DEBUG_DELAY_SECONDS", "0")
-)
 HTTP_TIMEOUT_SECONDS = float(os.getenv("HTTP_TIMEOUT_SECONDS", "10"))
 HTTP_CONNECT_TIMEOUT_SECONDS = float(os.getenv("HTTP_CONNECT_TIMEOUT_SECONDS", "5"))
 HTTP_WRITE_TIMEOUT_SECONDS = float(os.getenv("HTTP_WRITE_TIMEOUT_SECONDS", "10"))

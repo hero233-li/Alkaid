@@ -27,6 +27,53 @@ body {
   background: #111827 !important;
 }
 
+.mobile-menu-button {
+  display: none;
+  margin-bottom: 10px;
+}
+
+.task-center-filters {
+  width: 100%;
+  margin-bottom: 16px;
+}
+
+.task-center-filters .ant-input-affix-wrapper {
+  width: min(360px, 100%);
+}
+
+.task-center-filters .ant-select {
+  width: 150px;
+}
+
+.task-center-detail-stack {
+  width: 100%;
+}
+
+.task-center-call-content {
+  display: grid;
+  gap: 12px;
+}
+
+.task-center-detail-code {
+  max-height: 320px;
+  margin: 0;
+  overflow: auto;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.task-center-log-list {
+  display: grid;
+  gap: 10px;
+}
+
+.task-center-log-line {
+  display: grid;
+  grid-template-columns: 160px auto minmax(0, 1fr);
+  align-items: start;
+  gap: 8px;
+}
+
 .brand {
   height: 64px;
   display: flex;
@@ -453,11 +500,47 @@ body {
 }
 
 .settings-tabs {
-  width: min(720px, 100%);
+  width: 100%;
 }
 
 .settings-tabs > .ant-tabs-nav {
   margin-bottom: 8px;
+}
+
+.settings-embedded-page {
+  width: 100%;
+  padding-top: 8px;
+}
+
+.settings-tabs .shortcut-manage-list {
+  width: 100%;
+}
+
+.combined-settings-header,
+.shortcut-manage-row.combined-settings-row {
+  grid-template-columns: 36px minmax(220px, 1fr) minmax(132px, 180px) minmax(150px, 190px);
+}
+
+.combined-settings-header {
+  display: grid;
+  gap: 12px;
+  align-items: center;
+  padding: 10px 14px;
+  color: #64748b;
+  background: #f8fafc;
+  border-bottom: 1px solid #e5e7eb;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.combined-settings-header span:nth-child(n + 3) {
+  text-align: center;
+}
+
+.combined-settings-control {
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
 .settings-panel.compact {
@@ -711,82 +794,6 @@ body {
   font-family: 'JetBrains Mono', 'SFMono-Regular', Consolas, monospace;
   font-size: 12px;
   line-height: 1.65;
-}
-
-.global-api-progress {
-  position: fixed;
-  top: 18px;
-  left: 50%;
-  z-index: 2000;
-  width: min(560px, calc(100vw - 32px));
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  padding: 12px 14px;
-  color: #334155;
-  background: rgba(255, 255, 255, 0.96);
-  border: 1px solid #bfdbfe;
-  border-radius: 8px;
-  box-shadow: 0 18px 42px rgba(37, 99, 235, 0.18);
-  transform: translateX(-50%);
-  backdrop-filter: blur(12px);
-}
-
-.global-api-progress-text {
-  flex: 0 0 auto;
-  color: #334155;
-  font-size: 16px;
-  font-weight: 700;
-  white-space: nowrap;
-}
-
-.global-api-progress-track {
-  position: relative;
-  height: 12px;
-  flex: 1 1 auto;
-  min-width: 140px;
-  overflow: hidden;
-  background: #e5e7eb;
-  border: 1px solid #dbe4f0;
-  border-radius: 6px;
-  box-shadow: inset 0 1px 2px rgba(15, 23, 42, 0.08);
-}
-
-.global-api-progress-bar {
-  position: absolute;
-  inset: 0;
-  width: 100%;
-  overflow: hidden;
-  background: #2563eb;
-  border-radius: inherit;
-  transform: scaleX(0.04);
-  transform-origin: left center;
-  animation: global-api-progress-fill var(--progress-duration) cubic-bezier(0.22, 0.7, 0.32, 1)
-    forwards;
-}
-
-.global-api-progress-bar::after {
-  position: absolute;
-  inset: 0;
-  content: '';
-  background: linear-gradient(90deg, transparent 0, rgba(255, 255, 255, 0.5) 50%, transparent 100%);
-  transform: translateX(-100%);
-  animation: global-api-progress-shine 900ms ease-in-out infinite;
-}
-
-@keyframes global-api-progress-fill {
-  from {
-    transform: scaleX(0.04);
-  }
-  to {
-    transform: scaleX(1);
-  }
-}
-
-@keyframes global-api-progress-shine {
-  to {
-    transform: translateX(100%);
-  }
 }
 
 .workbench-apifox {
@@ -1312,6 +1319,10 @@ body {
     display: none;
   }
 
+  .mobile-menu-button {
+    display: inline-flex;
+  }
+
   .app-header {
     justify-content: space-between;
   }
@@ -1378,16 +1389,6 @@ body {
     border-left: 0;
   }
 
-  .global-api-progress {
-    top: 12px;
-    align-items: stretch;
-    flex-direction: column;
-  }
-
-  .global-api-progress-text {
-    font-size: 14px;
-  }
-
   .settings-row {
     align-items: flex-start;
     flex-direction: column;
@@ -1399,5 +1400,26 @@ body {
 
   .shortcut-grid {
     grid-template-columns: minmax(0, 1fr);
+  }
+
+  .combined-settings-header {
+    display: none;
+  }
+
+  .shortcut-manage-row.combined-settings-row {
+    grid-template-columns: 36px minmax(0, 1fr);
+    padding-top: 14px;
+    padding-bottom: 14px;
+  }
+
+  .combined-settings-control {
+    grid-column: 2;
+    justify-content: space-between;
+  }
+
+  .combined-settings-control::before {
+    content: attr(data-label);
+    color: #64748b;
+    font-size: 12px;
   }
 }

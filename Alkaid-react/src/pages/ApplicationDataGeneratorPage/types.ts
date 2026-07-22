@@ -8,14 +8,14 @@ export interface ApplicationDataFormValues {
   birthDate: string;
   gender: '男' | '女';
   tellerNo: string;
-  companyType: '91' | '92';
+  companyType: '91' | '92' | '51';
   count: number;
 }
 
 export interface ApplicationDataConfig {
   environments: string[];
   genders: Array<'男' | '女'>;
-  companyTypes: Array<{ label: string; value: '91' | '92' }>;
+  companyTypes: Array<{ label: string; value: '91' | '92' | '51' }>;
   maxCount: number;
 }
 

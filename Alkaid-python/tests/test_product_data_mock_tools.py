@@ -46,7 +46,7 @@ def test_generated_mock_fields_are_unique_for_maximum_request_size() -> None:
     for sequence in range(1_000):
         record = generate_application_record(
             sequence,
-            environment="环境1",
+            environment="UAT1",
             birth_date=date(1986, 7, 14),
             gender="男",
             company_type="91" if sequence % 2 else "92",
@@ -67,6 +67,27 @@ def test_generated_mock_fields_are_unique_for_maximum_request_size() -> None:
     assert len(credit_codes) == 1_000
 
 
+@pytest.mark.parametrize(
+    ("company_type", "name_suffix"),
+    [("91", "公司"), ("92", "个体"), ("51", "社会团体")],
+)
+def test_generated_company_data_matches_selected_subject_type(
+    company_type: str,
+    name_suffix: str,
+) -> None:
+    record = generate_application_record(
+        1,
+        environment="UAT1",
+        birth_date=date(1986, 7, 14),
+        gender="男",
+        company_type=company_type,
+    )
+
+    assert record.company_name.endswith(name_suffix)
+    assert record.company_credit_code.startswith(company_type)
+    assert validate_social_credit_code(record.company_credit_code)
+
+
 @pytest.mark.django_db
 def test_application_data_generation_runs_as_job(
     client,
@@ -78,7 +99,7 @@ def test_application_data_generation_runs_as_job(
         "/api/product-data/tools/application-data/generate",
         key="application-data",
         body={
-            "environment": "环境1",
+            "environment": "UAT1",
             "currentDate": "2026-07-14",
             "birthDate": "1986-07-14",
             "age": 40,
@@ -106,7 +127,7 @@ def test_card_search_and_action_use_dedicated_jobs(
         django_capture_on_commit_callbacks,
         "/api/product-data/tools/cards/search",
         key="card-search",
-        body={"environment": "环境1", "customerNo": "C000000000123"},
+        body={"environment": "UAT1", "customerNo": "C000000000123"},
     )
     card = search.result["cards"][0]
     action = _run_job(
@@ -138,14 +159,14 @@ def test_card_transfer_moves_balance_between_existing_cards(
         django_capture_on_commit_callbacks,
         "/api/product-data/tools/cards/search",
         key="card-transfer-source",
-        body={"environment": "环境1", "customerNo": "C000000000123"},
+        body={"environment": "UAT1", "customerNo": "C000000000123"},
     )
     target_job = _run_job(
         client,
         django_capture_on_commit_callbacks,
         "/api/product-data/tools/cards/search",
         key="card-transfer-target",
-        body={"environment": "环境1", "customerNo": "C000000000124"},
+        body={"environment": "UAT1", "customerNo": "C000000000124"},
     )
     source = source_job.result["cards"][0]
     target = target_job.result["cards"][0]
@@ -179,8 +200,8 @@ def test_card_transfer_moves_balance_between_existing_cards(
     ],
 )
 def test_card_transfer_rejects_invalid_target_or_balance(target, amount, message) -> None:
-    source = CARD_MOCK_STORE.search("环境1", "C000000000123")[0]
-    existing = CARD_MOCK_STORE.search("环境1", "C000000000124")[0]
+    source = CARD_MOCK_STORE.search("UAT1", "C000000000123")[0]
+    existing = CARD_MOCK_STORE.search("UAT1", "C000000000124")[0]
     target_card = {
         "same": source.card_no,
         "missing": "6222029999999999",
@@ -205,7 +226,7 @@ def test_application_data_rejects_unsafe_count_and_result_size(
     settings,
 ) -> None:
     body = {
-        "environment": "环境1",
+        "environment": "UAT1",
         "currentDate": "2026-07-14",
         "birthDate": "1986-07-14",
         "age": 40,
@@ -241,7 +262,7 @@ def test_application_data_uses_birth_date_in_certificate_and_validates_age(
     django_capture_on_commit_callbacks,
 ) -> None:
     body = {
-        "environment": "环境1",
+        "environment": "UAT1",
         "currentDate": "2026-07-15",
         "birthDate": "1986-07-14",
         "age": 40,
@@ -279,7 +300,7 @@ def test_loan_search_and_action_use_dedicated_jobs(
         django_capture_on_commit_callbacks,
         "/api/product-data/tools/loans/search",
         key="loan-search",
-        body={"environment": "环境1", "customerNo": "C000000000456"},
+        body={"environment": "UAT1", "customerNo": "C000000000456"},
     )
     card = search.result["cards"][0]
     loan = card["loans"][0]
@@ -306,7 +327,7 @@ def test_loan_search_and_action_use_dedicated_jobs(
 
 @pytest.mark.django_db
 def test_mock_state_is_shared_across_store_instances() -> None:
-    card = CARD_MOCK_STORE.search("环境1", "C000000000777")[0]
+    card = CARD_MOCK_STORE.search("UAT1", "C000000000777")[0]
     CardMockStore().apply_action(
         card.card_no,
         "deposit",
@@ -314,45 +335,45 @@ def test_mock_state_is_shared_across_store_instances() -> None:
         customer_no=card.customer_no,
         amount=250,
     )
-    assert CardMockStore().search("环境1", "C000000000777")[0].balance == 10_250
+    assert CardMockStore().search("UAT1", "C000000000777")[0].balance == 10_250
 
-    loan_card = LOAN_MOCK_STORE.search("环境1", "C000000000778")[0]
+    loan_card = LOAN_MOCK_STORE.search("UAT1", "C000000000778")[0]
     contract_no = loan_card["loans"][0]["contractNo"]
-    LoanMockStore().apply_action("环境1", "C000000000778", contract_no, "freeze", {})
-    assert LoanMockStore().search("环境1", "C000000000778")[0]["loans"][0]["freezeStatus"] == "是"
+    LoanMockStore().apply_action("UAT1", "C000000000778", contract_no, "freeze", {})
+    assert LoanMockStore().search("UAT1", "C000000000778")[0]["loans"][0]["freezeStatus"] == "是"
 
 
 @pytest.mark.django_db
 def test_mock_state_is_isolated_by_environment_and_validates_owner() -> None:
-    env1 = CARD_MOCK_STORE.search("环境1", "C000000000901")[0]
-    env2 = CARD_MOCK_STORE.search("环境2", "C000000000901")[0]
+    env1 = CARD_MOCK_STORE.search("UAT1", "C000000000901")[0]
+    env2 = CARD_MOCK_STORE.search("UAT2", "C000000000901")[0]
     CARD_MOCK_STORE.apply_action(
         env1.card_no,
         "deposit",
-        environment="环境1",
+        environment="UAT1",
         customer_no=env1.customer_no,
         amount=100,
     )
-    assert CARD_MOCK_STORE.search("环境1", env1.customer_no)[0].balance == 10_100
-    assert CARD_MOCK_STORE.search("环境2", env2.customer_no)[0].balance == 10_000
+    assert CARD_MOCK_STORE.search("UAT1", env1.customer_no)[0].balance == 10_100
+    assert CARD_MOCK_STORE.search("UAT2", env2.customer_no)[0].balance == 10_000
     with pytest.raises(ValueError, match="不存在"):
         CARD_MOCK_STORE.apply_action(
             env1.card_no,
             "deposit",
-            environment="环境3",
+            environment="UATC",
             customer_no=env1.customer_no,
             amount=100,
         )
 
-    loan1 = LOAN_MOCK_STORE.search("环境1", "C000000000902")[0]
-    loan2 = LOAN_MOCK_STORE.search("环境2", "C000000000902")[0]
+    loan1 = LOAN_MOCK_STORE.search("UAT1", "C000000000902")[0]
+    loan2 = LOAN_MOCK_STORE.search("UAT2", "C000000000902")[0]
     contract_no = loan1["loans"][0]["contractNo"]
-    LOAN_MOCK_STORE.apply_action("环境1", loan1["customerNo"], contract_no, "freeze", {})
+    LOAN_MOCK_STORE.apply_action("UAT1", loan1["customerNo"], contract_no, "freeze", {})
     assert (
-        LOAN_MOCK_STORE.search("环境1", loan1["customerNo"])[0]["loans"][0]["freezeStatus"] == "是"
+        LOAN_MOCK_STORE.search("UAT1", loan1["customerNo"])[0]["loans"][0]["freezeStatus"] == "是"
     )
     assert (
-        LOAN_MOCK_STORE.search("环境2", loan2["customerNo"])[0]["loans"][0]["freezeStatus"] == "否"
+        LOAN_MOCK_STORE.search("UAT2", loan2["customerNo"])[0]["loans"][0]["freezeStatus"] == "否"
     )
 
 
@@ -361,7 +382,7 @@ def test_concurrent_first_search_converges_on_one_mock_state() -> None:
     def search() -> str:
         close_old_connections()
         try:
-            return CardMockStore().search("环境1", "C000000000903")[0].card_no
+            return CardMockStore().search("UAT1", "C000000000903")[0].card_no
         finally:
             close_old_connections()
 
@@ -370,5 +391,5 @@ def test_concurrent_first_search_converges_on_one_mock_state() -> None:
 
     assert cards[0] == cards[1]
     assert (
-        MockToolState.objects.filter(namespace="card_status", key=f"环境1:{cards[0]}").count() == 1
+        MockToolState.objects.filter(namespace="card_status", key=f"UAT1:{cards[0]}").count() == 1
     )

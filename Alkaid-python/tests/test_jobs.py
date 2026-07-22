@@ -6,10 +6,11 @@ from django.utils import timezone
 from apps.core.errors import ContextIntegrityError, InvalidSubmission
 from apps.jobs.compatibility import ensure_legacy_job_compatibility
 from apps.jobs.http import sanitize
-from apps.jobs.models import JobStatus
+from apps.jobs.models import JobApiCall, JobStatus
 from apps.jobs.services import (
     InvalidJobTransition,
     JobConflict,
+    add_job_log,
     create_job,
     mark_job_failed,
     mark_job_running,
@@ -20,6 +21,7 @@ from apps.jobs.services import (
     request_job_retry,
     resolve_job_identifiers,
 )
+from apps.jobs.steps import save_job_step
 from apps.jobs.task_runner import run_menu_task
 
 
@@ -143,6 +145,98 @@ def test_completed_job_cannot_be_claimed_by_another_worker() -> None:
     assert mark_job_running(job.id, "worker-second") is None
     job.refresh_from_db()
     assert job.status == JobStatus.SUCCESS
+
+
+@pytest.mark.django_db
+def test_job_step_rejects_stale_worker_and_terminal_job() -> None:
+    job = _create_job(key="step-lease")
+    running = mark_job_running(job.id, "worker-current")
+    assert running is not None
+
+    stale = type(running).objects.get(id=running.id)
+    stale.celery_task_id = "worker-stale"
+    with pytest.raises(InvalidJobTransition, match="失去任务执行权"):
+        save_job_step(stale, "one", {"ok": True})
+
+    mark_job_success(running.id, {"done": True})
+    with pytest.raises(InvalidJobTransition, match="不能保存执行步骤"):
+        save_job_step(running, "late", {"ok": True})
+
+
+@pytest.mark.django_db
+def test_job_list_filters_status_and_returns_log_free_summaries(client) -> None:
+    success = _create_job(key="list-success")
+    running = _create_job(key="list-running")
+    mark_job_running(success.id, "worker-success")
+    mark_job_success(success.id, {"done": True})
+    mark_job_running(running.id, "worker-running")
+
+    response = client.get("/api/jobs/", {"status": "running", "query": str(running.id)})
+
+    assert response.status_code == 200
+    payload = response.json()["data"]
+    assert [item["id"] for item in payload] == [running.id]
+    assert "logs" not in payload[0]
+    assert payload[0]["apiCallCount"] == 0
+    assert success.id not in [item["id"] for item in payload]
+
+
+@pytest.mark.django_db
+def test_job_list_defaults_to_latest_five_jobs(client) -> None:
+    jobs = [_create_job(key=f"latest-{index}") for index in range(7)]
+
+    response = client.get("/api/jobs/")
+
+    assert response.status_code == 200
+    assert [item["id"] for item in response.json()["data"]] == [
+        job.id for job in reversed(jobs[-5:])
+    ]
+
+
+@pytest.mark.django_db
+def test_job_search_covers_logs_and_internal_call_records(client) -> None:
+    log_job = _create_job(key="search-log")
+    call_job = _create_job(key="search-call")
+    add_job_log(log_job, "INFO", "内部客户信息转换完成", step="customer_mapping")
+    call = JobApiCall.objects.create(
+        job=call_job,
+        method="POST",
+        url="/internal/customer/archive",
+        request_headers={"x-trace-id": "trace-call"},
+        request_body={"customerNo": "C001"},
+        response_status=200,
+        response_headers={},
+        response_body={"ok": True},
+        duration_ms=12,
+        status="success",
+        finished_at=timezone.now(),
+    )
+    JobApiCall.objects.create(
+        job=call_job,
+        method="GET",
+        url="/internal/customer/status",
+        request_headers={},
+        response_status=200,
+        response_headers={},
+        response_body={"status": "active"},
+        duration_ms=5,
+        status="success",
+        finished_at=timezone.now(),
+    )
+
+    log_response = client.get("/api/jobs/", {"query": "客户信息转换", "limit": 100})
+    call_response = client.get("/api/jobs/", {"query": "customer/archive", "limit": 100})
+    call_body_response = client.get("/api/jobs/", {"query": "C001", "limit": 100})
+    detail_response = client.get(f"/api/jobs/{call_job.id}")
+
+    assert [item["id"] for item in log_response.json()["data"]] == [log_job.id]
+    assert [item["id"] for item in call_response.json()["data"]] == [call_job.id]
+    assert [item["id"] for item in call_body_response.json()["data"]] == [call_job.id]
+    assert call_response.json()["data"][0]["apiCallCount"] == 2
+    detail = detail_response.json()["data"]
+    assert detail["apiCallCount"] == 2
+    assert detail["apiCalls"][0]["id"] == call.id
+    assert detail["apiCalls"][0]["requestBody"] == {"customerNo": "C001"}
 
 
 @pytest.mark.django_db
@@ -273,6 +367,17 @@ def test_job_payload_requires_staff_detail_endpoint(client, django_user_model) -
     client.force_login(staff)
     allowed = client.get(f"/api/jobs/{job.id}/payload")
     assert allowed.json()["data"]["payload"] == {"value": 1}
+
+
+@pytest.mark.django_db
+def test_product_application_detail_can_restore_submission_payload(client) -> None:
+    job = _create_job(key="product-payload", kind="product_application")
+
+    regular = client.get(f"/api/jobs/{job.id}")
+    detail = client.get(f"/api/jobs/{job.id}", {"includePayload": "true"})
+
+    assert "payload" not in regular.json()["data"]
+    assert detail.json()["data"]["payload"] == {"value": 1}
 
 
 def test_http_audit_sanitizer_masks_nested_sensitive_values() -> None:

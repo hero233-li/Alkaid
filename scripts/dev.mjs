@@ -164,6 +164,7 @@ function printStartupConfig(envValues, filePath, loadedValues) {
   console.log(`  DJANGO_SETTINGS_MODULE=${envValues.DJANGO_SETTINGS_MODULE ?? 'config.settings.local'}`);
   console.log(`  DEV_BACKEND_PORT=${envValues.DEV_BACKEND_PORT ?? '8000'}`);
   console.log(`  DEV_FRONTEND_PORT=${envValues.DEV_FRONTEND_PORT ?? '5174'}`);
+  console.log(`  DEV_BIND_ADDRESS=${envValues.DEV_BIND_ADDRESS ?? '0.0.0.0'}`);
   console.log(`  ALKAID_RUNTIME_DIR=${runtimeDir}`);
   console.log('MySQL config:');
   for (const key of [

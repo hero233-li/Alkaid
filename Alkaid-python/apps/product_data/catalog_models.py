@@ -54,6 +54,7 @@ class CatalogApplicationLinkRoute(BaseModel):
 
 class CatalogFeatures(BaseModel):
     model_config = ConfigDict(frozen=True, extra="forbid")
+    productApplication: bool = True
     applicationLinks: tuple[CatalogApplicationLinkRoute, ...] = ()
 
 
@@ -162,6 +163,8 @@ class ProductCatalog(BaseModel):
         field_sets: dict[str, list[str]] = {}
         products: list[ProductDefinition] = []
         for product in self.products.values():
+            if not product.features.productApplication:
+                continue
             product_groups: list[str] = []
             required_fields: list[str] = []
             for field in product.fields:

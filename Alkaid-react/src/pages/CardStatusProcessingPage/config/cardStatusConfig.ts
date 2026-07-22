@@ -1,6 +1,6 @@
 import type { CardAction } from '../types';
 export const cardStatusConfig = {
-  environments: ['环境1', '环境2', '环境3'],
+  environments: ['UAT1', 'UAT2', 'UATC'],
   defaultTellerNo: '310310',
   actions: [
     { value: 'deposit', label: '存钱' },

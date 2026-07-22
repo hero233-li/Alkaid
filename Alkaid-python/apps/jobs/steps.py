@@ -1,8 +1,10 @@
 from typing import Any
 
 from django.db import transaction
+from django.utils import timezone
 
-from apps.jobs.models import Job
+from apps.jobs.errors import InvalidJobTransition
+from apps.jobs.models import Job, JobStatus
 
 
 def save_job_step(
@@ -17,6 +19,12 @@ def save_job_step(
     """Persist one business checkpoint together with visible Job progress."""
     with transaction.atomic():
         locked = Job.objects.select_for_update().get(id=job.id)
+        if locked.status != JobStatus.RUNNING:
+            raise InvalidJobTransition(f"任务状态 {locked.status} 不能保存执行步骤")
+        if locked.celery_task_id != job.celery_task_id:
+            raise InvalidJobTransition("当前 Worker 已失去任务执行权")
+        if locked.deadline_at and locked.deadline_at <= timezone.now():
+            raise InvalidJobTransition("任务已超过截止时间")
         result = dict(locked.result or {})
         result[step] = value
         locked.result = result

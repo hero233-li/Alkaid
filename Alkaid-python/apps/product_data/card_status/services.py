@@ -39,4 +39,4 @@ def execute_card_status(job: Job) -> dict[str, Any]:
 
 
 def get_card_status_config() -> dict[str, object]:
-    return {"environments": ["环境1", "环境2", "环境3"]}
+    return {"environments": ["UAT1", "UAT2", "UATC"]}

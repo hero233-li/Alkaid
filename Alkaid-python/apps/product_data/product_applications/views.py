@@ -35,6 +35,9 @@ def create_product_application(request: HttpRequest) -> JsonResponse:
     try:
         submission = ProductApplicationSubmission.model_validate_json(request.body)
         catalog = load_product_catalog()
+        configured_product = catalog.product(submission.product)
+        if not configured_product.features.productApplication:
+            raise ProductConfigurationError(f"产品 {submission.product} 未启用产品申请")
         execution_snapshot = catalog.snapshot(
             submission.product,
             str(submission.payload.get("applicationMethod") or "") or None,

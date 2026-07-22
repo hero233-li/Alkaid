@@ -64,7 +64,7 @@ DJANGO_SETTINGS_MODULE=config.settings.local DB_ENGINE=mysql \
   MYSQL_HOST=127.0.0.1 MYSQL_PORT=3306 MYSQL_DATABASE=alkaid_dev \
   MYSQL_USER=workflow MYSQL_PASSWORD=workflow MYSQL_SSL_DISABLED=true \
   CELERY_TASK_ALWAYS_EAGER=true \
-  .venv/bin/python -m uvicorn config.asgi:application --host 127.0.0.1 --port 8000 --reload
+  .venv/bin/python -m uvicorn config.asgi:application --host 0.0.0.0 --port 8000 --reload
 ```
 
 ## 产品申请与 Job API
@@ -118,6 +118,20 @@ HTTP 连接、读写和连接池超时分别可配置；只有显式声明为 `R
 后端产品执行配置与前端展示配置不再分开维护。每个产品文件自包含页面字段、申请方式、必填规则
 和产品功能路由；运行时通过 Pydantic 加载并派生所需视图。产品调用顺序直接由业务服务表达，
 不再通过只修改常量的 Handler 子类和注册表间接选择。
+
+产品页面显示可以独立控制：`features.productApplication` 控制是否出现在“产品申请”页面，
+`features.applicationLinks` 非空时才出现在“申请链接生成”页面。例如只开放申请链接：
+
+```json
+{
+  "features": {
+    "productApplication": false,
+    "applicationLinks": [{"environment": "UAT1", "category": "动态链接"}]
+  }
+}
+```
+
+产品申请接口也会校验该开关，不能通过绕过前端直接提交被关闭的产品。
 
 修改产品配置后运行：
 

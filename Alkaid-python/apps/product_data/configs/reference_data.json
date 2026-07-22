@@ -1,10 +1,10 @@
 {
   "id": "product-application-example",
-  "version": 6,
+  "version": 7,
   "environments": [
-    {"label": "环境1", "value": "env-1"},
-    {"label": "环境2", "value": "env-2"},
-    {"label": "环境3", "value": "env-3"}
+    {"label": "UAT1", "value": "UAT1"},
+    {"label": "UAT2", "value": "UAT2"},
+    {"label": "UATC", "value": "UATC"}
   ],
   "cooperationProjects": [
     {"label": "合作项目一", "value": "PROJECT-001"},

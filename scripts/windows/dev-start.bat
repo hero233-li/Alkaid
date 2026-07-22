@@ -7,6 +7,18 @@ for %%I in ("%PROJECT_ROOT%\..") do set "DEFAULT_BASE=%%~fI"
 
 if not defined DEV_BACKEND_PORT set "DEV_BACKEND_PORT=8000"
 if not defined DEV_FRONTEND_PORT set "DEV_FRONTEND_PORT=5174"
+if not defined DEV_BIND_ADDRESS set "DEV_BIND_ADDRESS=0.0.0.0"
+if not defined DEV_LAN_IP (
+  for /f "usebackq delims=" %%I in (`powershell -NoProfile -Command "$c = Get-NetIPConfiguration ^| Where-Object { $_.IPv4DefaultGateway -and $_.NetAdapter.Status -eq 'Up' } ^| Select-Object -First 1; if ($c) { $c.IPv4Address.IPAddress }"`) do set "DEV_LAN_IP=%%I"
+)
+if not defined DEV_LAN_IP set "DEV_LAN_IP=127.0.0.1"
+if not defined DJANGO_ALLOWED_HOSTS (
+  if defined DEV_LAN_IP (
+    set "DJANGO_ALLOWED_HOSTS=localhost,127.0.0.1,%DEV_LAN_IP%"
+  ) else (
+    set "DJANGO_ALLOWED_HOSTS=localhost,127.0.0.1"
+  )
+)
 if not defined ALKAID_RUNTIME_DIR set "ALKAID_RUNTIME_DIR=%DEFAULT_BASE%\Alkaid-runtime"
 if not defined PYTHON_BOOTSTRAP set "PYTHON_BOOTSTRAP=py -3.10"
 if not defined NPM_INSTALL_CMD set "NPM_INSTALL_CMD=npm ci --include=optional"
@@ -87,10 +99,11 @@ if /I "%DEV_SPLIT_WINDOWS%"=="true" (
   >>"%BACKEND_RUNNER%" echo set "CELERY_BROKER_URL=%CELERY_BROKER_URL%"
   >>"%BACKEND_RUNNER%" echo set "CELERY_QUEUE=%CELERY_QUEUE%"
   >>"%BACKEND_RUNNER%" echo set "CELERY_TASK_ALWAYS_EAGER=%CELERY_TASK_ALWAYS_EAGER%"
+  >>"%BACKEND_RUNNER%" echo set "DJANGO_ALLOWED_HOSTS=%DJANGO_ALLOWED_HOSTS%"
   >>"%BACKEND_RUNNER%" echo pushd "%PROJECT_ROOT%\Alkaid-python"
   >>"%BACKEND_RUNNER%" echo "%BACKEND_PYTHON%" manage.py migrate
   >>"%BACKEND_RUNNER%" echo if errorlevel 1 exit /b 1
-  >>"%BACKEND_RUNNER%" echo "%BACKEND_PYTHON%" -m uvicorn config.asgi:application --host 127.0.0.1 --port %DEV_BACKEND_PORT% --reload
+  >>"%BACKEND_RUNNER%" echo "%BACKEND_PYTHON%" -m uvicorn config.asgi:application --host %DEV_BIND_ADDRESS% --port %DEV_BACKEND_PORT% --reload
   >>"%BACKEND_RUNNER%" echo popd
 
   >"%WORKER_RUNNER%" echo @echo off
@@ -112,10 +125,10 @@ if /I "%DEV_SPLIT_WINDOWS%"=="true" (
   >"%FRONTEND_RUNNER%" echo @echo off
   >>"%FRONTEND_RUNNER%" echo set "ALIOTH_API_TARGET=http://127.0.0.1:%DEV_BACKEND_PORT%"
   >>"%FRONTEND_RUNNER%" echo pushd "%PROJECT_ROOT%\Alkaid-react"
-  >>"%FRONTEND_RUNNER%" echo npm run dev -- --port %DEV_FRONTEND_PORT%
+  >>"%FRONTEND_RUNNER%" echo npm run dev -- --host %DEV_BIND_ADDRESS% --port %DEV_FRONTEND_PORT%
   >>"%FRONTEND_RUNNER%" echo popd
 
-  echo Starting dev backend on http://127.0.0.1:%DEV_BACKEND_PORT%
+  echo Starting dev backend on http://%DEV_LAN_IP%:%DEV_BACKEND_PORT%
   start "Alkaid dev backend" "%BACKEND_RUNNER%"
 
   if /I "%DEV_START_WORKER%"=="true" (
@@ -125,7 +138,7 @@ if /I "%DEV_SPLIT_WINDOWS%"=="true" (
     )
   )
 
-  echo Starting dev frontend on http://127.0.0.1:%DEV_FRONTEND_PORT%
+  echo Starting dev frontend on http://%DEV_LAN_IP%:%DEV_FRONTEND_PORT%
   start "Alkaid dev frontend" "%FRONTEND_RUNNER%"
 
   echo Dev services are starting in separate windows.

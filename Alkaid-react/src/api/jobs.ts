@@ -14,10 +14,20 @@ export interface JobLogStreamResult {
   terminalStatusReceived: boolean;
 }
 
-export async function getJobDetail(id: number) {
-  const { data } = await apiClient.get<ApiResponse<JobDetail>>(`/jobs/${id}`);
+export async function getJobDetail(id: number, options: { includePayload?: boolean } = {}) {
+  const { data } = await apiClient.get<ApiResponse<JobDetail>>(`/jobs/${id}`, {
+    params: options.includePayload ? { includePayload: true } : undefined,
+  });
   if (!data.ok) {
     throw new Error(data.message || '获取 Job 详情失败');
+  }
+  return data.data;
+}
+
+export async function listJobs(params: { status?: string; query?: string; limit?: number } = {}) {
+  const { data } = await apiClient.get<ApiResponse<JobDetail[]>>('/jobs/', { params });
+  if (!data.ok) {
+    throw new Error(data.message || '获取任务列表失败');
   }
   return data.data;
 }

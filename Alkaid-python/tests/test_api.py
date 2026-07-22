@@ -5,7 +5,7 @@ import pytest
 from django.test import override_settings
 
 from apps.jobs.models import Job, JobStatus
-from apps.jobs.services import create_job
+from apps.jobs.services import create_job, mark_job_running
 from apps.product_data.catalog import load_product_catalog
 from apps.product_data.product_applications import services as application_services
 from apps.product_data.product_applications.tasks import execute_product_application
@@ -16,7 +16,7 @@ def _product_b_submission() -> dict[str, object]:
         "name": "产品B申请",
         "product": "product-b",
         "payload": {
-            "environment": "env-1",
+            "environment": "UAT1",
             "product": "product-b",
             "location": "example-location",
             "branch": "example-branch",
@@ -34,7 +34,7 @@ def _product_b_submission() -> dict[str, object]:
 
 def _application_link_submission() -> dict[str, object]:
     return {
-        "env": "环境1",
+        "env": "UAT1",
         "product": "product-b",
         "category": "太阳码",
         "cooperationProjectId": "PROJECT-001",
@@ -44,7 +44,7 @@ def _application_link_submission() -> dict[str, object]:
 
 def _dynamic_application_link_submission() -> dict[str, object]:
     return {
-        "env": "环境1",
+        "env": "UAT1",
         "product": "product-a",
         "category": "动态链接",
         "cooperationProjectId": "PROJECT-001",
@@ -68,6 +68,17 @@ def test_readiness_checks_database_catalog_endpoints_and_messages(client) -> Non
     assert body["status"] == "ready"
     assert body["checks"]["catalog"]["products"] == 3
     assert body["checks"]["rawMessages"]["messages"] == 1
+
+
+def test_capabilities_hide_unimplemented_features_and_keep_local_workbench(client) -> None:
+    response = client.get("/api/meta/capabilities")
+
+    assert response.status_code == 200
+    data = response.json()["data"]
+    assert data["features"]["product-application"]["enabled"] is True
+    assert data["features"]["jobs"]["enabled"] is True
+    assert data["features"]["workflow-learning"]["enabled"] is False
+    assert data["features"]["workbench"]["enabled"] is True
 
 
 @pytest.mark.django_db
@@ -120,6 +131,9 @@ def test_product_application_resumes_from_persisted_link_checkpoint(monkeypatch)
         execution_config_version=snapshot.catalog_version,
         execution_config_snapshot=snapshot.model_dump(mode="json"),
     ).job
+    running = mark_job_running(job.id, "checkpoint-worker")
+    assert running is not None
+    job = running
 
     def fail_session(job):
         raise RuntimeError("application unavailable")
@@ -220,9 +234,9 @@ def test_application_link_route_is_frozen_and_executes_shared_operation(
     job = Job.objects.get(id=response.json()["data"]["id"])
     assert job.status == JobStatus.SUCCESS
     assert job.execution_config_snapshot["category"] == "太阳码"
-    assert job.execution_config_snapshot["environment"] == "env-1"
+    assert job.execution_config_snapshot["environment"] == "UAT1"
     assert job.execution_config_snapshot["product"] == "product-b"
-    assert job.payload["env"] == "env-1"
+    assert job.payload["env"] == "UAT1"
     assert job.payload["cooperationProjectId"] == "PROJECT-001"
     assert job.result["links"]["internalUrl"].startswith("https://internal.mock.local/")
     assert job.result["links"]["externalUrl"].startswith("https://apply.mock.local/")
@@ -230,7 +244,7 @@ def test_application_link_route_is_frozen_and_executes_shared_operation(
     events = {record.message: record for record in caplog.records}
     assert events["application_link_execution_started"].job_id == job.id
     assert events["application_link_execution_started"].product == "product-b"
-    assert events["application_link_execution_started"].environment == "env-1"
+    assert events["application_link_execution_started"].environment == "UAT1"
     assert events["application_link_links_generated"].category == "太阳码"
 
 
@@ -240,15 +254,36 @@ def test_application_link_config_uses_stable_catalog_codes(client) -> None:
 
     assert response.status_code == 200
     config = response.json()["data"]
-    assert config["environments"][0] == {"label": "环境1", "value": "env-1"}
+    assert config["environments"][0] == {"label": "UAT1", "value": "UAT1"}
     assert config["cooperationProjects"][0] == {
         "label": "合作项目一",
         "value": "PROJECT-001",
     }
     product_b = next(item for item in config["products"] if item["value"] == "product-b")
+    assert "product-a" in {item["value"] for item in config["products"]}
     assert product_b["label"] == "产品B"
-    assert product_b["routes"][0]["environment"] == "env-1"
+    assert product_b["routes"][0]["environment"] == "UAT1"
     assert product_b["routes"][0]["category"] == "太阳码"
+
+
+@pytest.mark.django_db
+def test_product_a_is_link_only_and_rejected_by_product_application(client) -> None:
+    config_response = client.get("/api/product-data/applications/config")
+    product_values = {item["value"] for item in config_response.json()["data"]["products"]}
+    assert "product-a" not in product_values
+
+    submission = _product_b_submission()
+    submission["name"] = "产品A申请"
+    submission["product"] = "product-a"
+    submission["payload"]["product"] = "product-a"
+    response = client.post(
+        "/api/product-data/applications",
+        data=json.dumps(submission),
+        content_type="application/json",
+    )
+
+    assert response.status_code == 400
+    assert "未启用产品申请" in response.json()["message"]
 
 
 @pytest.mark.django_db

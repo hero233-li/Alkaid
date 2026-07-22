@@ -15,7 +15,7 @@ from apps.product_data.application_data.schemas import (
 )
 
 logger = logging.getLogger(__name__)
-APPLICATION_DATA_ENVIRONMENTS = ("环境1", "环境2", "环境3")
+APPLICATION_DATA_ENVIRONMENTS = ("UAT1", "UAT2", "UATC")
 
 
 def execute_application_data_generation(job: Job) -> dict[str, object]:
@@ -62,6 +62,7 @@ def get_application_data_config() -> dict[str, object]:
         "companyTypes": [
             {"label": "公司", "value": "91"},
             {"label": "个体", "value": "92"},
+            {"label": "社会团体", "value": "51"},
         ],
         "genders": ["男", "女"],
         "maxCount": 1_000,
