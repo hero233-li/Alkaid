@@ -5,16 +5,7 @@ from django.conf import settings
 
 from apps.jobs.models import Job
 from apps.jobs.task_runner import JobTaskContext, run_job_task
-from apps.product_data.application_links.schemas import (
-    ApplicationLinkExecutionSnapshot,
-    ApplicationLinkSubmission,
-)
-from apps.product_data.application_links.services import (
-    generate_application_links,
-    normalize_submission,
-    resolve_execution_snapshot,
-    validate_submission,
-)
+from apps.product_data.application_links.flow import ApplicationLinkFlow
 
 logger = logging.getLogger(__name__)
 
@@ -29,22 +20,9 @@ logger = logging.getLogger(__name__)
 )
 def execute_application_link(self, job_id: int) -> None:
     def execute(context: JobTaskContext):
-        job = context.job
-        submission = ApplicationLinkSubmission.model_validate(job.payload)
-        if job.execution_config_snapshot:
-            snapshot = ApplicationLinkExecutionSnapshot.model_validate(
-                job.execution_config_snapshot
-            )
-        else:
-            submission = normalize_submission(submission)
-            snapshot = resolve_execution_snapshot(submission)
-        validate_submission(submission, snapshot)
-        context.progress(stage="validate", progress=30, message="申请链接参数校验完成")
-        result = generate_application_links(job, submission, snapshot=snapshot)
-        context.progress(
-            stage="generate",
-            progress=90,
-            message="申请链接生成完成，正在保存结果",
+        result = ApplicationLinkFlow().execute(
+            job=context.job,
+            progress=context.progress,
         )
         return {"links": result.model_dump(mode="json")}
 
@@ -66,5 +44,7 @@ def _log_error(job: Job, exc: Exception) -> None:
             "workflow_id": str(job.workflow_id),
             "trace_id": job.trace_id,
             "product": job.product,
+            "environment": job.payload.get("env") or job.payload.get("environment"),
+            "category": job.payload.get("category"),
         },
     )

@@ -17,6 +17,7 @@ from apps.product_data.application_links.services import (
     get_application_link_config,
     normalize_submission,
     resolve_execution_snapshot,
+    validate_submission,
 )
 from apps.product_data.catalog import ProductCatalogError
 
@@ -39,6 +40,7 @@ def generate_application_link(request: HttpRequest) -> JsonResponse:
             ApplicationLinkSubmission.model_validate_json(request.body)
         )
         execution_snapshot = resolve_execution_snapshot(submission)
+        validate_submission(submission, execution_snapshot)
         idempotency_key, trace_id = resolve_job_identifiers(
             request.headers.get("X-Idempotency-Key"),
             request.headers.get("X-Trace-ID"),

@@ -37,9 +37,7 @@ def normalize_submission(
         raise ApplicationLinkConfigurationError(str(exc)) from exc
     try:
         environment = _environment_code(catalog, submission.environment)
-        cooperation_project_id = _cooperation_project_id(
-            catalog, submission.cooperationProjectId
-        )
+        cooperation_project_id = _cooperation_project_id(catalog, submission.cooperationProjectId)
     except ProductCatalogError as exc:
         raise ApplicationLinkConfigurationError(str(exc)) from exc
     return submission.model_copy(
@@ -90,9 +88,7 @@ def _environment_code(catalog: ProductCatalog, environment_code_or_label: str) -
     raise ProductCatalogError(f"未知环境：{environment_code_or_label}")
 
 
-def _cooperation_project_id(
-    catalog: ProductCatalog, project_id_or_label: str | None
-) -> str | None:
+def _cooperation_project_id(catalog: ProductCatalog, project_id_or_label: str | None) -> str | None:
     options = catalog.reference.cooperationProjects
     if not options:
         return None
@@ -131,7 +127,6 @@ def resolve_execution_snapshot(
                 category=submission.category,
                 required_fields=route.requiredFields,
             )
-            validate_submission(submission, snapshot)
             return snapshot
     raise ApplicationLinkConfigurationError("当前产品在该环境下不支持该类别")
 
@@ -176,7 +171,6 @@ def generate_application_links(
     *,
     snapshot: ApplicationLinkExecutionSnapshot,
 ) -> ApplicationLinkResult:
-    validate_submission(submission, snapshot)
     log_context = {
         "job_id": job.id,
         "workflow_id": str(job.workflow_id),
