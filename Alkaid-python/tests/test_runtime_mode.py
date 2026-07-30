@@ -21,6 +21,7 @@ def test_celery_autodiscovery_registers_product_data_tasks() -> None:
         app.conf.task_always_eager = False
         app.loader.import_default_modules()
         expected = {
+            "apps.product_data.application_links.tasks.execute_application_link",
             "apps.product_data.verification_approval.tasks.execute_verification_approval",
             "apps.product_data.application_data.tasks.execute_application_data",
             "apps.product_data.card_status.tasks.execute_card_status",
@@ -29,6 +30,17 @@ def test_celery_autodiscovery_registers_product_data_tasks() -> None:
         assert expected <= set(app.tasks)
     finally:
         app.conf.task_always_eager = original_eager
+
+
+def test_compatibility_modules_remain_importable() -> None:
+    import apps.integrations.mock_product as mock_product
+    import apps.product_data.tasks as product_data_tasks
+
+    assert mock_product.__name__ == "apps.integrations.mock_product"
+    assert (
+        product_data_tasks.execute_application_link.name
+        == "apps.product_data.application_links.tasks.execute_application_link"
+    )
 
 
 @pytest.mark.django_db
