@@ -306,18 +306,17 @@ CELERY_QUEUE=alkaid-local
 
 ## 13. 发布状态
 
-本地实现、测试和报告均已提交，但当前执行环境无法把分支写入 GitHub：
+重新安装并授权 ChatGPT Codex Connector 后，已成功创建并发布远程分支：
 
 ```text
-git push -u origin agent/code-flow-refactor
-fatal: could not read Username for 'https://github.com': No such device or address
+agent/code-flow-refactor
 ```
 
-获得用户许可后尝试通过 GitHub Connector 创建同名分支，GitHub 仍返回：
+远程分支以 `a7a4f94e208d39ca2daf30bd60f1cd0ada124cae` 为唯一基准，包含实现、测试和报告三个
+逻辑提交。发布后已核对远程最终 tree SHA 与本地最终 tree SHA，二者均为：
 
 ```text
-403 Resource not accessible by integration
+ea7eda6e3e54a3fd5525b43fe59723c8e28a3d06
 ```
 
-因此远程分支尚未创建，也无法创建 PR。本地 commits 和从 `origin/main` 到本地 `HEAD`
-的完整 diff 均已保留；取得仓库写权限后可直接推送本地分支，或在 `main` 工作树上应用 diff。
+因此远程文件内容与本地验证过的文件内容完全一致。
