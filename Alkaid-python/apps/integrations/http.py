@@ -9,7 +9,7 @@ from typing import Any, Protocol
 from urllib.parse import urlsplit, urlunsplit
 
 import httpx
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
 from apps.integrations.contracts import BusinessResponseError, HttpResult, ResponseModel
 
@@ -240,6 +240,7 @@ class HttpClient:
             if form_data is not None
             else {"query": dict(params or {}), "body": request_json}
         )
+        audit_url = _without_query(str(self._client.base_url.join(path)))
         request_headers = dict(self._client.headers)
         request_headers.update(headers or {})
         request_headers["X-Trace-ID"] = trace_id
@@ -253,7 +254,7 @@ class HttpClient:
             response_handle = (
                 observer.started(
                     method=method,
-                    path=path,
+                    path=audit_url,
                     headers=request_headers,
                     request_body=audit_body,
                 )
@@ -305,9 +306,11 @@ class HttpClient:
         if response is None:
             raise ExternalServiceError("external service returned no response")
         self._log(method, path, trace_id, started, response.status_code, attempt + 1)
+        raw_response_body = _response_body(response)
         try:
             response.raise_for_status()
-            result = response_model.model_validate(response.json())
+            _raise_business_failure(raw_response_body)
+            result = response_model.model_validate(raw_response_body)
             if response_validator:
                 response_validator(result)
         except httpx.HTTPStatusError as exc:
@@ -316,12 +319,26 @@ class HttpClient:
                     response_handle,
                     status_code=response.status_code,
                     headers=dict(response.headers),
-                    response_body=_response_body(response),
+                    response_body=raw_response_body,
                     duration_ms=round((time.monotonic() - attempt_started) * 1000),
                     error=exc,
                 )
             raise ExternalServiceError(
                 "external service rejected the request",
+                status_code=response.status_code,
+            ) from exc
+        except ValidationError as exc:
+            if observer and response_handle is not None:
+                observer.finished(
+                    response_handle,
+                    status_code=response.status_code,
+                    headers=dict(response.headers),
+                    response_body=raw_response_body,
+                    duration_ms=round((time.monotonic() - attempt_started) * 1000),
+                    error=exc,
+                )
+            raise ExternalServiceError(
+                _invalid_response_message(exc, raw_response_body),
                 status_code=response.status_code,
             ) from exc
         except (ValueError, TypeError) as exc:
@@ -330,12 +347,13 @@ class HttpClient:
                     response_handle,
                     status_code=response.status_code,
                     headers=dict(response.headers),
-                    response_body=_response_body(response),
+                    response_body=raw_response_body,
                     duration_ms=round((time.monotonic() - attempt_started) * 1000),
                     error=exc,
                 )
             raise ExternalServiceError(
-                "external service returned an invalid response",
+                "外系统响应无法解析："
+                f"{type(exc).__name__}: {exc}",
                 status_code=response.status_code,
             ) from exc
         except BusinessResponseError as exc:
@@ -344,7 +362,7 @@ class HttpClient:
                     response_handle,
                     status_code=response.status_code,
                     headers=dict(response.headers),
-                    response_body=_response_body(response),
+                    response_body=raw_response_body,
                     duration_ms=round((time.monotonic() - attempt_started) * 1000),
                     error=exc,
                 )
@@ -354,7 +372,7 @@ class HttpClient:
                 response_handle,
                 status_code=response.status_code,
                 headers=dict(response.headers),
-                response_body=_response_body(response),
+                response_body=raw_response_body,
                 duration_ms=round((time.monotonic() - attempt_started) * 1000),
                 error=None,
             )
@@ -362,7 +380,7 @@ class HttpClient:
             data=result,
             status_code=response.status_code,
             headers=dict(response.headers),
-            body=_response_body(response),
+            body=raw_response_body,
         )
 
     def _retry_delay(self, attempt: int, response: httpx.Response | None) -> float:
@@ -392,6 +410,58 @@ class HttpClient:
                 "attempts": attempts,
             },
         )
+
+
+def _raise_business_failure(response_body: Any) -> None:
+    if not isinstance(response_body, Mapping):
+        return
+
+    state = response_body.get("biz_state", response_body.get("bizState"))
+    if str(state or "").strip().upper() not in {"F", "FAIL", "FAILED"}:
+        return
+
+    code = response_body.get("rsp_code", response_body.get("rspCode"))
+    message = response_body.get(
+        "rsp_msg",
+        response_body.get("rspMsg", response_body.get("message")),
+    )
+    raise BusinessResponseError(
+        "外系统业务失败："
+        f"biz_state={state!r}；"
+        f"rsp_code={code!r}；"
+        f"rsp_msg={message!r}"
+    )
+
+
+def _invalid_response_message(
+    error: ValidationError,
+    response_body: Any,
+) -> str:
+    missing_fields: list[str] = []
+    for item in error.errors():
+        if item.get("type") != "missing":
+            continue
+        location = ".".join(str(part) for part in item.get("loc", ()))
+        if location:
+            missing_fields.append(location)
+
+    if isinstance(response_body, Mapping):
+        actual_fields = ", ".join(
+            sorted(str(key) for key in response_body)
+        ) or "<空对象>"
+    else:
+        actual_fields = type(response_body).__name__
+
+    missing_text = (
+        ", ".join(missing_fields)
+        if missing_fields
+        else str(error).splitlines()[0]
+    )
+    return (
+        "外系统响应结构不符合预期："
+        f"缺少/错误字段={missing_text}；"
+        f"实际顶层字段={actual_fields}"
+    )
 
 
 def _response_body(response: httpx.Response) -> Any:
