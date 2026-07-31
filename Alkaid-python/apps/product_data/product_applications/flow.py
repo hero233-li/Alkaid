@@ -3,11 +3,16 @@ import binascii
 from collections.abc import Callable
 from typing import Any
 
+from apps.integrations.cjdk_jyrc import config
 from apps.integrations.cjdk_jyrc.adapter import CjdkJyrcAgreementAdapter
+from apps.integrations.cjdk_jyrc.application_link import (
+    CjdkJyrcApplicationLinkAdapter,
+)
 from apps.integrations.cjdk_jyrc.models import (
     AgreementDocumentBody,
     AgreementPreviewData,
     AgreementTemplateInfo,
+    ApplicationLinks,
 )
 from apps.jobs.models import Job
 from apps.product_data.catalog import ProductExecutionSnapshot
@@ -15,6 +20,7 @@ from apps.product_data.product_applications.context import ProductApplicationCon
 from apps.product_data.product_applications.schemas import ProductApplicationSubmission
 from apps.product_data.product_applications.services import (
     build_product_application_result,
+    resolve_application_link_category,
     resolve_product_snapshot,
     validate_submission,
 )
@@ -45,19 +51,36 @@ class ProductApplicationFlow:
         self.report_progress(
             progress,
             stage="validate",
-            progress=35,
+            progress=25,
             message="产品申请参数校验完成",
+        )
+
+        self.generate_application_link(context)
+        self.report_progress(
+            progress,
+            stage="application_link",
+            progress=40,
+            message="申请链接获取完成",
         )
 
         with CjdkJyrcAgreementAdapter(
             job,
             environment=self.environment(context),
         ) as adapter:
+            self.acquire_application_session(context, adapter)
+            self.capture_session(context, adapter)
+            self.report_progress(
+                progress,
+                stage="session",
+                progress=50,
+                message="申请页面 Session 建立完成",
+            )
+
             self.query_agreement_templates(context, adapter)
             self.report_progress(
                 progress,
                 stage="agreement_query",
-                progress=55,
+                progress=65,
                 message="协议模板查询完成",
             )
 
@@ -65,7 +88,7 @@ class ProductApplicationFlow:
             self.report_progress(
                 progress,
                 stage="agreement_preview",
-                progress=70,
+                progress=78,
                 message="协议预览生成完成",
             )
 
@@ -126,6 +149,38 @@ class ProductApplicationFlow:
         return value.strip()
 
     @staticmethod
+    def generate_application_link(context: ProductApplicationContext) -> None:
+        submission = ProductApplicationFlow._submission(context)
+        environment = ProductApplicationFlow.environment(context)
+        context.application_link_category = resolve_application_link_category(
+            submission.product,
+            environment,
+        )
+        with CjdkJyrcApplicationLinkAdapter(
+            context.job,
+            environment=environment,
+        ) as adapter:
+            context.application_links = adapter.generate_link(
+                product=submission.product,
+                category=context.application_link_category,
+                payload=submission.payload,
+            )
+
+    @staticmethod
+    def acquire_application_session(
+        context: ProductApplicationContext,
+        adapter: CjdkJyrcAgreementAdapter,
+    ) -> None:
+        links = ProductApplicationFlow._application_links(context)
+        mode = config.application_link_url_mode()
+        if mode == "internal":
+            application_url = links.internal_url
+        else:
+            application_url = links.external_url
+        context.selected_application_link_kind = mode
+        adapter.acquire_session(application_url)
+
+    @staticmethod
     def query_agreement_templates(
         context: ProductApplicationContext,
         adapter: CjdkJyrcAgreementAdapter,
@@ -161,7 +216,9 @@ class ProductApplicationFlow:
         adapter: CjdkJyrcAgreementAdapter,
     ) -> None:
         context.session_established = adapter.session_established
+        context.session_cookie_names = adapter.session_cookie_names
         context.session_header_names = adapter.session_header_names
+        context.session_final_url = adapter.session_final_url
 
     @staticmethod
     def build_result(context: ProductApplicationContext) -> None:
@@ -170,7 +227,12 @@ class ProductApplicationFlow:
             ProductApplicationFlow._submission(context),
             ProductApplicationFlow._snapshot(context),
             flow_result={
-                "message": "协议查询、预览与阅读完成",
+                "message": "申请链接、Session、协议查询、预览与阅读完成",
+                "applicationLink": {
+                    "generated": context.application_links is not None,
+                    "category": context.application_link_category,
+                    "selected": context.selected_application_link_kind,
+                },
                 "agreementReadCompleted": bool(context.agreement_documents),
                 "agreementTemplates": [
                     ProductApplicationFlow._template_summary(item)
@@ -195,7 +257,9 @@ class ProductApplicationFlow:
                 ],
                 "externalSession": {
                     "established": context.session_established,
+                    "cookieNames": list(context.session_cookie_names),
                     "forwardedHeaderNames": list(context.session_header_names),
+                    "finalUrlPresent": context.session_final_url is not None,
                 },
             },
         )
@@ -232,6 +296,12 @@ class ProductApplicationFlow:
         if context.execution_snapshot is None:
             raise RuntimeError("产品申请流程尚未解析执行配置")
         return context.execution_snapshot
+
+    @staticmethod
+    def _application_links(context: ProductApplicationContext) -> ApplicationLinks:
+        if context.application_links is None:
+            raise RuntimeError("产品申请流程尚未获取申请链接")
+        return context.application_links
 
     @staticmethod
     def _agreement_preview(context: ProductApplicationContext) -> AgreementPreviewData:
