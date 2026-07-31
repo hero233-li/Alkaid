@@ -1,6 +1,9 @@
 name: Package backend temporary
 
 on:
+  pull_request:
+    branches:
+      - main
   push:
     branches:
       - agent/code-flow-refactor
