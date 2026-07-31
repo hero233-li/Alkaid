@@ -1,4 +1,4 @@
-"""Dispatch persisted Jobs without leaking broker failures into API responses."""
+"""Dispatch persisted product-application Jobs without leaking broker failures into API responses."""
 
 import logging
 from typing import Any
@@ -12,14 +12,7 @@ logger = logging.getLogger(__name__)
 
 
 def enqueue_job(job: Job) -> None:
-    """Enqueue a Job, with a development-only fallback for local Mock mode.
-
-    A job is persisted before this function is called.  If RabbitMQ is down,
-    production keeps that fact on the Job instead of turning the HTTP response
-    into an unhelpful HTML 500.  Local Mock development can still be used
-    without installing RabbitMQ: the task is executed synchronously in the
-    request process and the normal Job state machine remains authoritative.
-    """
+    """Enqueue one product-application Job with a development-only Mock fallback."""
 
     task = _task_for_kind(job.kind)
     try:
@@ -28,8 +21,8 @@ def enqueue_job(job: Job) -> None:
     except Exception:  # Celery/Kombu exceptions vary by transport.
         logger.exception("job_enqueue_failed", extra={"job_id": job.id, "kind": job.kind})
 
-    # With Celery eager execution, delay() has already run the task.  A second
-    # apply() would duplicate external calls when the task itself failed.
+    # With eager execution, delay() has already run the task. A second apply()
+    # would duplicate external calls when the task itself failed.
     if settings.CELERY_TASK_ALWAYS_EAGER:
         return
 
@@ -40,8 +33,6 @@ def enqueue_job(job: Job) -> None:
             "消息队列不可用，开发 Mock 模式切换为本地执行",
             step="dispatch",
         )
-        # throw=False keeps a business/external failure in the Job record and
-        # prevents it from becoming a second HTTP 500.
         task.apply(args=(job.id,), throw=False)
         return
 
@@ -55,34 +46,9 @@ def _allow_sync_fallback() -> bool:
 
 
 def _task_for_kind(kind: str) -> Any:
-    if kind == "product_application":
-        from apps.product_data.product_applications.tasks import execute_product_application
+    if kind != "product_application":
+        raise ValueError(f"不支持的任务类型：{kind}")
 
-        return execute_product_application
-    if kind == "application_link_generation":
-        from apps.product_data.application_links.tasks import execute_application_link
+    from apps.product_data.product_applications.tasks import execute_product_application
 
-        return execute_application_link
-    if kind.startswith("business_access."):
-        from apps.product_data.business_access.tasks import execute_business_access_task
-
-        return execute_business_access_task
-    if kind.startswith("verification_approval."):
-        from apps.product_data.verification_approval.tasks import (
-            execute_verification_approval_task,
-        )
-
-        return execute_verification_approval_task
-    if kind == "application_data.generate":
-        from apps.product_data.application_data.tasks import execute_application_data_task
-
-        return execute_application_data_task
-    if kind.startswith("card_status."):
-        from apps.product_data.card_status.tasks import execute_card_status_task
-
-        return execute_card_status_task
-    if kind.startswith("loan_status."):
-        from apps.product_data.loan_status.tasks import execute_loan_status_task
-
-        return execute_loan_status_task
-    raise ValueError(f"不支持的任务类型：{kind}")
+    return execute_product_application
