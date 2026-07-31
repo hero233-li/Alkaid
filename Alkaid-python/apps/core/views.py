@@ -7,8 +7,13 @@ from django.db import connection
 from django.http import FileResponse, Http404, JsonResponse
 from django.views.decorators.http import require_GET
 
+from apps.integrations.cjdk_jyrc.messages import (
+    validate_message_catalog as validate_agreement_message_catalog,
+)
 from apps.integrations.mock_product.api import validate_product_endpoint_coverage
-from apps.integrations.mock_product.messages import validate_message_catalog
+from apps.integrations.mock_product.messages import (
+    validate_message_catalog as validate_mock_message_catalog,
+)
 from apps.product_data.catalog import load_product_catalog
 
 logger = logging.getLogger(__name__)
@@ -36,7 +41,14 @@ def readiness(request):
         }
         validate_product_endpoint_coverage(set(catalog.products))
         checks["productEndpoints"] = "ok"
-        checks["rawMessages"] = {"status": "ok", **validate_message_catalog()}
+        checks["rawMessages"] = {
+            "status": "ok",
+            **validate_mock_message_catalog(),
+        }
+        checks["agreementMessages"] = {
+            "status": "ok",
+            **validate_agreement_message_catalog(),
+        }
     except Exception as exc:
         logger.exception("readiness_check_failed")
         checks["error"] = type(exc).__name__
