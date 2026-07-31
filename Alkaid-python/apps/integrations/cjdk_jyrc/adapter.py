@@ -37,8 +37,19 @@ class CjdkJyrcAgreementAdapter:
         return self._client.session_established
 
     @property
+    def session_cookie_names(self) -> tuple[str, ...]:
+        return self._client.session_cookie_names
+
+    @property
     def session_header_names(self) -> tuple[str, ...]:
         return self._client.session_header_names
+
+    @property
+    def session_final_url(self) -> str | None:
+        return self._client.session_final_url
+
+    def acquire_session(self, application_url: str) -> None:
+        self._client.acquire_session(application_url)
 
     def query_agreement_templates(
         self,
@@ -101,7 +112,9 @@ class CjdkJyrcAgreementAdapter:
                     for number in template_numbers
                 ],
                 "coprProjeId": str(
-                    payload.get("projectId") or config.default_project_id()
+                    payload.get("projectId")
+                    or payload.get("cooperationProjectId")
+                    or config.default_project_id()
                 ),
                 "prodSubdvDmsnEncode": config.product_subdivision_encode(),
             }
