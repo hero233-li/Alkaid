@@ -24,6 +24,8 @@ def _product_b_submission() -> dict[str, object]:
             "customerType": "farmer",
             "applicationMethod": "normal",
             "redShieldEnabled": True,
+            "idType": "01",
+            "projectId": "PROJECT-001",
         },
     }
 
@@ -37,11 +39,14 @@ def test_readiness_checks_database_catalog_endpoints_and_messages(client) -> Non
     assert body["status"] == "ready"
     assert body["checks"]["catalog"]["products"] == 3
     assert body["checks"]["rawMessages"]["messages"] == 1
+    assert body["checks"]["agreementMessages"]["messages"] == 3
 
 
 @pytest.mark.django_db
-def test_product_application_freezes_catalog_and_runs_mock_external_flow(
-    client, django_capture_on_commit_callbacks
+@override_settings(EXTERNAL_SYSTEM_MODE="mock")
+def test_product_application_freezes_catalog_and_reads_agreement(
+    client,
+    django_capture_on_commit_callbacks,
 ) -> None:
     with django_capture_on_commit_callbacks(execute=True):
         response = client.post(
@@ -56,14 +61,17 @@ def test_product_application_freezes_catalog_and_runs_mock_external_flow(
     job = Job.objects.get(id=response.json()["data"]["id"])
     assert job.status == JobStatus.SUCCESS
     assert job.execution_config_snapshot["product_code"] == "product-b"
-    assert job.result["applicationNo"].startswith("APP-")
-    assert job.api_calls.count() == 5
+    assert job.result["agreementReadCompleted"] is True
+    assert job.result["agreementDocuments"][0]["fileName"] == "mock-agreement.pdf"
+    assert job.api_calls.count() == 3
 
 
 @pytest.mark.django_db
 @override_settings(DEBUG=True, EXTERNAL_SYSTEM_MODE="mock", CELERY_TASK_ALWAYS_EAGER=False)
 def test_product_application_uses_local_mock_when_broker_is_unavailable(
-    client, monkeypatch, django_capture_on_commit_callbacks
+    client,
+    monkeypatch,
+    django_capture_on_commit_callbacks,
 ) -> None:
     def fail_enqueue(*args, **kwargs):
         raise ConnectionError("RabbitMQ is unavailable")
@@ -80,13 +88,16 @@ def test_product_application_uses_local_mock_when_broker_is_unavailable(
     assert response.status_code == 202
     job = Job.objects.get(id=response.json()["data"]["id"])
     assert job.status == JobStatus.SUCCESS
+    assert job.result["agreementReadCompleted"] is True
     assert any("本地执行" in log.message for log in job.logs.all())
 
 
 @pytest.mark.django_db
 @override_settings(DEBUG=False, EXTERNAL_SYSTEM_MODE="real", CELERY_TASK_ALWAYS_EAGER=False)
 def test_product_application_records_broker_failure_on_job(
-    client, monkeypatch, django_capture_on_commit_callbacks
+    client,
+    monkeypatch,
+    django_capture_on_commit_callbacks,
 ) -> None:
     def fail_enqueue(*args, **kwargs):
         raise ConnectionError("RabbitMQ is unavailable")
