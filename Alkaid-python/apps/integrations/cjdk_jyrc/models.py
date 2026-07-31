@@ -1,10 +1,27 @@
 from typing import Any
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import AliasChoices, BaseModel, ConfigDict, Field
 
 
 class CjdkResponseModel(BaseModel):
     model_config = ConfigDict(populate_by_name=True, extra="allow")
+
+
+class ApplicationLinks(CjdkResponseModel):
+    internal_url: str = Field(
+        min_length=1,
+        validation_alias=AliasChoices("internal_url", "internalUrl"),
+    )
+    external_url: str = Field(
+        min_length=1,
+        validation_alias=AliasChoices("external_url", "externalUrl"),
+    )
+
+
+class GenerateApplicationLinkEnvelope(CjdkResponseModel):
+    code: str
+    message: str | None = None
+    data: ApplicationLinks
 
 
 class AgreementTemplateInfo(CjdkResponseModel):
