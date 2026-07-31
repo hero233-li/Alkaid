@@ -1,6 +1,6 @@
 {
   "id": "product-application-example",
-  "version": 8,
+  "version": 7,
   "environments": [
     {
       "label": "UAT1",
