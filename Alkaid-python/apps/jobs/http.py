@@ -29,6 +29,10 @@ SENSITIVE_KEYS = {
     "sign",
     "req_message",
     "biz_content",
+    "x_fcos_sessionid",
+    "x_sd",
+    "jsessionid",
+    "sessionid",
 }
 
 
@@ -54,11 +58,13 @@ def sanitize(value: Any, *, key: str = "") -> Any:
         or "secret" in compact_key
         or "privatekey" in compact_key
         or "cookie" in compact_key
+        or "session" in compact_key
     ):
         return _masked(value)
     if isinstance(value, Mapping):
         return {
-            str(item_key): sanitize(item, key=str(item_key)) for item_key, item in value.items()
+            str(item_key): sanitize(item, key=str(item_key))
+            for item_key, item in value.items()
         }
     if isinstance(value, (list, tuple)):
         return [sanitize(item) for item in value]
@@ -72,8 +78,15 @@ def sanitize_and_limit(value: Any) -> tuple[Any, bool]:
     encoded = json.dumps(sanitized, ensure_ascii=False, default=str).encode("utf-8")
     if len(encoded) <= settings.JOB_MAX_HTTP_BODY_BYTES:
         return sanitized, False
-    preview = encoded[: settings.JOB_MAX_HTTP_BODY_BYTES].decode("utf-8", errors="ignore")
-    return {"truncated": True, "originalBytes": len(encoded), "preview": preview}, True
+    preview = encoded[: settings.JOB_MAX_HTTP_BODY_BYTES].decode(
+        "utf-8",
+        errors="ignore",
+    )
+    return {
+        "truncated": True,
+        "originalBytes": len(encoded),
+        "preview": preview,
+    }, True
 
 
 class JobHttpCallObserver:
@@ -149,7 +162,8 @@ class JobHttpCallObserver:
         add_job_log(
             self.job,
             "ERROR" if error else "INFO",
-            f"外部接口{outcome}：{call.method} {call.url} -> {status_text} ({duration_ms}ms)",
+            f"外部接口{outcome}：{call.method} {call.url} -> "
+            f"{status_text} ({duration_ms}ms)",
             step=self.step,
             celery_task_id=self.job.celery_task_id,
             metadata={
