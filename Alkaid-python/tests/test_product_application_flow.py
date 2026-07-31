@@ -49,25 +49,38 @@ def _job(*, key: str, payload=None, snapshot=None):
 
 
 @pytest.mark.django_db
-@override_settings(EXTERNAL_SYSTEM_MODE="mock")
-def test_product_application_flow_queries_previews_and_reads_agreement() -> None:
+@override_settings(EXTERNAL_SYSTEM_MODE="mock", APPLICATION_LINK_URL_MODE="internal")
+def test_product_application_flow_opens_link_then_reads_agreement() -> None:
     job = _job(key="agreement-flow")
 
     result = ProductApplicationFlow().execute(job=job)
 
+    assert result["applicationLink"] == {
+        "generated": True,
+        "category": "太阳码",
+        "selected": "internal",
+    }
     assert result["agreementReadCompleted"] is True
     assert result["agreementTemplates"][0]["fcosTemplateNo"] == "2209201448031"
     assert result["agreementPreview"]["documents"][0]["docId"] == "MOCK-DOC-ID-001"
     assert result["agreementDocuments"][0]["fileName"] == "mock-agreement.pdf"
     assert result["agreementDocuments"][0]["contentBytes"] > 0
     assert result["externalSession"]["established"] is True
+    assert result["externalSession"]["cookieNames"] == [
+        "JSESSIONID",
+        "link_entry",
+        "token_id",
+    ]
     assert result["externalSession"]["forwardedHeaderNames"] == [
         "X-FCOS-SESSIONID",
         "X-Sd",
         "X-Token",
     ]
+    assert result["externalSession"]["finalUrlPresent"] is True
 
     assert list(job.api_calls.order_by("id").values_list("step", flat=True)) == [
+        "application_link.generate_link",
+        "application_link.acquire_session",
         "agreement.query_templates",
         "agreement.query_preview",
         "agreement.read_document",
@@ -86,8 +99,13 @@ def test_product_application_flow_validates_before_opening_adapter(monkeypatch) 
     )
 
     def unexpected_adapter(*args, **kwargs):
-        raise AssertionError("validation failure must not open the external adapter")
+        raise AssertionError("validation failure must not open an external adapter")
 
+    monkeypatch.setattr(
+        flow_module,
+        "CjdkJyrcApplicationLinkAdapter",
+        unexpected_adapter,
+    )
     monkeypatch.setattr(flow_module, "CjdkJyrcAgreementAdapter", unexpected_adapter)
 
     with pytest.raises(ProductConfigurationError, match="personName"):
@@ -125,9 +143,18 @@ def test_product_application_task_delegates_to_flow(monkeypatch) -> None:
         "uat1": "http://uat1.example:8090/",
         "uat2": "http://uat2.example:8091",
     },
+    APPLICATION_LINK_BASE_URLS={
+        "uat1": "http://link-uat1.example:8080/",
+        "uat2": "http://link-uat2.example:8081",
+    },
 )
-def test_environment_selects_its_own_base_url() -> None:
-    from apps.integrations.cjdk_jyrc.config import resolve_base_url
+def test_environment_selects_its_own_base_urls() -> None:
+    from apps.integrations.cjdk_jyrc.config import (
+        resolve_application_link_base_url,
+        resolve_base_url,
+    )
 
     assert resolve_base_url("uat1") == "http://uat1.example:8090"
     assert resolve_base_url("UAT2") == "http://uat2.example:8091"
+    assert resolve_application_link_base_url("uat1") == "http://link-uat1.example:8080"
+    assert resolve_application_link_base_url("UAT2") == "http://link-uat2.example:8081"
