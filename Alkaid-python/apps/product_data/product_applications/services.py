@@ -1,7 +1,6 @@
 import json
 from typing import Any
 
-from apps.integrations.cjdk_jyrc.config import is_configured_environment
 from apps.jobs.models import Job
 from apps.product_data.catalog import (
     PRODUCT_ROOT,
@@ -34,23 +33,22 @@ def validate_submission(
     if execution_snapshot.product_code != submission.product:
         raise ProductConfigurationError("Job 执行配置与提交产品不一致")
 
-    product = None
-    if catalog is not None:
-        try:
-            product = catalog.product(submission.product)
-        except ValueError as exc:
-            raise ProductConfigurationError(f"未知产品：{submission.product}") from exc
+    resolved_catalog = catalog or load_product_catalog()
+    try:
+        product = resolved_catalog.product(submission.product)
+    except ValueError as exc:
+        raise ProductConfigurationError(f"未知产品：{submission.product}") from exc
 
     payload = submission.payload
     if payload.get("product") not in {None, submission.product}:
         raise ProductConfigurationError("payload.product 与提交产品不一致")
-    environment = payload.get("environment")
-    if (
-        product is not None
-        and environment not in product.environments
-        and not is_configured_environment(str(environment or ""))
-    ):
-        raise ProductConfigurationError("当前环境不支持该产品，或未配置对应基础地址")
+    environment = normalize_environment(
+        payload.get("environment"),
+        resolved_catalog,
+    )
+    payload["environment"] = environment
+    if environment not in product.environments:
+        raise ProductConfigurationError("当前环境不支持该产品")
 
     customer_type = validate_customer_type(payload)
     if payload.get("applicationMethod") != execution_snapshot.method_code:
@@ -77,9 +75,21 @@ def validate_submission(
     ):
         raise ProductConfigurationError("projectId 与 cooperationProjectId 不一致")
 
-    if product is not None:
-        _validate_location_hierarchy(product.locations, payload)
+    _validate_location_hierarchy(product.locations, payload)
     payload["customerType"] = customer_type.value
+
+
+def normalize_environment(value: object, catalog: ProductCatalog) -> str:
+    if not isinstance(value, str) or not value.strip():
+        raise ProductConfigurationError("环境不能为空")
+
+    normalized = value.strip().upper()
+    for option in catalog.reference.environments:
+        if normalized in {option.value.upper(), option.label.upper()}:
+            return option.value
+
+    allowed = ", ".join(option.value for option in catalog.reference.environments)
+    raise ProductConfigurationError(f"环境必须是以下值之一：{allowed}")
 
 
 def validate_customer_type(payload: dict[str, Any]) -> CustomerType:

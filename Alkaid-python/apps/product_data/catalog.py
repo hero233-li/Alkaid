@@ -39,11 +39,16 @@ class CatalogField(ProductField):
     def required_for(self, method_code: str) -> bool:
         return ALL_METHODS in self.requiredFor or method_code in self.requiredFor
 
-    def as_ui_field(self, method_code: str) -> ProductField:
+    def as_ui_field(self) -> ProductField:
+        """Return product-neutral control metadata.
+
+        Requiredness belongs to ProductDefinition.requiredFields and the frozen
+        ProductExecutionSnapshot, never to the shared field descriptor.
+        """
         content = self.model_dump(
             exclude={"group", "enabledFor", "requiredFor", "expose", "execution"}
         )
-        content["required"] = self.required_for(method_code)
+        content["required"] = False
         return ProductField.model_validate(content)
 
 
@@ -233,7 +238,7 @@ class ProductCatalog(BaseModel):
             for field in product.fields:
                 if not field.expose:
                     continue
-                ui_field = field.as_ui_field(product.defaultApplicationMethod)
+                ui_field = field.as_ui_field()
                 previous = ui_fields.get(field.name)
                 if previous is not None and previous != ui_field:
                     raise ProductCatalogError(f"页面字段 {field.name} 在多个产品中的定义不一致")

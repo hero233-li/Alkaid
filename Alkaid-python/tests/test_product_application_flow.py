@@ -12,7 +12,7 @@ from apps.product_data.product_applications.services import ProductConfiguration
 
 def _payload() -> dict[str, object]:
     return {
-        "environment": "env-1",
+        "environment": "UAT1",
         "product": "product-b",
         "location": "example-location",
         "branch": "example-branch",
@@ -140,12 +140,14 @@ def test_product_application_task_delegates_to_flow(monkeypatch) -> None:
 @override_settings(
     EXTERNAL_SYSTEM_MODE="real",
     CJDK_JYRC_BASE_URLS={
-        "uat1": "http://uat1.example:8090/",
-        "uat2": "http://uat2.example:8091",
+        "UAT1": "http://uat1.example:8090/",
+        "UAT2": "http://uat2.example:8091",
+        "UATC": "http://uatc.example:8092",
     },
     APPLICATION_LINK_BASE_URLS={
-        "uat1": "http://link-uat1.example:8080/",
-        "uat2": "http://link-uat2.example:8081",
+        "UAT1": "http://link-uat1.example:8080/",
+        "UAT2": "http://link-uat2.example:8081",
+        "UATC": "http://link-uatc.example:8082",
     },
 )
 def test_environment_selects_its_own_base_urls() -> None:
@@ -158,3 +160,24 @@ def test_environment_selects_its_own_base_urls() -> None:
     assert resolve_base_url("UAT2") == "http://uat2.example:8091"
     assert resolve_application_link_base_url("uat1") == "http://link-uat1.example:8080"
     assert resolve_application_link_base_url("UAT2") == "http://link-uat2.example:8081"
+    assert resolve_base_url("uatc") == "http://uatc.example:8092"
+    assert resolve_application_link_base_url("uatc") == "http://link-uatc.example:8082"
+
+
+def test_requiredness_is_not_stored_on_global_ui_field() -> None:
+    from apps.product_data.catalog import CatalogField
+
+    required_for_product = CatalogField(
+        name="sharedField",
+        group="base",
+        requiredFor=("*",),
+    )
+    optional_for_product = CatalogField(
+        name="sharedField",
+        group="base",
+    )
+
+    assert required_for_product.required_for("normal") is True
+    assert optional_for_product.required_for("normal") is False
+    assert required_for_product.as_ui_field() == optional_for_product.as_ui_field()
+    assert required_for_product.as_ui_field().required is False

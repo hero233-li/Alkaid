@@ -12,7 +12,7 @@ def _product_b_submission() -> dict[str, object]:
         "name": "产品B申请",
         "product": "product-b",
         "payload": {
-            "environment": "env-1",
+            "environment": "uat1",
             "product": "product-b",
             "location": "example-location",
             "branch": "example-branch",
@@ -61,6 +61,7 @@ def test_product_application_freezes_catalog_and_reads_agreement(
     job = Job.objects.get(id=response.json()["data"]["id"])
     assert job.status == JobStatus.SUCCESS
     assert job.execution_config_snapshot["product_code"] == "product-b"
+    assert job.payload["environment"] == "UAT1"
     assert job.result["applicationLink"]["category"] == "太阳码"
     assert job.result["externalSession"]["established"] is True
     assert job.result["agreementReadCompleted"] is True

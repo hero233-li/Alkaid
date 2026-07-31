@@ -46,7 +46,7 @@ def application_link_url_mode() -> str:
 
 
 def is_configured_environment(environment: str) -> bool:
-    normalized = environment.strip().lower()
+    normalized = environment.strip().upper()
     return bool(normalized and normalized in _url_mapping("CJDK_JYRC_BASE_URLS"))
 
 
@@ -98,7 +98,7 @@ def default_template_numbers() -> tuple[str, ...]:
 
 
 def _environment(environment: str) -> str:
-    normalized = environment.strip().lower()
+    normalized = environment.strip().upper()
     if not normalized:
         raise ImproperlyConfigured("产品申请环境不能为空")
     return normalized
@@ -139,7 +139,7 @@ def _url_mapping(name: str) -> dict[str, str]:
 
     result: dict[str, str] = {}
     for key, value in configured.items():
-        normalized_key = str(key).strip().lower()
+        normalized_key = str(key).strip().upper()
         normalized_value = str(value).strip()
         if normalized_key and normalized_value:
             result[normalized_key] = normalized_value
