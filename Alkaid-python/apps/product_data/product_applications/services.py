@@ -1,5 +1,6 @@
 from typing import Any
 
+from apps.integrations.cjdk_jyrc.config import is_configured_environment
 from apps.jobs.models import Job
 from apps.product_data.catalog import (
     ProductCatalog,
@@ -14,6 +15,12 @@ from apps.product_data.product_applications.schemas import (
 
 class ProductConfigurationError(ValueError):
     pass
+
+
+INTEGRATION_OPTIONAL_FIELDS = {
+    "idType",
+    "projectId",
+}
 
 
 def validate_submission(
@@ -34,19 +41,26 @@ def validate_submission(
     payload = submission.payload
     if payload.get("product") not in {None, submission.product}:
         raise ProductConfigurationError("payload.product 与提交产品不一致")
-    if product is not None and payload.get("environment") not in product.environments:
-        raise ProductConfigurationError("当前环境不支持该产品")
+    environment = payload.get("environment")
+    if (
+        product is not None
+        and environment not in product.environments
+        and not is_configured_environment(str(environment or ""))
+    ):
+        raise ProductConfigurationError("当前环境不支持该产品，或未配置对应基础地址")
 
     customer_type = validate_customer_type(payload)
     if payload.get("applicationMethod") != execution_snapshot.method_code:
         raise ProductConfigurationError("申请方式与 Job 执行配置不一致")
-    known_fields = set(execution_snapshot.fields)
+    known_fields = set(execution_snapshot.fields) | INTEGRATION_OPTIONAL_FIELDS
     unknown_fields = set(payload) - known_fields
     if unknown_fields:
         raise ProductConfigurationError(f"提交了未知字段：{', '.join(sorted(unknown_fields))}")
     required_fields = set(execution_snapshot.required_fields)
     missing = [
-        name for name in required_fields if payload.get(name) is None or payload.get(name) == ""
+        name
+        for name in required_fields
+        if payload.get(name) is None or payload.get(name) == ""
     ]
     if missing:
         raise ProductConfigurationError(f"缺少必填字段：{', '.join(sorted(missing))}")
@@ -111,7 +125,7 @@ def build_product_application_result(
         "executionConfigVersion": snapshot.catalog_version,
         "applicationMethod": snapshot.method_code,
         "executionFields": list(snapshot.fields),
-        "message": "示例产品参数校验完成",
+        "message": "产品申请参数校验完成",
         **flow_result,
     }
 
