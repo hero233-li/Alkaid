@@ -29,6 +29,8 @@ SENSITIVE_KEYS = {
     "sign",
     "req_message",
     "biz_content",
+    "downfile",
+    "down_file",
     "x_fcos_sessionid",
     "x_sd",
     "jsessionid",
@@ -59,6 +61,7 @@ def sanitize(value: Any, *, key: str = "") -> Any:
         or "privatekey" in compact_key
         or "cookie" in compact_key
         or "session" in compact_key
+        or "downfile" in compact_key
     ):
         return _masked(value)
     if isinstance(value, Mapping):
