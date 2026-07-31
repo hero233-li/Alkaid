@@ -6,10 +6,6 @@ from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
-from apps.product_data.application_links.schemas import (
-    ApplicationLinkSubmission,
-    LinkCategory,
-)
 from apps.product_data.product_applications.schemas import (
     ProductApplicationConfig,
     ProductDefinition,
@@ -58,18 +54,10 @@ class CatalogApplicationMethod(BaseModel):
     name: str = Field(min_length=1, max_length=128)
 
 
-class CatalogApplicationLinkRoute(BaseModel):
-    model_config = ConfigDict(frozen=True, extra="forbid")
-
-    environment: str = Field(min_length=1, max_length=128)
-    category: str = Field(min_length=1, max_length=32)
-    requiredFields: tuple[str, ...] = ()
-
-
 class CatalogFeatures(BaseModel):
-    model_config = ConfigDict(frozen=True, extra="forbid")
+    """Compatibility envelope for product metadata not used by product application."""
 
-    applicationLinks: tuple[CatalogApplicationLinkRoute, ...] = ()
+    model_config = ConfigDict(frozen=True, extra="ignore")
 
 
 class ProductCatalogSource(BaseModel):
@@ -118,22 +106,6 @@ class ProductCatalogSource(BaseModel):
                     raise ValueError(f"字段 {field.name} 在未启用的申请方式中被设为必填")
             if field.expose and not field.group:
                 raise ValueError(f"页面字段 {field.name} 缺少 group")
-
-        route_keys: list[tuple[str, str]] = []
-        known_link_fields = set(ApplicationLinkSubmission.model_fields)
-        known_categories = {category.value for category in LinkCategory}
-        for route in self.features.applicationLinks:
-            route_key = (route.environment, route.category)
-            route_keys.append(route_key)
-            if route.category not in known_categories:
-                raise ValueError(f"申请链接类别无效：{route.category}")
-            unknown_required_fields = set(route.requiredFields) - known_link_fields
-            if unknown_required_fields:
-                raise ValueError(
-                    f"申请链接路由引用了未知字段：{', '.join(sorted(unknown_required_fields))}"
-                )
-        if len(route_keys) != len(set(route_keys)):
-            raise ValueError("申请链接环境与类别路由不能重复")
         return self
 
     def method(self, method_code: str | None = None) -> CatalogApplicationMethod:
@@ -346,14 +318,6 @@ def _load_product_catalog(
                 raise ProductCatalogError(
                     f"产品 {product.code} 引用了未知环境代码："
                     f"{', '.join(sorted(unknown_product_environments))}"
-                )
-            unknown_link_environments = {
-                route.environment for route in product.features.applicationLinks
-            } - known_environments
-            if unknown_link_environments:
-                raise ProductCatalogError(
-                    f"产品 {product.code} 的申请链接引用了未知环境代码："
-                    f"{', '.join(sorted(unknown_link_environments))}"
                 )
         checksum = _checksum({"reference": reference_raw, "products": product_raw})
         catalog = ProductCatalog(reference=reference, products=products, checksum=checksum)
