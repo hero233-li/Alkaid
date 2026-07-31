@@ -1,7 +1,5 @@
 from typing import Any
 
-from apps.integrations.mock_product.adapters import MockProductApplicationAdapter
-from apps.integrations.mock_product.models import ProductCheckInput, ProductSubmissionInput
 from apps.jobs.models import Job
 from apps.product_data.catalog import (
     ProductCatalog,
@@ -97,16 +95,12 @@ def resolve_product_snapshot(job: Job, product_code: str) -> ProductExecutionSna
     return load_product_catalog().snapshot(product_code)
 
 
-def run_product_application(
-    job: Job,
+def build_product_application_result(
     submission: ProductApplicationSubmission,
+    snapshot: ProductExecutionSnapshot,
     *,
-    snapshot: ProductExecutionSnapshot | None = None,
+    flow_result: dict[str, Any],
 ) -> dict[str, Any]:
-    snapshot = snapshot or resolve_product_snapshot(job, submission.product)
-    if snapshot.product_code != submission.product:
-        raise ProductConfigurationError("Job 执行配置与提交产品不一致")
-    flow_result = _run_mock_product_flow(job, submission, snapshot)
     return {
         "validated": True,
         "product": submission.product,
@@ -122,67 +116,18 @@ def run_product_application(
     }
 
 
-def _run_mock_product_flow(
+def run_product_application(
     job: Job,
     submission: ProductApplicationSubmission,
-    snapshot: ProductExecutionSnapshot,
-) -> dict[str, object]:
-    """Execute the one flow currently shared by every configured mock product."""
+    *,
+    snapshot: ProductExecutionSnapshot | None = None,
+) -> dict[str, Any]:
+    """Compatibility wrapper for callers not yet migrated to ProductApplicationFlow."""
 
-    with MockProductApplicationAdapter(job) as adapter:
-        request_head = adapter.request_head()
-        adapter.login(request_head)
-        version_after_login = adapter.flow_token_version
-        adapter.check_product(
-            request_head,
-            ProductCheckInput(
-                product=snapshot.product_code,
-                customer_type=submission.payload["customerType"],
-                switch_name=snapshot.switch_field,
-                switch_enabled=bool(submission.payload[snapshot.switch_field]),
-                product_type=snapshot.product_type,
-            ),
-        )
-        version_after_check = adapter.flow_token_version
-        adapter.rotate_token(request_head)
-        version_after_rotate = adapter.flow_token_version
-        application = adapter.submit_application(
-            request_head,
-            ProductSubmissionInput(
-                product=submission.product,
-                environment=submission.payload["environment"],
-                product_type=snapshot.product_type,
-                organization_code=submission.payload["branch"],
-                customer_name=submission.payload["personName"],
-                certificate_no=submission.payload["certificateNo"],
-                phone=submission.payload["phone"],
-                customer_type=submission.payload["customerType"],
-                outlet_code=submission.payload["outlet"],
-                application_method=submission.payload["applicationMethod"],
-                risk={
-                    name: submission.payload[name]
-                    for name in (
-                        "whitelistEnabled",
-                        "redShieldEnabled",
-                        "creditEnabled",
-                    )
-                    if name in submission.payload
-                },
-                dynamic_term=submission.payload.get("dynamicTerm"),
-                dynamic_amount=submission.payload.get("dynamicAmount"),
-                extra_reason=submission.payload.get("extraReason"),
-            ),
-        )
-        version_after_submit = adapter.flow_token_version
-        adapter.audit(request_head)
+    from apps.product_data.product_applications.flow import ProductApplicationFlow
 
-    return {
-        "applicationNo": application.data["applicationNo"],
-        "flowTokenVersions": {
-            "login": version_after_login,
-            "check": version_after_check,
-            "rotate": version_after_rotate,
-            "submit": version_after_submit,
-        },
-        "fixedTokenCall": "success",
-    }
+    return ProductApplicationFlow().execute(
+        job=job,
+        submission=submission,
+        snapshot=snapshot,
+    )
