@@ -1,8 +1,8 @@
 import pytest
+from django.test import override_settings
 
 import apps.product_data.product_applications.flow as flow_module
 import apps.product_data.product_applications.tasks as task_module
-from apps.integrations.mock_product.models import OperationResponse, RequestHead
 from apps.jobs.models import JobStatus
 from apps.jobs.services import create_job
 from apps.product_data.catalog import load_product_catalog
@@ -24,6 +24,8 @@ def _payload() -> dict[str, object]:
         "customerType": "farmer",
         "applicationMethod": "normal",
         "redShieldEnabled": True,
+        "idType": "01",
+        "projectId": "PROJECT-001",
     }
 
 
@@ -47,84 +49,29 @@ def _job(*, key: str, payload=None, snapshot=None):
 
 
 @pytest.mark.django_db
-def test_product_application_flow_executes_steps_in_python_order(monkeypatch) -> None:
-    job = _job(key="product-flow-order")
-    calls: list[str] = []
-
-    class StubAdapter:
-        def __init__(self, job_arg) -> None:
-            assert job_arg == job
-            self.version = 0
-
-        def __enter__(self):
-            calls.append("enter")
-            return self
-
-        def __exit__(self, *args):
-            calls.append("exit")
-            return None
-
-        @property
-        def flow_token_version(self) -> int:
-            return self.version
-
-        def request_head(self) -> RequestHead:
-            calls.append("request_head")
-            return RequestHead(
-                traceno=job.trace_id,
-                starttime="20260731084900",
-                product=job.product,
-            )
-
-        def login(self, head: RequestHead) -> None:
-            assert head.product == "product-b"
-            calls.append("login")
-            self.version = 1
-
-        def check_product(self, head, request) -> OperationResponse:
-            assert request.product == "product-b"
-            assert request.switch_name == "redShieldEnabled"
-            calls.append("check_product")
-            return OperationResponse(code="0000", message="success")
-
-        def rotate_token(self, head: RequestHead) -> None:
-            calls.append("rotate_token")
-            self.version = 2
-
-        def submit_application(self, head, request) -> OperationResponse:
-            assert request.customer_name == "测试用户"
-            calls.append("submit_application")
-            return OperationResponse(
-                code="0000",
-                message="success",
-                data={"applicationNo": "APP-FLOW-001"},
-            )
-
-        def audit(self, head: RequestHead) -> None:
-            calls.append("audit")
-
-    monkeypatch.setattr(flow_module, "MockProductApplicationAdapter", StubAdapter)
+@override_settings(EXTERNAL_SYSTEM_MODE="mock")
+def test_product_application_flow_queries_previews_and_reads_agreement() -> None:
+    job = _job(key="agreement-flow")
 
     result = ProductApplicationFlow().execute(job=job)
 
-    assert calls == [
-        "enter",
-        "request_head",
-        "login",
-        "check_product",
-        "rotate_token",
-        "submit_application",
-        "audit",
-        "exit",
+    assert result["agreementReadCompleted"] is True
+    assert result["agreementTemplates"][0]["fcosTemplateNo"] == "2209201448031"
+    assert result["agreementPreview"]["documents"][0]["docId"] == "MOCK-DOC-ID-001"
+    assert result["agreementDocuments"][0]["fileName"] == "mock-agreement.pdf"
+    assert result["agreementDocuments"][0]["contentBytes"] > 0
+    assert result["externalSession"]["established"] is True
+    assert result["externalSession"]["forwardedHeaderNames"] == [
+        "X-FCOS-SESSIONID",
+        "X-Sd",
+        "X-Token",
     ]
-    assert result["applicationNo"] == "APP-FLOW-001"
-    assert result["flowTokenVersions"] == {
-        "login": 1,
-        "check": 1,
-        "rotate": 2,
-        "submit": 2,
-    }
-    assert result["fixedTokenCall"] == "success"
+
+    assert list(job.api_calls.order_by("id").values_list("step", flat=True)) == [
+        "agreement.query_templates",
+        "agreement.query_preview",
+        "agreement.read_document",
+    ]
 
 
 @pytest.mark.django_db
@@ -141,7 +88,7 @@ def test_product_application_flow_validates_before_opening_adapter(monkeypatch) 
     def unexpected_adapter(*args, **kwargs):
         raise AssertionError("validation failure must not open the external adapter")
 
-    monkeypatch.setattr(flow_module, "MockProductApplicationAdapter", unexpected_adapter)
+    monkeypatch.setattr(flow_module, "CjdkJyrcAgreementAdapter", unexpected_adapter)
 
     with pytest.raises(ProductConfigurationError, match="personName"):
         ProductApplicationFlow().execute(job=job)
@@ -152,7 +99,7 @@ def test_product_application_task_delegates_to_flow(monkeypatch) -> None:
     job = _job(key="product-task-flow")
     captured: dict[str, object] = {}
     expected_result = {
-        "applicationNo": "APP-STUB-001",
+        "agreementReadCompleted": True,
         "validated": True,
     }
 
@@ -170,3 +117,17 @@ def test_product_application_task_delegates_to_flow(monkeypatch) -> None:
     assert callable(captured["progress"])
     assert job.status == JobStatus.SUCCESS
     assert job.result == expected_result
+
+
+@override_settings(
+    EXTERNAL_SYSTEM_MODE="real",
+    CJDK_JYRC_BASE_URLS={
+        "uat1": "http://uat1.example:8090/",
+        "uat2": "http://uat2.example:8091",
+    },
+)
+def test_environment_selects_its_own_base_url() -> None:
+    from apps.integrations.cjdk_jyrc.config import resolve_base_url
+
+    assert resolve_base_url("uat1") == "http://uat1.example:8090"
+    assert resolve_base_url("UAT2") == "http://uat2.example:8091"
