@@ -43,35 +43,6 @@ def resolve_base_url(environment: str) -> str:
     )
 
 
-def resolve_application_link_base_url(environment: str) -> str:
-    normalized = _environment(environment)
-    if external_system_mode() == "mock":
-        return "https://application-link.mock"
-
-    local = _local_environment_config()
-    if local is not None:
-        return _local_environment_url(
-            local,
-            normalized,
-            field_name="applicationLinkBaseUrl",
-            display_name="申请链接服务",
-        )
-
-    configured = _url_mapping("APPLICATION_LINK_BASE_URLS")
-    if normalized in configured:
-        return configured[normalized].rstrip("/")
-
-    legacy = str(getattr(settings, "APPLICATION_LINK_BASE_URL", "")).strip()
-    if legacy:
-        return legacy.rstrip("/")
-
-    known = ", ".join(sorted(configured)) or "未配置"
-    raise ImproperlyConfigured(
-        f"申请链接环境 {environment!r} 未配置基础地址；已配置环境：{known}；"
-        f"建议创建 {LOCAL_ENVIRONMENT_CONFIG_PATH}"
-    )
-
-
 def application_link_url_mode() -> str:
     local = _local_environment_config()
     if local is not None:
@@ -81,6 +52,77 @@ def application_link_url_mode() -> str:
     if value not in {"internal", "external"}:
         raise ImproperlyConfigured(
             "APPLICATION_LINK_URL_MODE 必须是 internal 或 external"
+        )
+    return value
+
+
+def java_sdk_dir() -> Path:
+    value = _java_gateway_value(
+        "sdkDir",
+        "APPLICATION_LINK_JAVA_SDK_DIR",
+        "",
+    )
+    if not value:
+        raise ImproperlyConfigured("javaGateway.sdkDir 未配置")
+    return Path(value)
+
+
+def java_executable() -> Path:
+    value = _java_gateway_value(
+        "javaExecutable",
+        "APPLICATION_LINK_JAVA_EXECUTABLE",
+        "",
+    )
+    if not value:
+        raise ImproperlyConfigured("javaGateway.javaExecutable 未配置")
+    return Path(value)
+
+
+def java_jar() -> Path:
+    value = _java_gateway_value(
+        "jar",
+        "APPLICATION_LINK_JAVA_JAR",
+        "",
+    )
+    if not value:
+        raise ImproperlyConfigured("javaGateway.jar 未配置")
+    return Path(value)
+
+
+def java_main_class() -> str:
+    value = _java_gateway_value(
+        "mainClass",
+        "APPLICATION_LINK_JAVA_MAIN_CLASS",
+        "",
+    )
+    if not value:
+        raise ImproperlyConfigured("javaGateway.mainClass 未配置")
+    return value
+
+
+def java_output_encoding() -> str:
+    return _java_gateway_value(
+        "outputEncoding",
+        "APPLICATION_LINK_JAVA_OUTPUT_ENCODING",
+        "gbk",
+    )
+
+
+def java_timeout_seconds() -> float:
+    raw = _java_gateway_value(
+        "timeoutSeconds",
+        "APPLICATION_LINK_JAVA_TIMEOUT_SECONDS",
+        "120",
+    )
+    try:
+        value = float(raw)
+    except (TypeError, ValueError) as exc:
+        raise ImproperlyConfigured(
+            "javaGateway.timeoutSeconds 必须是数字"
+        ) from exc
+    if value <= 0:
+        raise ImproperlyConfigured(
+            "javaGateway.timeoutSeconds 必须大于 0"
         )
     return value
 
@@ -166,14 +208,17 @@ def _load_local_environment_config() -> dict[str, object] | None:
         return None
 
     try:
-        raw = json.loads(LOCAL_ENVIRONMENT_CONFIG_PATH.read_text(encoding="utf-8"))
+        raw = json.loads(
+            LOCAL_ENVIRONMENT_CONFIG_PATH.read_text(encoding="utf-8")
+        )
     except OSError as exc:
         raise ImproperlyConfigured(
             f"无法读取环境配置文件：{LOCAL_ENVIRONMENT_CONFIG_PATH}: {exc}"
         ) from exc
     except json.JSONDecodeError as exc:
         raise ImproperlyConfigured(
-            f"环境配置文件不是有效 JSON：{LOCAL_ENVIRONMENT_CONFIG_PATH}: {exc}"
+            f"环境配置文件不是有效 JSON："
+            f"{LOCAL_ENVIRONMENT_CONFIG_PATH}: {exc}"
         ) from exc
 
     if not isinstance(raw, Mapping):
@@ -183,15 +228,51 @@ def _load_local_environment_config() -> dict[str, object] | None:
     if mode not in {"mock", "real"}:
         raise ImproperlyConfigured("环境配置 mode 必须是 mock 或 real")
 
-    url_mode = str(raw.get("applicationLinkUrlMode", "internal")).strip().lower()
+    url_mode = str(
+        raw.get("applicationLinkUrlMode", "internal")
+    ).strip().lower()
     if url_mode not in {"internal", "external"}:
         raise ImproperlyConfigured(
             "环境配置 applicationLinkUrlMode 必须是 internal 或 external"
         )
 
+    raw_gateway = raw.get("javaGateway", {})
+    if not isinstance(raw_gateway, Mapping):
+        raise ImproperlyConfigured(
+            "环境配置 javaGateway 必须是 JSON 对象"
+        )
+    gateway = {
+        "sdkDir": str(raw_gateway.get("sdkDir", "")).strip(),
+        "javaExecutable": str(
+            raw_gateway.get("javaExecutable", "")
+        ).strip(),
+        "jar": str(raw_gateway.get("jar", "")).strip(),
+        "mainClass": str(raw_gateway.get("mainClass", "")).strip(),
+        "outputEncoding": str(
+            raw_gateway.get("outputEncoding", "gbk")
+        ).strip(),
+        "timeoutSeconds": raw_gateway.get("timeoutSeconds", 120),
+    }
+    if mode == "real":
+        for field_name in (
+            "sdkDir",
+            "javaExecutable",
+            "jar",
+            "mainClass",
+        ):
+            if not gateway[field_name]:
+                raise ImproperlyConfigured(
+                    f"环境配置 javaGateway.{field_name} 未配置"
+                )
+
     configured_environments = raw.get("environments")
-    if not isinstance(configured_environments, Mapping) or not configured_environments:
-        raise ImproperlyConfigured("环境配置 environments 必须是非空 JSON 对象")
+    if (
+        not isinstance(configured_environments, Mapping)
+        or not configured_environments
+    ):
+        raise ImproperlyConfigured(
+            "环境配置 environments 必须是非空 JSON 对象"
+        )
 
     environments: dict[str, dict[str, str]] = {}
     for key, value in configured_environments.items():
@@ -199,27 +280,41 @@ def _load_local_environment_config() -> dict[str, object] | None:
         if not normalized_key:
             raise ImproperlyConfigured("环境代码不能为空")
         if not isinstance(value, Mapping):
-            raise ImproperlyConfigured(f"环境 {normalized_key} 的配置必须是 JSON 对象")
-
-        application_link_url = str(value.get("applicationLinkBaseUrl", "")).strip()
-        agreement_url = str(value.get("agreementBaseUrl", "")).strip()
-        if mode == "real" and not application_link_url:
             raise ImproperlyConfigured(
-                f"环境 {normalized_key} 缺少 applicationLinkBaseUrl"
+                f"环境 {normalized_key} 的配置必须是 JSON 对象"
             )
+
+        agreement_url = str(
+            value.get("agreementBaseUrl", "")
+        ).strip()
         if mode == "real" and not agreement_url:
-            raise ImproperlyConfigured(f"环境 {normalized_key} 缺少 agreementBaseUrl")
+            raise ImproperlyConfigured(
+                f"环境 {normalized_key} 缺少 agreementBaseUrl"
+            )
 
         environments[normalized_key] = {
-            "applicationLinkBaseUrl": application_link_url,
             "agreementBaseUrl": agreement_url,
         }
 
     return {
         "mode": mode,
         "applicationLinkUrlMode": url_mode,
+        "javaGateway": gateway,
         "environments": environments,
     }
+
+
+def _java_gateway_value(
+    local_name: str,
+    setting_name: str,
+    default: str,
+) -> str:
+    local = _local_environment_config()
+    if local is not None:
+        gateway = local.get("javaGateway")
+        if isinstance(gateway, Mapping):
+            return str(gateway.get(local_name, default)).strip()
+    return str(_setting(setting_name, default)).strip()
 
 
 def _local_environment_url(
@@ -235,9 +330,12 @@ def _local_environment_url(
 
     raw_environment = environments.get(environment)
     if not isinstance(raw_environment, Mapping):
-        known = ", ".join(sorted(str(item) for item in environments)) or "未配置"
+        known = ", ".join(
+            sorted(str(item) for item in environments)
+        ) or "未配置"
         raise ImproperlyConfigured(
-            f"{display_name}环境 {environment!r} 未配置；已配置环境：{known}"
+            f"{display_name}环境 {environment!r} 未配置；"
+            f"已配置环境：{known}"
         )
 
     value = str(raw_environment.get(field_name, "")).strip()
@@ -260,7 +358,8 @@ def _resolve_environment_url(
     except KeyError:
         known = ", ".join(sorted(configured)) or "未配置"
         raise ImproperlyConfigured(
-            f"{missing_message} 环境 {environment!r} 未配置基础地址；已配置环境：{known}；"
+            f"{missing_message} 环境 {environment!r} 未配置基础地址；"
+            f"已配置环境：{known}；"
             f"建议创建 {LOCAL_ENVIRONMENT_CONFIG_PATH}"
         ) from None
 
@@ -272,15 +371,21 @@ def _url_mapping(name: str) -> dict[str, str]:
         try:
             configured = json.loads(raw)
         except json.JSONDecodeError as exc:
-            raise ImproperlyConfigured(f"{name} 必须是 JSON 对象") from exc
+            raise ImproperlyConfigured(
+                f"{name} 必须是 JSON 对象"
+            ) from exc
     elif isinstance(configured, str):
         try:
             configured = json.loads(configured or "{}")
         except json.JSONDecodeError as exc:
-            raise ImproperlyConfigured(f"{name} 必须是 JSON 对象") from exc
+            raise ImproperlyConfigured(
+                f"{name} 必须是 JSON 对象"
+            ) from exc
 
     if not isinstance(configured, Mapping):
-        raise ImproperlyConfigured(f"{name} 必须是环境到 URL 的映射")
+        raise ImproperlyConfigured(
+            f"{name} 必须是环境到 URL 的映射"
+        )
 
     result: dict[str, str] = {}
     for key, value in configured.items():
