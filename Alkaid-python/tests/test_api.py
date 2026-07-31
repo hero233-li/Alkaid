@@ -43,7 +43,7 @@ def test_readiness_checks_database_catalog_endpoints_and_messages(client) -> Non
 
 
 @pytest.mark.django_db
-@override_settings(EXTERNAL_SYSTEM_MODE="mock")
+@override_settings(EXTERNAL_SYSTEM_MODE="mock", APPLICATION_LINK_URL_MODE="internal")
 def test_product_application_freezes_catalog_and_reads_agreement(
     client,
     django_capture_on_commit_callbacks,
@@ -61,9 +61,11 @@ def test_product_application_freezes_catalog_and_reads_agreement(
     job = Job.objects.get(id=response.json()["data"]["id"])
     assert job.status == JobStatus.SUCCESS
     assert job.execution_config_snapshot["product_code"] == "product-b"
+    assert job.result["applicationLink"]["category"] == "太阳码"
+    assert job.result["externalSession"]["established"] is True
     assert job.result["agreementReadCompleted"] is True
     assert job.result["agreementDocuments"][0]["fileName"] == "mock-agreement.pdf"
-    assert job.api_calls.count() == 3
+    assert job.api_calls.count() == 5
 
 
 @pytest.mark.django_db
