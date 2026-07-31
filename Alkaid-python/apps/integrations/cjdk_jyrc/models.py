@@ -18,7 +18,40 @@ class ApplicationLinks(CjdkResponseModel):
     )
 
 
+class GenerateApplicationLinkRequest(BaseModel):
+    """Product-local request passed to the Java SDK as one JSON object."""
+
+    model_config = ConfigDict(populate_by_name=True, extra="forbid")
+
+    env: str = Field(min_length=1)
+    product: str = Field(min_length=1)
+    category: str = Field(min_length=1)
+    cooperation_project_id: str | None = Field(
+        default=None,
+        alias="cooperationProjectId",
+        validation_alias=AliasChoices(
+            "cooperation_project_id",
+            "cooperationProjectId",
+            "projectId",
+        ),
+    )
+    payload: dict[str, Any]
+
+    def external_request(self) -> dict[str, Any]:
+        content: dict[str, Any] = {
+            "env": self.env,
+            "product": self.product,
+            "category": self.category,
+            "payload": self.payload,
+        }
+        if self.cooperation_project_id:
+            content["cooperationProjectId"] = self.cooperation_project_id
+        return content
+
+
 class GenerateApplicationLinkEnvelope(CjdkResponseModel):
+    """Legacy HTTP envelope retained only for backwards-compatible imports."""
+
     code: str
     message: str | None = None
     data: ApplicationLinks
