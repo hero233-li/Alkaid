@@ -15,8 +15,13 @@ from apps.integrations.cjdk_jyrc.models import (
     ApplicationLinks,
     GenerateApplicationLinkRequest,
 )
-from apps.jobs.http import JobHttpCallObserver
+from apps.jobs.http import (
+    JobHttpCallObserver,
+    format_log_value,
+    sanitize_text,
+)
 from apps.jobs.models import Job
+from apps.jobs.services import add_job_log
 
 logger = logging.getLogger(__name__)
 
@@ -24,7 +29,7 @@ RESULT_PREFIX = "ALKAID_RESULT="
 
 
 class JavaApplicationLinkGateway:
-    """Invoke the local Java SDK and parse its final application-link result."""
+    """Invoke the local Java SDK and parse ALKAID_RESULT."""
 
     def __init__(self, job: Job) -> None:
         self.job = job
@@ -60,7 +65,6 @@ class JavaApplicationLinkGateway:
                 "product": request.product,
                 "category": request.category,
                 "cooperation_project_id": request.cooperation_project_id,
-                # Do not log private keys, certificates, phone numbers, or payload values.
                 "payload_fields": sorted(request.payload.keys()),
             },
         )
@@ -140,9 +144,23 @@ class JavaApplicationLinkGateway:
                 "-cp",
                 classpath,
                 config.java_main_class(),
-                # Java args[0] receives only the UTF-8 JSON file path.
                 str(request_path),
             ]
+
+            self._write_diagnostic(
+                "JavaGateway 执行信息",
+                {
+                    "cwd": str(sdk_root),
+                    "command": [
+                        *command[:-1],
+                        "<temporary request.json>",
+                    ],
+                    "requestFileEncoding": "utf-8",
+                    "outputEncoding": config.java_output_encoding(),
+                    "timeoutSeconds": config.java_timeout_seconds(),
+                },
+            )
+
             try:
                 completed = subprocess.run(
                     command,
@@ -157,10 +175,23 @@ class JavaApplicationLinkGateway:
                 )
             except subprocess.TimeoutExpired as exc:
                 raise RuntimeError(
-                    f"申请链接 Java SDK 执行超时：{config.java_timeout_seconds()} 秒"
+                    "申请链接 Java SDK 执行超时："
+                    f"{config.java_timeout_seconds()} 秒"
                 ) from exc
             except OSError as exc:
-                raise RuntimeError(f"申请链接 Java SDK 无法启动：{exc}") from exc
+                raise RuntimeError(
+                    f"申请链接 Java SDK 无法启动：{exc}"
+                ) from exc
+
+        self._write_diagnostic(
+            "JavaGateway 执行结果",
+            {
+                "returnCode": completed.returncode,
+                "stdout": sanitize_text(completed.stdout),
+                "stderr": sanitize_text(completed.stderr),
+            },
+            level="INFO" if completed.returncode == 0 else "ERROR",
+        )
 
         if completed.returncode != 0:
             raise RuntimeError(
@@ -170,18 +201,48 @@ class JavaApplicationLinkGateway:
             )
         return self._parse_result(completed.stdout)
 
+    def _write_diagnostic(
+        self,
+        title: str,
+        content: dict[str, Any],
+        *,
+        level: str = "INFO",
+    ) -> None:
+        message = (
+            f"{title}（敏感值已脱敏）：\n"
+            f"{format_log_value(content)}"
+        )
+        add_job_log(
+            self.job,
+            level,
+            message,
+            step="application_link.generate_link",
+            celery_task_id=self.job.celery_task_id,
+            metadata={
+                "event": "java_gateway_diagnostic",
+                "title": title,
+            },
+        )
+        log_method = logger.error if level == "ERROR" else logger.info
+        log_method(
+            "java_gateway_diagnostic %s\n%s",
+            title,
+            format_log_value(content),
+        )
+
     @staticmethod
     def _parse_result(stdout: str) -> dict[str, Any]:
-        # Search from the end so preceding Java SDK logs cannot shadow the final result.
         for line in reversed(stdout.splitlines()):
             normalized = line.strip()
             if not normalized.startswith(RESULT_PREFIX):
                 continue
-            result_json = normalized[len(RESULT_PREFIX) :]
+            result_json = normalized[len(RESULT_PREFIX):]
             try:
                 result = json.loads(result_json)
             except json.JSONDecodeError as exc:
-                raise RuntimeError("Java ALKAID_RESULT 不是有效 JSON") from exc
+                raise RuntimeError(
+                    "Java ALKAID_RESULT 不是有效 JSON"
+                ) from exc
             if not isinstance(result, dict):
                 raise RuntimeError("Java 返回结果不是 JSON 对象")
             return result
