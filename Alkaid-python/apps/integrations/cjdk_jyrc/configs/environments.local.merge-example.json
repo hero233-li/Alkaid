@@ -1,0 +1,10 @@
+{
+  "javaGateway": {
+    "sdkDir": "D:/你的申请链接JavaSDK目录",
+    "javaExecutable": "D:/你的JDK/bin/java.exe",
+    "jar": "你的申请链接Jar文件名.jar",
+    "mainClass": "实际Java主类全限定名",
+    "outputEncoding": "gbk",
+    "timeoutSeconds": 120
+  }
+}
