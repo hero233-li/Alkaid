@@ -1,4 +1,5 @@
 import base64
+import hashlib
 import json
 from urllib.parse import parse_qs
 
@@ -14,16 +15,79 @@ def create_mock_transport() -> httpx.MockTransport:
 
 
 def _handle_request(request: httpx.Request) -> httpx.Response:
+    path = request.url.path
+    if request.method == "POST" and path in {"/links/sun-code", "/links/dynamic"}:
+        return _generate_application_link(request)
+    if request.method == "GET" and path.startswith("/application-entry/"):
+        link_id = path.rsplit("/", 1)[-1]
+        return httpx.Response(
+            302,
+            headers=[
+                ("Location", f"/h5/application/session/bootstrap?linkId={link_id}"),
+                ("Set-Cookie", "link_entry=mock-link-entry; Path=/; HttpOnly"),
+            ],
+        )
+    if request.method == "GET" and path == "/h5/application/session/bootstrap":
+        return _establish_session()
+
     message = _request_message(request)
-    if request.url.path.endswith("/queryAgreementTemplateInfoListEA.do"):
+    if path.endswith("/queryAgreementTemplateInfoListEA.do"):
+        _require_session_cookie(request)
         return _query_agreements(message)
-    if request.url.path.endswith("/queryPreviewImage.ajax"):
+    if path.endswith("/queryPreviewImage.ajax"):
         _require_session_cookie(request)
         return _query_preview(message)
-    if request.url.path.endswith("/showDocumentByDocIdList.ajax"):
+    if path.endswith("/showDocumentByDocIdList.ajax"):
         _require_session_cookie(request)
         return _show_document(message)
     return httpx.Response(404, json={"message": "mock endpoint not found"})
+
+
+def _generate_application_link(request: httpx.Request) -> httpx.Response:
+    form = parse_qs(request.content.decode("utf-8"), keep_blank_values=True)
+    required = {"msg_id", "sign", "timestamp", "REQ_MESSAGE", "biz_content"}
+    if set(form) != required:
+        return httpx.Response(400, json={"code": "INVALID_FORM", "data": {}})
+    raw_message = form["REQ_MESSAGE"][0]
+    if form["biz_content"][0] != raw_message:
+        return httpx.Response(400, json={"code": "MESSAGE_MISMATCH", "data": {}})
+
+    message = json.loads(raw_message)
+    application_request = message["REQ_BODY"]["request"]
+    digest = hashlib.sha256(
+        json.dumps(
+            application_request,
+            ensure_ascii=False,
+            sort_keys=True,
+        ).encode("utf-8")
+    ).hexdigest()[:12].upper()
+    link_id = f"LINK-{digest}"
+    return httpx.Response(
+        200,
+        json={
+            "code": "0000",
+            "message": "处理成功",
+            "data": {
+                "internal_url": f"https://cjdk-jyrc.mock/application-entry/{link_id}",
+                "external_url": f"https://cjdk-jyrc.mock/application-entry/{link_id}?scope=external",
+            },
+        },
+    )
+
+
+def _establish_session() -> httpx.Response:
+    return httpx.Response(
+        200,
+        text="<html><body>mock product application</body></html>",
+        headers=[
+            ("Content-Type", "text/html;charset=UTF-8"),
+            ("Set-Cookie", "token_id=mock-entry-token; Path=/; HttpOnly"),
+            ("Set-Cookie", "JSESSIONID=mock-entry-session; Path=/; HttpOnly"),
+            ("X-FCOS-SESSIONID", "mock-entry-fcos-session"),
+            ("X-Token", "mock-entry-x-token"),
+            ("X-Sd", "mock-entry-x-sd"),
+        ],
+    )
 
 
 def _query_agreements(message: dict[str, object]) -> httpx.Response:
@@ -146,4 +210,4 @@ def _request_message(request: httpx.Request) -> dict[str, object]:
 def _require_session_cookie(request: httpx.Request) -> None:
     cookie = request.headers.get("Cookie", "")
     if "JSESSIONID=" not in cookie or "token_id=" not in cookie:
-        raise AssertionError("agreement session cookies were not carried forward")
+        raise AssertionError("application session cookies were not carried forward")
