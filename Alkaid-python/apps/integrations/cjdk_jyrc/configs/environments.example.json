@@ -1,17 +1,22 @@
 {
   "mode": "real",
   "applicationLinkUrlMode": "internal",
+  "javaGateway": {
+    "sdkDir": "D:/application-link-sdk",
+    "javaExecutable": "D:/jdk/bin/java.exe",
+    "jar": "application-link.jar",
+    "mainClass": "com.example.ApplicationLinkMain",
+    "outputEncoding": "gbk",
+    "timeoutSeconds": 120
+  },
   "environments": {
     "UAT1": {
-      "applicationLinkBaseUrl": "http://application-link-uat1-host:port",
       "agreementBaseUrl": "http://agreement-uat1-host:port"
     },
     "UAT2": {
-      "applicationLinkBaseUrl": "http://application-link-uat2-host:port",
       "agreementBaseUrl": "http://agreement-uat2-host:port"
     },
     "UATC": {
-      "applicationLinkBaseUrl": "http://application-link-uatc-host:port",
       "agreementBaseUrl": "http://agreement-uatc-host:port"
     }
   }
