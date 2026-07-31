@@ -108,7 +108,7 @@ class CjdkJyrcApplicationLinkAdapter:
         )
 
     def _configured_sign(self, message: str) -> str:
-        if settings.EXTERNAL_SYSTEM_MODE == "real":
+        if config.external_system_mode() == "real":
             if not settings.APPLICATION_LINK_PROTOCOL_CONFIRMED:
                 raise ImproperlyConfigured(
                     "申请链接真实协议尚未确认；请确认路径、签名和响应字段后设置 "
@@ -128,7 +128,11 @@ class CjdkJyrcApplicationLinkAdapter:
         return sign
 
     def _create_client(self) -> HttpClient:
-        transport = create_mock_transport() if settings.EXTERNAL_SYSTEM_MODE == "mock" else None
+        transport = (
+            create_mock_transport()
+            if config.external_system_mode() == "mock"
+            else None
+        )
         return HttpClient(
             HttpClientConfig(
                 base_url=config.resolve_application_link_base_url(self.environment),
