@@ -1,0 +1,18 @@
+{
+  "mode": "real",
+  "applicationLinkUrlMode": "internal",
+  "environments": {
+    "UAT1": {
+      "applicationLinkBaseUrl": "http://application-link-uat1-host:port",
+      "agreementBaseUrl": "http://agreement-uat1-host:port"
+    },
+    "UAT2": {
+      "applicationLinkBaseUrl": "http://application-link-uat2-host:port",
+      "agreementBaseUrl": "http://agreement-uat2-host:port"
+    },
+    "UATC": {
+      "applicationLinkBaseUrl": "http://application-link-uatc-host:port",
+      "agreementBaseUrl": "http://agreement-uatc-host:port"
+    }
+  }
+}
