@@ -1,8 +1,10 @@
+import json
 from typing import Any
 
 from apps.integrations.cjdk_jyrc.config import is_configured_environment
 from apps.jobs.models import Job
 from apps.product_data.catalog import (
+    PRODUCT_ROOT,
     ProductCatalog,
     ProductExecutionSnapshot,
     load_product_catalog,
@@ -20,6 +22,7 @@ class ProductConfigurationError(ValueError):
 INTEGRATION_OPTIONAL_FIELDS = {
     "idType",
     "projectId",
+    "cooperationProjectId",
 }
 
 
@@ -65,6 +68,15 @@ def validate_submission(
     if missing:
         raise ProductConfigurationError(f"缺少必填字段：{', '.join(sorted(missing))}")
 
+    project_id = payload.get("projectId")
+    cooperation_project_id = payload.get("cooperationProjectId")
+    if (
+        project_id is not None
+        and cooperation_project_id is not None
+        and project_id != cooperation_project_id
+    ):
+        raise ProductConfigurationError("projectId 与 cooperationProjectId 不一致")
+
     if product is not None:
         _validate_location_hierarchy(product.locations, payload)
     payload["customerType"] = customer_type.value
@@ -90,6 +102,31 @@ def validate_customer_type(payload: dict[str, Any]) -> CustomerType:
     if company_name:
         payload["companyName"] = company_name
     return customer_type
+
+
+def resolve_application_link_category(product_code: str, environment: str) -> str:
+    """Read the existing product-local applicationLinks route for this environment."""
+
+    for path in sorted(PRODUCT_ROOT.glob("*.json")):
+        try:
+            raw = json.loads(path.read_text(encoding="utf-8"))
+        except (OSError, ValueError) as exc:
+            raise ProductConfigurationError(f"产品配置读取失败：{path.name}: {exc}") from exc
+        if raw.get("code") != product_code:
+            continue
+        routes = (raw.get("features") or {}).get("applicationLinks") or []
+        for route in routes:
+            if route.get("environment") == environment:
+                category = str(route.get("category") or "").strip()
+                if category in {"动态链接", "太阳码"}:
+                    return category
+                raise ProductConfigurationError(
+                    f"产品 {product_code} 在环境 {environment} 的申请链接类别无效"
+                )
+        raise ProductConfigurationError(
+            f"产品 {product_code} 在环境 {environment} 未配置申请链接"
+        )
+    raise ProductConfigurationError(f"未知产品：{product_code}")
 
 
 def _validate_location_hierarchy(locations: tuple[Any, ...], payload: dict[str, Any]) -> None:
