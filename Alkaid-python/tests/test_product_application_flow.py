@@ -162,6 +162,8 @@ def test_environment_selects_its_own_base_urls() -> None:
     assert resolve_application_link_base_url("UAT2") == "http://link-uat2.example:8081"
     assert resolve_base_url("uatc") == "http://uatc.example:8092"
     assert resolve_application_link_base_url("uatc") == "http://link-uatc.example:8082"
+    assert resolve_base_url("uatc") == "http://uatc.example:8092"
+    assert resolve_application_link_base_url("uatc") == "http://link-uatc.example:8082"
 
 
 def test_requiredness_is_not_stored_on_global_ui_field() -> None:
