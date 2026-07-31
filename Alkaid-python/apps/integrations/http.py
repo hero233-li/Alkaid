@@ -6,6 +6,7 @@ from collections.abc import Callable, Mapping
 from datetime import datetime, timezone
 from email.utils import parsedate_to_datetime
 from typing import Any, Protocol
+from urllib.parse import urlsplit, urlunsplit
 
 import httpx
 from pydantic import BaseModel, ConfigDict, Field
@@ -49,6 +50,7 @@ class HttpClientConfig(BaseModel):
     max_retries: int = Field(default=2, ge=0, le=5)
     retry_backoff_seconds: float = Field(default=0.2, ge=0)
     retry_max_backoff_seconds: float = Field(default=5, gt=0)
+    follow_redirects: bool = False
 
 
 class ExternalServiceError(RuntimeError):
@@ -80,7 +82,12 @@ class HttpClient:
             ),
             headers=headers,
             transport=transport,
+            follow_redirects=config.follow_redirects,
         )
+
+    @property
+    def cookie_names(self) -> tuple[str, ...]:
+        return tuple(sorted({cookie.name for cookie in self._client.cookies.jar}))
 
     def close(self) -> None:
         self._client.close()
@@ -90,6 +97,90 @@ class HttpClient:
 
     def __exit__(self, *_: object) -> None:
         self.close()
+
+    def open_url(
+        self,
+        method: str,
+        url: str,
+        *,
+        params: Mapping[str, str] | None = None,
+        headers: Mapping[str, str] | None = None,
+        trace_id: str | None = None,
+        observer: HttpCallObserver | None = None,
+    ) -> httpx.Response:
+        """Open an HTML/page URL while preserving this client's cookie jar."""
+
+        trace_id = trace_id or str(uuid.uuid4())
+        started = time.monotonic()
+        request_headers = dict(self._client.headers)
+        request_headers.update(headers or {})
+        request_headers["X-Trace-ID"] = trace_id
+        safe_url = _without_query(url)
+        response_handle = (
+            observer.started(
+                method=method,
+                path=safe_url,
+                headers=request_headers,
+                request_body={"query": dict(params or {})},
+            )
+            if observer
+            else None
+        )
+        response: httpx.Response | None = None
+        try:
+            response = self._client.request(
+                method,
+                url,
+                params=params,
+                headers=request_headers,
+            )
+            response.raise_for_status()
+        except httpx.TransportError as exc:
+            if observer and response_handle is not None:
+                observer.finished(
+                    response_handle,
+                    status_code=None,
+                    headers={},
+                    response_body=None,
+                    duration_ms=round((time.monotonic() - started) * 1000),
+                    error=exc,
+                )
+            self._log(method, safe_url, trace_id, started, None, 1)
+            raise ExternalServiceError("external service transport error") from exc
+        except httpx.HTTPStatusError as exc:
+            if observer and response_handle is not None and response is not None:
+                observer.finished(
+                    response_handle,
+                    status_code=response.status_code,
+                    headers=dict(response.headers),
+                    response_body=_raw_response_summary(response),
+                    duration_ms=round((time.monotonic() - started) * 1000),
+                    error=exc,
+                )
+            self._log(
+                method,
+                safe_url,
+                trace_id,
+                started,
+                response.status_code if response is not None else None,
+                1,
+            )
+            raise ExternalServiceError(
+                "external service rejected the request",
+                status_code=response.status_code if response is not None else None,
+            ) from exc
+
+        self._log(method, safe_url, trace_id, started, response.status_code, 1)
+        if observer and response_handle is not None:
+            observer.finished(
+                response_handle,
+                status_code=response.status_code,
+                headers=dict(response.headers),
+                response_body=_raw_response_summary(response),
+                duration_ms=round((time.monotonic() - started) * 1000),
+                error=None,
+            )
+        return response
 
     def request(
         self,
@@ -230,7 +321,8 @@ class HttpClient:
                     error=exc,
                 )
             raise ExternalServiceError(
-                "external service rejected the request", status_code=response.status_code
+                "external service rejected the request",
+                status_code=response.status_code,
             ) from exc
         except (ValueError, TypeError) as exc:
             if observer and response_handle is not None:
@@ -243,7 +335,8 @@ class HttpClient:
                     error=exc,
                 )
             raise ExternalServiceError(
-                "external service returned an invalid response", status_code=response.status_code
+                "external service returned an invalid response",
+                status_code=response.status_code,
             ) from exc
         except BusinessResponseError as exc:
             if observer and response_handle is not None:
@@ -306,6 +399,26 @@ def _response_body(response: httpx.Response) -> Any:
         return response.json()
     except ValueError:
         return response.text
+
+
+def _raw_response_summary(response: httpx.Response) -> dict[str, Any]:
+    return {
+        "url": _without_query(str(response.url)),
+        "contentType": response.headers.get("Content-Type"),
+        "contentLength": len(response.content),
+        "redirects": [
+            {
+                "status": item.status_code,
+                "url": _without_query(str(item.url)),
+            }
+            for item in response.history
+        ],
+    }
+
+
+def _without_query(value: str) -> str:
+    parsed = urlsplit(value)
+    return urlunsplit((parsed.scheme, parsed.netloc, parsed.path, "", ""))
 
 
 def _serialize_form(form_data: Mapping[str, Any] | None) -> dict[str, str] | None:
