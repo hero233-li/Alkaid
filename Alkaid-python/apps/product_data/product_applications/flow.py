@@ -1,8 +1,14 @@
+import base64
+import binascii
 from collections.abc import Callable
 from typing import Any
 
-from apps.integrations.mock_product.adapters import MockProductApplicationAdapter
-from apps.integrations.mock_product.models import ProductCheckInput, ProductSubmissionInput
+from apps.integrations.cjdk_jyrc.adapter import CjdkJyrcAgreementAdapter
+from apps.integrations.cjdk_jyrc.models import (
+    AgreementDocumentBody,
+    AgreementPreviewData,
+    AgreementTemplateInfo,
+)
 from apps.jobs.models import Job
 from apps.product_data.catalog import ProductExecutionSnapshot
 from apps.product_data.product_applications.context import ProductApplicationContext
@@ -17,7 +23,7 @@ ProgressReporter = Callable[..., None]
 
 
 class ProductApplicationFlow:
-    """Execute the current product-application flow in explicit Python order."""
+    """Run the implemented product flow in explicit Python order."""
 
     def execute(
         self,
@@ -36,18 +42,43 @@ class ProductApplicationFlow:
         self.parse_submission(context)
         self.load_execution_snapshot(context)
         self.validate_submission(context)
-        self.report_validation_completed(progress)
+        self.report_progress(
+            progress,
+            stage="validate",
+            progress=35,
+            message="产品申请参数校验完成",
+        )
 
-        with MockProductApplicationAdapter(job) as adapter:
-            self.create_request_head(context, adapter)
-            self.login(context, adapter)
-            self.check_product(context, adapter)
-            self.rotate_token(context, adapter)
-            self.submit_application(context, adapter)
-            self.audit(context, adapter)
+        with CjdkJyrcAgreementAdapter(
+            job,
+            environment=self.environment(context),
+        ) as adapter:
+            self.query_agreement_templates(context, adapter)
+            self.report_progress(
+                progress,
+                stage="agreement_query",
+                progress=55,
+                message="协议模板查询完成",
+            )
+
+            self.query_agreement_preview(context, adapter)
+            self.report_progress(
+                progress,
+                stage="agreement_preview",
+                progress=70,
+                message="协议预览生成完成",
+            )
+
+            self.read_agreement_documents(context, adapter)
+            self.capture_session(context, adapter)
+            self.report_progress(
+                progress,
+                stage="agreement_read",
+                progress=90,
+                message="协议阅读完成，正在保存结果",
+            )
 
         self.build_result(context)
-        self.report_execution_completed(progress)
         return self.result(context)
 
     @staticmethod
@@ -88,115 +119,100 @@ class ProductApplicationFlow:
         )
 
     @staticmethod
-    def report_validation_completed(progress: ProgressReporter | None) -> None:
-        if progress is not None:
-            progress(stage="validate", progress=40, message="产品申请参数校验完成")
+    def environment(context: ProductApplicationContext) -> str:
+        value = ProductApplicationFlow._submission(context).payload.get("environment")
+        if not isinstance(value, str) or not value.strip():
+            raise RuntimeError("产品申请环境不能为空")
+        return value.strip()
 
     @staticmethod
-    def create_request_head(
+    def query_agreement_templates(
         context: ProductApplicationContext,
-        adapter: MockProductApplicationAdapter,
+        adapter: CjdkJyrcAgreementAdapter,
     ) -> None:
-        context.request_head = adapter.request_head()
-
-    @staticmethod
-    def login(
-        context: ProductApplicationContext,
-        adapter: MockProductApplicationAdapter,
-    ) -> None:
-        adapter.login(ProductApplicationFlow._request_head(context))
-        context.flow_token_versions["login"] = adapter.flow_token_version
-
-    @staticmethod
-    def check_product(
-        context: ProductApplicationContext,
-        adapter: MockProductApplicationAdapter,
-    ) -> None:
-        submission = ProductApplicationFlow._submission(context)
-        snapshot = ProductApplicationFlow._snapshot(context)
-        adapter.check_product(
-            ProductApplicationFlow._request_head(context),
-            ProductCheckInput(
-                product=snapshot.product_code,
-                customer_type=submission.payload["customerType"],
-                switch_name=snapshot.switch_field,
-                switch_enabled=bool(submission.payload[snapshot.switch_field]),
-                product_type=snapshot.product_type,
-            ),
+        context.agreement_templates = adapter.query_agreement_templates(
+            ProductApplicationFlow._submission(context).payload
         )
-        context.flow_token_versions["check"] = adapter.flow_token_version
 
     @staticmethod
-    def rotate_token(
+    def query_agreement_preview(
         context: ProductApplicationContext,
-        adapter: MockProductApplicationAdapter,
+        adapter: CjdkJyrcAgreementAdapter,
     ) -> None:
-        adapter.rotate_token(ProductApplicationFlow._request_head(context))
-        context.flow_token_versions["rotate"] = adapter.flow_token_version
-
-    @staticmethod
-    def submit_application(
-        context: ProductApplicationContext,
-        adapter: MockProductApplicationAdapter,
-    ) -> None:
-        submission = ProductApplicationFlow._submission(context)
-        snapshot = ProductApplicationFlow._snapshot(context)
-        context.application_response = adapter.submit_application(
-            ProductApplicationFlow._request_head(context),
-            ProductSubmissionInput(
-                product=submission.product,
-                environment=submission.payload["environment"],
-                product_type=snapshot.product_type,
-                organization_code=submission.payload["branch"],
-                customer_name=submission.payload["personName"],
-                certificate_no=submission.payload["certificateNo"],
-                phone=submission.payload["phone"],
-                customer_type=submission.payload["customerType"],
-                outlet_code=submission.payload["outlet"],
-                application_method=submission.payload["applicationMethod"],
-                risk={
-                    name: submission.payload[name]
-                    for name in (
-                        "whitelistEnabled",
-                        "redShieldEnabled",
-                        "creditEnabled",
-                    )
-                    if name in submission.payload
-                },
-                dynamic_term=submission.payload.get("dynamicTerm"),
-                dynamic_amount=submission.payload.get("dynamicAmount"),
-                extra_reason=submission.payload.get("extraReason"),
-            ),
+        context.agreement_preview = adapter.query_preview(
+            ProductApplicationFlow._submission(context).payload,
+            context.agreement_templates,
         )
-        context.flow_token_versions["submit"] = adapter.flow_token_version
 
     @staticmethod
-    def audit(
+    def read_agreement_documents(
         context: ProductApplicationContext,
-        adapter: MockProductApplicationAdapter,
+        adapter: CjdkJyrcAgreementAdapter,
     ) -> None:
-        adapter.audit(ProductApplicationFlow._request_head(context))
+        preview = ProductApplicationFlow._agreement_preview(context)
+        context.agreement_documents = [
+            adapter.read_document(document.doc_id)
+            for document in preview.documents
+        ]
+
+    @staticmethod
+    def capture_session(
+        context: ProductApplicationContext,
+        adapter: CjdkJyrcAgreementAdapter,
+    ) -> None:
+        context.session_established = adapter.session_established
+        context.session_header_names = adapter.session_header_names
 
     @staticmethod
     def build_result(context: ProductApplicationContext) -> None:
-        application = ProductApplicationFlow._application_response(context)
+        preview = ProductApplicationFlow._agreement_preview(context)
         context.result = build_product_application_result(
             ProductApplicationFlow._submission(context),
             ProductApplicationFlow._snapshot(context),
             flow_result={
-                "applicationNo": application.data["applicationNo"],
-                "flowTokenVersions": dict(context.flow_token_versions),
-                "fixedTokenCall": "success",
+                "message": "协议查询、预览与阅读完成",
+                "agreementReadCompleted": bool(context.agreement_documents),
+                "agreementTemplates": [
+                    ProductApplicationFlow._template_summary(item)
+                    for item in context.agreement_templates
+                ],
+                "agreementPreview": {
+                    "successFlag": preview.success_flag,
+                    "docId": preview.doc_id,
+                    "documents": [
+                        {
+                            "docId": item.doc_id,
+                            "docName": item.doc_name,
+                            "docType": item.doc_type,
+                            "fcosTemplateNo": item.fcos_template_no,
+                        }
+                        for item in preview.documents
+                    ],
+                },
+                "agreementDocuments": [
+                    ProductApplicationFlow._document_summary(document)
+                    for document in context.agreement_documents
+                ],
+                "externalSession": {
+                    "established": context.session_established,
+                    "forwardedHeaderNames": list(context.session_header_names),
+                },
             },
         )
 
     @staticmethod
-    def report_execution_completed(progress: ProgressReporter | None) -> None:
-        if progress is not None:
-            progress(
-                stage="execute",
-                progress=90,
-                message="产品申请处理完成，正在保存结果",
+    def report_progress(
+        progress_reporter: ProgressReporter | None,
+        *,
+        stage: str,
+        progress: int,
+        message: str,
+    ) -> None:
+        if progress_reporter is not None:
+            progress_reporter(
+                stage=stage,
+                progress=progress,
+                message=message,
             )
 
     @staticmethod
@@ -218,13 +234,38 @@ class ProductApplicationFlow:
         return context.execution_snapshot
 
     @staticmethod
-    def _request_head(context: ProductApplicationContext):
-        if context.request_head is None:
-            raise RuntimeError("产品申请流程尚未创建请求头")
-        return context.request_head
+    def _agreement_preview(context: ProductApplicationContext) -> AgreementPreviewData:
+        if context.agreement_preview is None:
+            raise RuntimeError("产品申请流程尚未生成协议预览")
+        return context.agreement_preview
 
     @staticmethod
-    def _application_response(context: ProductApplicationContext):
-        if context.application_response is None:
-            raise RuntimeError("产品申请流程尚未提交申请")
-        return context.application_response
+    def _template_summary(item: AgreementTemplateInfo) -> dict[str, Any]:
+        return {
+            "docId": item.doc_id,
+            "docName": item.doc_name,
+            "docType": item.doc_type,
+            "fcosTemplateNo": item.fcos_template_no,
+            "status": item.status,
+        }
+
+    @staticmethod
+    def _document_summary(document: AgreementDocumentBody) -> dict[str, Any]:
+        file_info = document.file_info[0] if document.file_info else None
+        content = document.down_file or (file_info.down_file if file_info else None)
+        return {
+            "docId": (document.request or {}).get("docId"),
+            "fileName": file_info.file_name if file_info else None,
+            "docSize": document.doc_size,
+            "successFlag": document.success_flag,
+            "contentBytes": ProductApplicationFlow._decoded_size(content),
+        }
+
+    @staticmethod
+    def _decoded_size(content: str | None) -> int | None:
+        if not content:
+            return None
+        try:
+            return len(base64.b64decode(content, validate=False))
+        except (ValueError, binascii.Error):
+            return None
