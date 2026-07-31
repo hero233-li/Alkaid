@@ -30,7 +30,11 @@ class CjdkJyrcClient:
         self._session_final_url: str | None = None
 
     def __enter__(self) -> "CjdkJyrcClient":
-        transport = create_mock_transport() if settings.EXTERNAL_SYSTEM_MODE == "mock" else None
+        transport = (
+            create_mock_transport()
+            if config.external_system_mode() == "mock"
+            else None
+        )
         self._http_client = HttpClient(
             HttpClientConfig(
                 base_url=self.base_url,
