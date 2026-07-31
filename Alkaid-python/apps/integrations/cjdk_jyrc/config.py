@@ -7,25 +7,47 @@ from django.core.exceptions import ImproperlyConfigured
 
 
 def resolve_base_url(environment: str) -> str:
-    normalized = environment.strip().lower()
-    if not normalized:
-        raise ImproperlyConfigured("产品申请环境不能为空")
+    normalized = _environment(environment)
     if settings.EXTERNAL_SYSTEM_MODE == "mock":
         return "https://cjdk-jyrc.mock"
+    return _resolve_environment_url(
+        normalized,
+        mapping_name="CJDK_JYRC_BASE_URLS",
+        missing_message="CJDK-JYRC",
+    )
 
-    configured = _base_url_mapping()
-    try:
+
+def resolve_application_link_base_url(environment: str) -> str:
+    normalized = _environment(environment)
+    if settings.EXTERNAL_SYSTEM_MODE == "mock":
+        return "https://application-link.mock"
+
+    configured = _url_mapping("APPLICATION_LINK_BASE_URLS")
+    if normalized in configured:
         return configured[normalized].rstrip("/")
-    except KeyError:
-        known = ", ".join(sorted(configured)) or "未配置"
+
+    legacy = str(getattr(settings, "APPLICATION_LINK_BASE_URL", "")).strip()
+    if legacy:
+        return legacy.rstrip("/")
+
+    known = ", ".join(sorted(configured)) or "未配置"
+    raise ImproperlyConfigured(
+        f"申请链接环境 {environment!r} 未配置基础地址；已配置环境：{known}"
+    )
+
+
+def application_link_url_mode() -> str:
+    value = str(_setting("APPLICATION_LINK_URL_MODE", "internal")).strip().lower()
+    if value not in {"internal", "external"}:
         raise ImproperlyConfigured(
-            f"CJDK-JYRC 环境 {environment!r} 未配置基础地址；已配置环境：{known}"
-        ) from None
+            "APPLICATION_LINK_URL_MODE 必须是 internal 或 external"
+        )
+    return value
 
 
 def is_configured_environment(environment: str) -> bool:
     normalized = environment.strip().lower()
-    return bool(normalized and normalized in _base_url_mapping())
+    return bool(normalized and normalized in _url_mapping("CJDK_JYRC_BASE_URLS"))
 
 
 def channel() -> int:
@@ -75,16 +97,45 @@ def default_template_numbers() -> tuple[str, ...]:
     return tuple(item.strip() for item in str(value).split(",") if item.strip())
 
 
-def _base_url_mapping() -> dict[str, str]:
-    configured = getattr(settings, "CJDK_JYRC_BASE_URLS", None)
+def _environment(environment: str) -> str:
+    normalized = environment.strip().lower()
+    if not normalized:
+        raise ImproperlyConfigured("产品申请环境不能为空")
+    return normalized
+
+
+def _resolve_environment_url(
+    environment: str,
+    *,
+    mapping_name: str,
+    missing_message: str,
+) -> str:
+    configured = _url_mapping(mapping_name)
+    try:
+        return configured[environment].rstrip("/")
+    except KeyError:
+        known = ", ".join(sorted(configured)) or "未配置"
+        raise ImproperlyConfigured(
+            f"{missing_message} 环境 {environment!r} 未配置基础地址；已配置环境：{known}"
+        ) from None
+
+
+def _url_mapping(name: str) -> dict[str, str]:
+    configured = getattr(settings, name, None)
     if configured is None:
-        raw = os.getenv("CJDK_JYRC_BASE_URLS", "{}")
+        raw = os.getenv(name, "{}")
         try:
             configured = json.loads(raw)
         except json.JSONDecodeError as exc:
-            raise ImproperlyConfigured("CJDK_JYRC_BASE_URLS 必须是 JSON 对象") from exc
+            raise ImproperlyConfigured(f"{name} 必须是 JSON 对象") from exc
+    elif isinstance(configured, str):
+        try:
+            configured = json.loads(configured or "{}")
+        except json.JSONDecodeError as exc:
+            raise ImproperlyConfigured(f"{name} 必须是 JSON 对象") from exc
+
     if not isinstance(configured, Mapping):
-        raise ImproperlyConfigured("CJDK_JYRC_BASE_URLS 必须是环境到 URL 的映射")
+        raise ImproperlyConfigured(f"{name} 必须是环境到 URL 的映射")
 
     result: dict[str, str] = {}
     for key, value in configured.items():
