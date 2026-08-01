@@ -31,15 +31,29 @@ def _product_b_submission() -> dict[str, object]:
 
 
 @pytest.mark.django_db
-def test_readiness_checks_database_catalog_endpoints_and_messages(client) -> None:
+def test_readiness_checks_database_catalog_and_messages(client) -> None:
     response = client.get("/health/ready/")
     body = response.json()
 
     assert response.status_code == 200
     assert body["status"] == "ready"
     assert body["checks"]["catalog"]["products"] == 3
-    assert body["checks"]["rawMessages"]["messages"] == 1
     assert body["checks"]["agreementMessages"]["messages"] == 3
+
+
+def test_capabilities_match_current_backend_routes(client) -> None:
+    response = client.get("/api/meta/capabilities")
+
+    assert response.status_code == 200
+    features = response.json()["data"]["features"]
+    assert features["product-application"]["enabled"] is True
+    assert features["business-access-query"]["enabled"] is True
+    assert features["application-link-generator"]["enabled"] is True
+    assert features["jobs"]["enabled"] is True
+    assert features["settings"]["enabled"] is True
+    assert features["workbench"]["enabled"] is True
+    assert features["workflow"]["enabled"] is True
+    assert features["high-frequency-transaction"]["enabled"] is True
 
 
 @pytest.mark.django_db
@@ -67,7 +81,8 @@ def test_product_application_freezes_catalog_and_reads_agreement(
     assert job.result["externalSession"]["established"] is True
     assert job.result["agreementReadCompleted"] is True
     assert job.result["agreementDocuments"][0]["fileName"] == "mock-agreement.pdf"
-    assert job.api_calls.count() == 5
+    # Each validated redirect hop is audited independently.
+    assert job.api_calls.count() == 6
 
 
 @pytest.mark.django_db

@@ -25,11 +25,17 @@ configs/
 - 申请方式代码和显示名称
 - 页面字段、字段分组和字段适用的申请方式
 - 每种申请方式的必填规则
-- 申请链接功能路由
+- 申请链接路由、真实业务报文模板和 payloadBindings
 
 字段名直接使用产品申请 API 的 payload 名称，例如 `personName`、`dynamicAmount`。
 必填规则只维护 `requiredFor`；页面的 `required` 由 Catalog 自动派生，避免双重配置。
-外系统字段名和原始报文不属于产品配置，必须保留在 `apps/integrations/<system>/`。
+执行字段同时声明 `valueType`（`string`、`boolean`、`integer`、`decimal`、`enum`），并可配置
+`nullable`、`strip`、长度、正则、数值上下限和 `allowedValues`。后端严格区分 bool/string/int，
+不做字符串与布尔、数字之间的隐式转换；验证返回新 payload，不修改调用方对象。
+产品专属的外系统业务字段（例如 `order_no`、`cooperator_id`）直接保留在产品路由的
+`requestTemplate` 中；公共协议骨架和敏感字段路径由
+`apps/integrations/cjdk_jyrc/profiles/` 维护。产品 JSON 不允许保存 appId、私钥、公钥、Token、
+Cookie、证书或 Java SDK 路径。
 
 ## 运行方式
 
@@ -50,19 +56,20 @@ configs/
 python scripts/compile_product_config.py --check
 ```
 
-命令名称为兼容旧开发脚本而保留；它不再生成运行时文件，会同时校验统一产品目录、每个产品的
-外系统检查接口覆盖关系，以及全部原始报文的信封结构。
+命令名称为兼容旧开发脚本而保留；它不再生成运行时文件，会同时校验统一产品目录和当前
+CJDK-JYRC 协议原始报文的结构。
 
 ## 新增产品
 
 1. 在 `products/` 新增一个产品 JSON。
-2. 在对应 Integration 的 `api/` 中为产品登记外系统检查接口；若多个产品确实共用同一接口，
-   可以直接复用同一个 `EndpointSpec`。配置检查会阻止遗漏或多余映射进入发布版。
+2. 为每个支持的环境和申请方式配置唯一 `applicationLinks` 路由，复用对应版本的
+   Integration Profile。
 3. 如果调用顺序与现有产品相同，不需要新增 Handler、注册表或业务类。
 4. 只有调用顺序真正不同，才在 `product_applications/services.py` 新增一个明确业务函数；
    不为只修改常量的产品建立 Handler 或注册表。
-5. 外系统请求报文仍在对应 Integration Adapter 中显式赋值。
+5. 产品业务报文写入路由 `requestTemplate`；敏感值只通过 Profile 的 `secretBindings` 在执行时注入。
 6. 运行配置检查和后端测试。
 
-创建 Job 时会保存 `execution_config_snapshot`。字段和申请方式配置更新后，历史 Job 仍使用创建
-时的快照；旧快照中的历史 Handler/operation 字段会被兼容读取但不再参与新任务执行。
+创建 Job 时会将标准化 payload、申请链接路由、Profile 版本/校验和、编译后的非敏感模板及绑定
+保存到 `execution_config_snapshot`。Worker 不再读取当前产品目录。缺少完整冻结配置的旧 Job 会
+明确失败并要求重新创建，不会用当前配置静默补齐。

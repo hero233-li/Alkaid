@@ -1,0 +1,18 @@
+{
+  "id": "cjdk-jyrc.application-link",
+  "version": 1,
+  "template": {
+    "REQ_HEAD": {},
+    "REQ_BODY": {
+      "appId": "",
+      "myPrivateKey": "",
+      "apigwPublicKey": "",
+      "request": {}
+    }
+  },
+  "secretBindings": {
+    "REQ_BODY.appId": "cjdkJyrc.applicationLink.appId",
+    "REQ_BODY.myPrivateKey": "cjdkJyrc.applicationLink.privateKey",
+    "REQ_BODY.apigwPublicKey": "cjdkJyrc.applicationLink.publicKey"
+  }
+}

@@ -1,26 +1,30 @@
 # 外系统集成边界
 
-外系统代码按系统/业务域分目录，不把 Mock 响应、业务编排和 HTTP 传输混在一起：
+当前产品申请主链路由 Celery Task 组装：
 
 ```text
-integrations/
-├── mock_product/              # 产品申请外系统
-├── application_link/          # 申请链接外系统
-├── business_access/           # 业务准入外系统
-└── verification_approval/     # 核实审批外系统
+Job 冻结快照
+→ Task 创建 JobIntegrationObserver 与 CjdkJyrcAdapter
+→ ProductApplicationFlow（中立 Command / Result / Port）
+→ CjdkJyrcAdapter（CJDK 报文转换）
+→ JavaApplicationLinkGateway / CjdkJyrcClient
+→ HttpClient
 ```
 
-每个目录的职责固定：
+`product_data/product_applications` 不导入 CJDK 响应模型；`integrations/cjdk_jyrc` 不导入产品
+Catalog、产品配置或 Job ORM。Task 是唯一允许同时引用业务、Integration 与 Job 基础设施的组装层。
 
-- `api.py` 或 `api/`：接口后缀、HTTP 方法、成功码、认证和重试声明。
-- `models.py` 或 `models/`：外系统请求和响应模型。
-- `adapter.py`：把后端语义输入转换为外系统调用，对业务层隐藏 HTTP 细节。
-- `mock_transport.py`：只模拟外系统服务端响应；业务服务不能导入它。
-- `raw_messages/`：固定长报文模板，仅由对应 Adapter 复制并显式覆盖动态字段。
+JavaGateway 基线保持为：冻结快照生成完整 Java 请求，写入 UTF-8 临时 `request.json`，文件路径是
+Java 主类唯一业务参数；cwd、classpath、输出编码、超时和 `ALKAID_RESULT=` 解析均由部署配置控制。
 
-`EXTERNAL_SYSTEM_MODE=mock` 时 Adapter 使用 `httpx.MockTransport`，仍然经过完整的
-`EndpointExecutor -> HttpClient -> 响应模型校验` 链路。切到 `real` 时只替换 Base URL 和 Token，
-业务服务、Job 和前端 API 不变。
+通用 `HttpClient` 只处理传输、HTTP 状态、响应读取/解析、大小限制、重试和 Observer；CJDK 的
+`biz_state`/`rsp_code`/`rsp_msg` 在 `cjdk_jyrc/response.py` 中解释。CJDK POST 当前均为
+`RetryMode.NEVER`。
 
-业务准入和核实审批的 Mock 状态保存在各自 `mock_transport.py` 的内存 Store 中，用来模拟外系统
-记录状态；进程重启后会清空。真实模式下状态由真实外系统维护。
+Session 真实初始化接口尚未实现。现有代码只安全打开申请链接并按环境 `SessionRequirement` 判断
+`not_started`、`page_opened`、`partial`、`established`、`failed` 状态；未满足要求时禁止查询协议。
+真实 TokenId 接口资料确认后，只在 `CjdkJyrcAdapter.initialize_session()` 或专用 Session Client
+中接入，Flow 不感知其字段和路径。
+
+响应限制集中在 `responseLimits`：JSON/HTML 原始响应、重定向次数、模板/预览数量、Base64 字符、
+单文档解码大小和累计文档大小。真实 Java SDK 与内网协议接口仍需在对应网络环境验证。

@@ -18,7 +18,7 @@ from apps.product_data.catalog import (
 from apps.product_data.product_applications.schemas import ProductApplicationSubmission
 from apps.product_data.product_applications.services import (
     ProductConfigurationError,
-    validate_submission,
+    freeze_product_execution_snapshot,
 )
 
 
@@ -37,15 +37,9 @@ def create_product_application(request: HttpRequest) -> JsonResponse:
     try:
         submission = ProductApplicationSubmission.model_validate_json(request.body)
         catalog = load_product_catalog()
-        execution_snapshot = catalog.snapshot(
-            submission.product,
-            str(submission.payload.get("applicationMethod") or "") or None,
-        )
-        submission.payload["applicationMethod"] = execution_snapshot.method_code
-        validate_submission(
+        execution_snapshot = freeze_product_execution_snapshot(
             submission,
-            execution_snapshot=execution_snapshot,
-            catalog=catalog,
+            catalog,
         )
         idempotency_key, trace_id = resolve_job_identifiers(
             request.headers.get("X-Idempotency-Key"),

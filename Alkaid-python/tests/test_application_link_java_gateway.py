@@ -1,110 +1,148 @@
 import json
+from copy import deepcopy
+from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
-from apps.integrations.cjdk_jyrc.java_gateway import (
-    JavaApplicationLinkGateway,
-)
+from apps.integrations.cjdk_jyrc import config
+from apps.integrations.cjdk_jyrc.java_gateway import JavaApplicationLinkGateway
+from apps.integrations.cjdk_jyrc.profiles import load_integration_profile
 from apps.integrations.cjdk_jyrc.request_builder import (
     ApplicationLinkRequestError,
     build_application_link_request,
 )
+from apps.product_data.application_link_plan import compile_application_link_plan
+from apps.product_data.catalog import load_product_catalog
 
 
-def test_product_payload_is_copied_and_bound(tmp_path) -> None:
-    product_root = tmp_path / "products"
-    product_root.mkdir()
-
-    product_path = product_root / "product.json"
-    source = {
-        "code": "CJDK-ZHHX",
-        "features": {
-            "applicationLinks": [
-                {
-                    "environment": "UAT1",
-                    "category": "太阳码",
-                    "requiredFields": ["projectId"],
-                    "payload": {
-                        "REQ_HEAD": {},
-                        "REQ_BODY": {
-                            "request": {
-                                "selbl_prod_id": "",
-                                "co_project_id": "",
-                            }
-                        },
-                    },
-                    "payloadBindings": {
-                        "REQ_BODY.request.selbl_prod_id": "product",
-                        "REQ_BODY.request.co_project_id": "projectId",
-                    },
-                }
-            ]
-        },
+class TestSecretResolver:
+    values = {
+        "cjdkJyrc.applicationLink.appId": "APP-ID",
+        "cjdkJyrc.applicationLink.privateKey": "PRIVATE-KEY",
+        "cjdkJyrc.applicationLink.publicKey": "PUBLIC-KEY",
     }
-    product_path.write_text(
-        json.dumps(source, ensure_ascii=False),
-        encoding="utf-8",
+
+    def resolve(self, reference: str) -> str:
+        return self.values[reference]
+
+
+def _cjdk_catalog_and_plan():
+    catalog = load_product_catalog()
+    source = catalog.product("product-b")
+    product = source.model_copy(update={"code": "CJDK-ZHHX"})
+    copied_catalog = catalog.model_copy(update={"products": {"CJDK-ZHHX": product}})
+    plan = compile_application_link_plan(
+        catalog=copied_catalog,
+        product_code="CJDK-ZHHX",
+        environment="UAT1",
+        method_code="normal",
     )
+    return product, plan
+
+
+def test_product_payload_is_copied_bound_and_secret_injected() -> None:
+    product, plan = _cjdk_catalog_and_plan()
+    profile_before = deepcopy(load_integration_profile("cjdk-jyrc.application-link", 1).template)
+    route_before = deepcopy(product.features.application_links[0].request_template)
 
     request = build_application_link_request(
-        product="CJDK-ZHHX",
-        environment="uat1",
-        category="太阳码",
-        submission_payload={
-            "projectId": "PROJECT-001",
+        plan=plan,
+        normalized_payload={
+            "product": "CJDK-ZHHX",
+            "environment": "UAT1",
+            "cooperationProjectId": "PROJECT-001",
         },
-        product_root=product_root,
+        secret_resolver=TestSecretResolver(),
     )
 
     external = request.external_request()
     assert external["env"] == "UAT1"
+    assert external["product"] == "CJDK-ZHHX"
+    assert external["category"] == "太阳码"
     assert external["cooperationProjectId"] == "PROJECT-001"
-    request_body = external["payload"]["REQ_BODY"]["request"]
-    assert request_body["selbl_prod_id"] == "CJDK-ZHHX"
-    assert request_body["co_project_id"] == "PROJECT-001"
+    assert external["payload"]["REQ_BODY"]["request"] == {
+        "order_no": "XCXYXM_CJDK_JYRC",
+        "cooperator_id": "XCXYXM",
+        "cooperator_name": "小程序渠道码",
+        "loan_flow_stag": "1",
+        "selbl_prod_id": "CJDK-ZHHX",
+        "co_project_id": "PROJECT-001",
+        "appl_chnl_cd": "5C",
+    }
+    assert external["payload"]["REQ_BODY"]["appId"] == "APP-ID"
+    assert external["payload"]["REQ_BODY"]["myPrivateKey"] == "PRIVATE-KEY"
+    assert external["payload"]["REQ_BODY"]["apigwPublicKey"] == "PUBLIC-KEY"
+    assert load_integration_profile("cjdk-jyrc.application-link", 1).template == profile_before
+    assert product.features.application_links[0].request_template == route_before
 
-    original = json.loads(product_path.read_text(encoding="utf-8"))
-    original_body = (
-        original["features"]["applicationLinks"][0]
-        ["payload"]["REQ_BODY"]["request"]
-    )
-    assert original_body["selbl_prod_id"] == ""
-    assert original_body["co_project_id"] == ""
 
-
-def test_missing_required_binding_value_is_rejected(tmp_path) -> None:
-    product_root = tmp_path / "products"
-    product_root.mkdir()
-    (product_root / "product.json").write_text(
-        json.dumps(
-            {
-                "code": "P1",
-                "features": {
-                    "applicationLinks": [
-                        {
-                            "environment": "UAT1",
-                            "category": "太阳码",
-                            "requiredFields": ["projectId"],
-                            "payload": {},
-                        }
-                    ]
-                },
-            }
-        ),
-        encoding="utf-8",
-    )
-
-    with pytest.raises(
-        ApplicationLinkRequestError,
-        match="projectId",
-    ):
+def test_missing_required_binding_value_is_rejected() -> None:
+    _, plan = _cjdk_catalog_and_plan()
+    with pytest.raises(ApplicationLinkRequestError, match="cooperationProjectId"):
         build_application_link_request(
-            product="P1",
-            environment="UAT1",
-            category="太阳码",
-            submission_payload={},
-            product_root=product_root,
+            plan=plan,
+            normalized_payload={"product": "CJDK-ZHHX", "environment": "UAT1"},
+            secret_resolver=TestSecretResolver(),
         )
+
+
+def test_java_gateway_preserves_request_file_contract(tmp_path, monkeypatch) -> None:
+    sdk_dir = tmp_path / "sdk"
+    lib_dir = sdk_dir / "lib"
+    lib_dir.mkdir(parents=True)
+    java = tmp_path / "jdk" / "bin" / "java.exe"
+    java.parent.mkdir(parents=True)
+    java.write_text("", encoding="utf-8")
+    jar = sdk_dir / "application-link.jar"
+    jar.write_text("", encoding="utf-8")
+    captured: dict[str, object] = {}
+
+    configured = config.CjdkJyrcSettings(
+        mode="real",
+        application_link_url_mode="internal",
+        java_gateway=config.JavaGatewaySettings(
+            sdk_dir=sdk_dir,
+            java_executable=java,
+            jar=Path("application-link.jar"),
+            main_class="com.example.ApplicationLinkMain",
+            output_encoding="gbk",
+            timeout_seconds=15,
+        ),
+        environments={"UAT1": config.EnvironmentSettings(agreement_base_url="http://agreement")},
+    )
+    monkeypatch.setattr(config, "get_cjdk_jyrc_settings", lambda: configured)
+
+    def fake_run(command, **kwargs):
+        request_path = Path(command[-1])
+        captured.update(
+            command=command,
+            kwargs=kwargs,
+            request=json.loads(request_path.read_text(encoding="utf-8")),
+        )
+        return SimpleNamespace(
+            returncode=0,
+            stdout='ALKAID_RESULT={"internal_url":"in","external_url":"out"}\n',
+            stderr="",
+        )
+
+    monkeypatch.setattr("subprocess.run", fake_run)
+    gateway = object.__new__(JavaApplicationLinkGateway)
+    gateway._write_diagnostic = lambda *args, **kwargs: None
+
+    result = gateway._execute_java({"env": "UAT1", "payload": {"中文": "值"}})
+
+    command = captured["command"]
+    kwargs = captured["kwargs"]
+    assert command[0] == str(java)
+    assert command[1] == "-cp"
+    assert command[3] == "com.example.ApplicationLinkMain"
+    assert len(command[4:]) == 1
+    assert kwargs["cwd"] == str(sdk_dir)
+    assert kwargs["encoding"] == "gbk"
+    assert kwargs["timeout"] == 15
+    assert captured["request"] == {"env": "UAT1", "payload": {"中文": "值"}}
+    assert result == {"internal_url": "in", "external_url": "out"}
 
 
 def test_java_result_uses_last_alkaid_result_line() -> None:
@@ -114,11 +152,7 @@ def test_java_result_uses_last_alkaid_result_line() -> None:
         "more log\n"
         'ALKAID_RESULT={"internalUrl":"in","externalUrl":"out"}\n'
     )
-
-    assert result == {
-        "internalUrl": "in",
-        "externalUrl": "out",
-    }
+    assert result == {"internalUrl": "in", "externalUrl": "out"}
 
 
 def test_java_result_marker_is_required() -> None:

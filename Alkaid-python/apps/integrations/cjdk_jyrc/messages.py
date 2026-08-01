@@ -4,7 +4,6 @@ from functools import lru_cache
 from pathlib import Path
 from typing import Any
 
-
 RAW_MESSAGE_ROOT = Path(__file__).with_name("raw_messages")
 
 

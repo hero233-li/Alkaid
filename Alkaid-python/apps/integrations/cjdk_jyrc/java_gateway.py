@@ -15,13 +15,7 @@ from apps.integrations.cjdk_jyrc.models import (
     ApplicationLinks,
     GenerateApplicationLinkRequest,
 )
-from apps.jobs.http import (
-    JobHttpCallObserver,
-    format_log_value,
-    sanitize_text,
-)
-from apps.jobs.models import Job
-from apps.jobs.services import add_job_log
+from apps.integrations.contracts import IntegrationObserver
 
 logger = logging.getLogger(__name__)
 
@@ -31,36 +25,34 @@ RESULT_PREFIX = "ALKAID_RESULT="
 class JavaApplicationLinkGateway:
     """Invoke the local Java SDK and parse ALKAID_RESULT."""
 
-    def __init__(self, job: Job) -> None:
-        self.job = job
+    def __init__(self, *, observer: IntegrationObserver, trace_id: str) -> None:
+        self._observer = observer
+        self._trace_id = trace_id
 
     def generate_link(
         self,
         request: GenerateApplicationLinkRequest,
     ) -> ApplicationLinks:
+        integration_settings = config.get_cjdk_jyrc_settings()
         java_request = request.external_request()
-        observer = JobHttpCallObserver(
-            self.job,
-            step="application_link.generate_link",
-        )
         call_path = (
             "mock://java-application-link"
-            if config.external_system_mode() == "mock"
-            else config.java_main_class()
+            if integration_settings.mode == "mock"
+            else integration_settings.java_gateway.main_class
         )
-        handle = observer.started(
+        handle = self._observer.request_started(
+            step="application_link.generate_link",
             method="JAVA",
-            path=call_path,
+            url=call_path,
             headers={},
-            request_body=java_request,
+            body=java_request,
         )
         started_at = monotonic()
 
         logger.info(
             "application_link_java_started",
             extra={
-                "job_id": self.job.id,
-                "trace_id": self.job.trace_id,
+                "trace_id": self._trace_id,
                 "env": request.env,
                 "product": request.product,
                 "category": request.category,
@@ -70,35 +62,34 @@ class JavaApplicationLinkGateway:
         )
 
         try:
-            if config.external_system_mode() == "mock":
+            if integration_settings.mode == "mock":
                 result = self._mock_result(java_request)
             else:
                 result = self._execute_java(java_request)
             links = ApplicationLinks.model_validate(result)
         except Exception as exc:
-            observer.finished(
+            self._observer.request_finished(
                 handle,
                 status_code=None,
                 headers={},
-                response_body={},
+                body={},
                 duration_ms=self._duration_ms(started_at),
                 error=exc,
             )
             raise
 
-        observer.finished(
+        self._observer.request_finished(
             handle,
             status_code=0,
             headers={},
-            response_body=links.model_dump(mode="json"),
+            body=links.model_dump(mode="json"),
             duration_ms=self._duration_ms(started_at),
             error=None,
         )
         logger.info(
             "application_link_java_completed",
             extra={
-                "job_id": self.job.id,
-                "trace_id": self.job.trace_id,
+                "trace_id": self._trace_id,
                 "env": request.env,
                 "product": request.product,
                 "category": request.category,
@@ -107,13 +98,14 @@ class JavaApplicationLinkGateway:
         return links
 
     def _execute_java(self, java_request: dict[str, Any]) -> dict[str, Any]:
-        sdk_root = config.java_sdk_dir()
+        gateway_settings = config.get_cjdk_jyrc_settings().java_gateway
+        sdk_root = gateway_settings.sdk_dir
         java_executable = self._resolve_runtime_path(
-            config.java_executable(),
+            gateway_settings.java_executable,
             sdk_root,
         )
         jar_path = self._resolve_runtime_path(
-            config.java_jar(),
+            gateway_settings.jar,
             sdk_root,
         )
         self._validate_runtime(
@@ -143,7 +135,7 @@ class JavaApplicationLinkGateway:
                 str(java_executable),
                 "-cp",
                 classpath,
-                config.java_main_class(),
+                gateway_settings.main_class,
                 str(request_path),
             ]
 
@@ -156,8 +148,8 @@ class JavaApplicationLinkGateway:
                         "<temporary request.json>",
                     ],
                     "requestFileEncoding": "utf-8",
-                    "outputEncoding": config.java_output_encoding(),
-                    "timeoutSeconds": config.java_timeout_seconds(),
+                    "outputEncoding": gateway_settings.output_encoding,
+                    "timeoutSeconds": gateway_settings.timeout_seconds,
                 },
             )
 
@@ -168,15 +160,15 @@ class JavaApplicationLinkGateway:
                     shell=False,
                     capture_output=True,
                     text=True,
-                    encoding=config.java_output_encoding(),
+                    encoding=gateway_settings.output_encoding,
                     errors="replace",
-                    timeout=config.java_timeout_seconds(),
+                    timeout=gateway_settings.timeout_seconds,
                     check=False,
                 )
             except subprocess.TimeoutExpired as exc:
                 raise RuntimeError(
                     "申请链接 Java SDK 执行超时："
-                    f"{config.java_timeout_seconds()} 秒"
+                    f"{gateway_settings.timeout_seconds} 秒"
                 ) from exc
             except OSError as exc:
                 raise RuntimeError(
@@ -187,8 +179,8 @@ class JavaApplicationLinkGateway:
             "JavaGateway 执行结果",
             {
                 "returnCode": completed.returncode,
-                "stdout": sanitize_text(completed.stdout),
-                "stderr": sanitize_text(completed.stderr),
+                "stdout": completed.stdout,
+                "stderr": completed.stderr,
             },
             level="INFO" if completed.returncode == 0 else "ERROR",
         )
@@ -208,26 +200,11 @@ class JavaApplicationLinkGateway:
         *,
         level: str = "INFO",
     ) -> None:
-        message = (
-            f"{title}（敏感值已脱敏）：\n"
-            f"{format_log_value(content)}"
-        )
-        add_job_log(
-            self.job,
-            level,
-            message,
+        self._observer.diagnostic(
             step="application_link.generate_link",
-            celery_task_id=self.job.celery_task_id,
-            metadata={
-                "event": "java_gateway_diagnostic",
-                "title": title,
-            },
-        )
-        log_method = logger.error if level == "ERROR" else logger.info
-        log_method(
-            "java_gateway_diagnostic %s\n%s",
-            title,
-            format_log_value(content),
+            title=title,
+            content=content,
+            level=level,
         )
 
     @staticmethod

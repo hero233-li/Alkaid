@@ -1,13 +1,19 @@
 import pytest
 from django.test import override_settings
 
-import apps.product_data.product_applications.flow as flow_module
 import apps.product_data.product_applications.tasks as task_module
+from apps.integrations.cjdk_jyrc import config
+from apps.integrations.cjdk_jyrc.adapter import CjdkJyrcAdapter
+from apps.jobs.integration_observer import JobIntegrationObserver
 from apps.jobs.models import JobStatus
 from apps.jobs.services import create_job
 from apps.product_data.catalog import load_product_catalog
 from apps.product_data.product_applications.flow import ProductApplicationFlow
-from apps.product_data.product_applications.services import ProductConfigurationError
+from apps.product_data.product_applications.schemas import ProductApplicationSubmission
+from apps.product_data.product_applications.services import (
+    ProductConfigurationError,
+    freeze_product_execution_snapshot,
+)
 
 
 def _payload() -> dict[str, object]:
@@ -29,17 +35,23 @@ def _payload() -> dict[str, object]:
     }
 
 
-def _snapshot():
-    return load_product_catalog().snapshot("product-b")
+def _snapshot(payload=None):
+    submission = ProductApplicationSubmission(
+        name="产品B申请",
+        product="product-b",
+        payload=payload or _payload(),
+    )
+    return freeze_product_execution_snapshot(submission, load_product_catalog())
 
 
 def _job(*, key: str, payload=None, snapshot=None):
-    resolved_snapshot = snapshot or _snapshot()
+    resolved_payload = payload or _payload()
+    resolved_snapshot = snapshot or _snapshot(resolved_payload)
     return create_job(
         kind="product_application",
         name="产品B申请",
         product="product-b",
-        payload=payload or _payload(),
+        payload=resolved_payload,
         trace_id=f"trace-{key}",
         idempotency_key=key,
         timeout_seconds=60,
@@ -52,8 +64,22 @@ def _job(*, key: str, payload=None, snapshot=None):
 @override_settings(EXTERNAL_SYSTEM_MODE="mock", APPLICATION_LINK_URL_MODE="internal")
 def test_product_application_flow_opens_link_then_reads_agreement() -> None:
     job = _job(key="agreement-flow")
-
-    result = ProductApplicationFlow().execute(job=job)
+    snapshot = _snapshot()
+    submission = ProductApplicationSubmission(
+        name=job.name, product=job.product, payload=dict(snapshot.normalized_payload)
+    )
+    adapter = CjdkJyrcAdapter(
+        settings=config.get_cjdk_jyrc_settings(),
+        observer=JobIntegrationObserver(job),
+        trace_id=job.trace_id,
+        environment=snapshot.environment,
+    )
+    result = ProductApplicationFlow(adapter).execute(
+        job_id=job.id,
+        trace_id=job.trace_id,
+        submission=submission,
+        snapshot=snapshot,
+    )
 
     assert result["applicationLink"] == {
         "generated": True,
@@ -78,38 +104,47 @@ def test_product_application_flow_opens_link_then_reads_agreement() -> None:
     ]
     assert result["externalSession"]["finalUrlPresent"] is True
 
-    assert list(job.api_calls.order_by("id").values_list("step", flat=True)) == [
-        "application_link.generate_link",
-        "application_link.acquire_session",
+    steps = list(job.api_calls.order_by("id").values_list("step", flat=True))
+    assert steps[0] == "application_link.generate_link"
+    assert steps[-3:] == [
         "agreement.query_templates",
         "agreement.query_preview",
         "agreement.read_document",
     ]
+    assert "application_link.acquire_session" in steps
 
 
 @pytest.mark.django_db
-def test_product_application_flow_validates_before_opening_adapter(monkeypatch) -> None:
-    snapshot = _snapshot().model_copy(update={"required_fields": ("personName",)})
+def test_product_application_flow_validates_before_opening_adapter() -> None:
     payload = _payload()
     payload.pop("personName")
+    frozen_payload = _payload()
+    frozen_payload.pop("personName")
+    snapshot = _snapshot().model_copy(
+        update={
+            "required_fields": ("personName",),
+            "normalized_payload": frozen_payload,
+        }
+    )
     job = _job(
         key="product-flow-invalid",
         payload=payload,
         snapshot=snapshot,
     )
 
-    def unexpected_adapter(*args, **kwargs):
-        raise AssertionError("validation failure must not open an external adapter")
-
-    monkeypatch.setattr(
-        flow_module,
-        "CjdkJyrcApplicationLinkAdapter",
-        unexpected_adapter,
-    )
-    monkeypatch.setattr(flow_module, "CjdkJyrcAgreementAdapter", unexpected_adapter)
+    class UnexpectedPort:
+        def __enter__(self):
+            raise AssertionError("validation failure must not open an external adapter")
 
     with pytest.raises(ProductConfigurationError, match="personName"):
-        ProductApplicationFlow().execute(job=job)
+        ProductApplicationFlow(UnexpectedPort()).execute(
+            job_id=job.id,
+            trace_id=job.trace_id,
+            submission=ProductApplicationSubmission(
+                name=job.name, product=job.product, payload=frozen_payload
+            ),
+            snapshot=snapshot,
+        )
 
 
 @pytest.mark.django_db
@@ -122,8 +157,11 @@ def test_product_application_task_delegates_to_flow(monkeypatch) -> None:
     }
 
     class StubFlow:
-        def execute(self, *, job, progress):
-            captured.update(job=job, progress=progress)
+        def __init__(self, port):
+            captured["port"] = port
+
+        def execute(self, **kwargs):
+            captured.update(kwargs)
             return expected_result
 
     monkeypatch.setattr(task_module, "ProductApplicationFlow", StubFlow)
@@ -131,7 +169,7 @@ def test_product_application_task_delegates_to_flow(monkeypatch) -> None:
     task_module.execute_product_application.apply(args=(job.id,), throw=True)
 
     job.refresh_from_db()
-    assert captured["job"].id == job.id
+    assert captured["job_id"] == job.id
     assert callable(captured["progress"])
     assert job.status == JobStatus.SUCCESS
     assert job.result == expected_result
@@ -139,31 +177,39 @@ def test_product_application_task_delegates_to_flow(monkeypatch) -> None:
 
 @override_settings(
     EXTERNAL_SYSTEM_MODE="real",
-    CJDK_JYRC_BASE_URLS={
-        "UAT1": "http://uat1.example:8090/",
-        "UAT2": "http://uat2.example:8091",
-        "UATC": "http://uatc.example:8092",
-    },
-    APPLICATION_LINK_BASE_URLS={
-        "UAT1": "http://link-uat1.example:8080/",
-        "UAT2": "http://link-uat2.example:8081",
-        "UATC": "http://link-uatc.example:8082",
-    },
+    CJDK_JYRC_BASE_URLS={"UAT1": "http://django-setting.example:8090"},
+    APPLICATION_LINK_JAVA_SDK_DIR="D:/django-sdk",
 )
-def test_environment_selects_its_own_base_urls() -> None:
-    from apps.integrations.cjdk_jyrc.config import (
-        resolve_application_link_base_url,
-        resolve_base_url,
+def test_local_environment_config_has_highest_priority(tmp_path, monkeypatch) -> None:
+    local_path = tmp_path / "environments.local.json"
+    local_path.write_text(
+        """{
+          "mode": "real",
+          "applicationLinkUrlMode": "external",
+          "javaGateway": {
+            "sdkDir": "D:/local-sdk",
+            "javaExecutable": "D:/jdk/bin/java.exe",
+            "jar": "application-link.jar",
+            "mainClass": "com.example.LocalMain",
+            "outputEncoding": "gbk",
+            "timeoutSeconds": 33
+          },
+          "environments": {
+            "UAT1": {"agreementBaseUrl": "http://local.example:8091/"}
+          }
+        }""",
+        encoding="utf-8",
     )
+    monkeypatch.setattr(config, "LOCAL_ENVIRONMENT_CONFIG_PATH", local_path)
+    config.clear_environment_config_cache()
 
-    assert resolve_base_url("uat1") == "http://uat1.example:8090"
-    assert resolve_base_url("UAT2") == "http://uat2.example:8091"
-    assert resolve_application_link_base_url("uat1") == "http://link-uat1.example:8080"
-    assert resolve_application_link_base_url("UAT2") == "http://link-uat2.example:8081"
-    assert resolve_base_url("uatc") == "http://uatc.example:8092"
-    assert resolve_application_link_base_url("uatc") == "http://link-uatc.example:8082"
-    assert resolve_base_url("uatc") == "http://uatc.example:8092"
-    assert resolve_application_link_base_url("uatc") == "http://link-uatc.example:8082"
+    configured = config.get_cjdk_jyrc_settings()
+
+    assert configured.java_gateway.sdk_dir.as_posix() == "D:/local-sdk"
+    assert configured.java_gateway.main_class == "com.example.LocalMain"
+    assert configured.java_gateway.timeout_seconds == 33
+    assert configured.application_link_url_mode == "external"
+    assert config.resolve_base_url("uat1") == "http://local.example:8091"
 
 
 def test_requiredness_is_not_stored_on_global_ui_field() -> None:

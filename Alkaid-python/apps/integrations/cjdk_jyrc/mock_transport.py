@@ -5,7 +5,6 @@ from urllib.parse import parse_qs
 
 import httpx
 
-
 MOCK_TEMPLATE_NO = "2209201448031"
 MOCK_PREVIEW_DOC_ID = "MOCK-DOC-ID-001"
 

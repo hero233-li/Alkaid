@@ -2,10 +2,14 @@ import hashlib
 import json
 from functools import lru_cache
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
+from apps.integrations.cjdk_jyrc.application_link_contract import (
+    ApplicationLinkCategory,
+    FrozenApplicationLinkRoute,
+)
 from apps.product_data.product_applications.schemas import (
     ProductApplicationConfig,
     ProductDefinition,
@@ -32,6 +36,36 @@ class CatalogField(ProductField):
     requiredFor: tuple[str, ...] = ()
     expose: bool = True
     execution: bool = True
+    valueType: Literal["string", "boolean", "integer", "decimal", "enum"] = "string"
+    nullable: bool = False
+    minLength: int | None = Field(default=None, ge=0)
+    maxLength: int | None = Field(default=None, ge=0)
+    pattern: str | None = None
+    strip: bool = True
+    minimum: int | float | None = None
+    maximum: int | float | None = None
+    allowedValues: tuple[str | int | bool, ...] = ()
+
+    @model_validator(mode="after")
+    def validate_constraints(self) -> "CatalogField":
+        import re
+
+        if (
+            self.minLength is not None
+            and self.maxLength is not None
+            and self.minLength > self.maxLength
+        ):
+            raise ValueError(f"字段 {self.name} minLength 不能大于 maxLength")
+        if self.minimum is not None and self.maximum is not None and self.minimum > self.maximum:
+            raise ValueError(f"字段 {self.name} minimum 不能大于 maximum")
+        if self.pattern:
+            try:
+                re.compile(self.pattern)
+            except re.error as exc:
+                raise ValueError(f"字段 {self.name} pattern 无效：{exc}") from exc
+        if self.valueType == "enum" and not self.allowedValues:
+            raise ValueError(f"枚举字段 {self.name} 必须配置 allowedValues")
+        return self
 
     def enabled_for(self, method_code: str) -> bool:
         return ALL_METHODS in self.enabledFor or method_code in self.enabledFor
@@ -46,7 +80,11 @@ class CatalogField(ProductField):
         ProductExecutionSnapshot, never to the shared field descriptor.
         """
         content = self.model_dump(
-            exclude={"group", "enabledFor", "requiredFor", "expose", "execution"}
+            exclude={
+                "group", "enabledFor", "requiredFor", "expose", "execution",
+                "valueType", "nullable", "minLength", "maxLength", "pattern",
+                "strip", "minimum", "maximum", "allowedValues",
+            }
         )
         content["required"] = False
         return ProductField.model_validate(content)
@@ -59,10 +97,51 @@ class CatalogApplicationMethod(BaseModel):
     name: str = Field(min_length=1, max_length=128)
 
 
-class CatalogFeatures(BaseModel):
-    """Compatibility envelope for product metadata not used by product application."""
+class ApplicationLinkRoute(BaseModel):
+    model_config = ConfigDict(frozen=True, extra="forbid", populate_by_name=True)
 
-    model_config = ConfigDict(frozen=True, extra="ignore")
+    route_id: str = Field(alias="routeId", min_length=1, max_length=255)
+    environment: str = Field(min_length=1, max_length=128)
+    application_methods: tuple[str, ...] = Field(
+        alias="applicationMethods",
+        min_length=1,
+    )
+    category_code: ApplicationLinkCategory = Field(alias="categoryCode")
+    integration_profile_id: str = Field(
+        alias="integrationProfileId",
+        min_length=1,
+        max_length=255,
+    )
+    integration_profile_version: int = Field(alias="integrationProfileVersion", ge=1)
+    required_fields: tuple[str, ...] = Field(default_factory=tuple, alias="requiredFields")
+    request_template: dict[str, Any] = Field(alias="requestTemplate")
+    payload_bindings: dict[str, str] = Field(default_factory=dict, alias="payloadBindings")
+
+    @model_validator(mode="after")
+    def normalize_and_validate(self) -> "ApplicationLinkRoute":
+        normalized_environment = self.environment.strip().upper()
+        if not normalized_environment:
+            raise ValueError("申请链接环境不能为空")
+        normalized_methods = tuple(method.strip() for method in self.application_methods)
+        if any(not method for method in normalized_methods):
+            raise ValueError("申请链接申请方式不能为空")
+        if len(normalized_methods) != len(set(normalized_methods)):
+            raise ValueError("申请链接申请方式不能重复")
+        object.__setattr__(self, "environment", normalized_environment)
+        object.__setattr__(self, "application_methods", normalized_methods)
+        return self
+
+
+class CatalogFeatures(BaseModel):
+    """Strongly typed product feature configuration used by execution."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid", populate_by_name=True)
+
+    product_application: bool = Field(default=True, alias="productApplication")
+    application_links: tuple[ApplicationLinkRoute, ...] = Field(
+        default_factory=tuple,
+        alias="applicationLinks",
+    )
 
 
 class ProductCatalogSource(BaseModel):
@@ -111,6 +190,13 @@ class ProductCatalogSource(BaseModel):
                     raise ValueError(f"字段 {field.name} 在未启用的申请方式中被设为必填")
             if field.expose and not field.group:
                 raise ValueError(f"页面字段 {field.name} 缺少 group")
+
+        for route in self.features.application_links:
+            if route.environment not in self.environments:
+                raise ValueError(f"申请链接路由 {route.route_id} 引用了产品未支持的环境")
+            unknown_route_methods = set(route.application_methods) - known_methods - {ALL_METHODS}
+            if unknown_route_methods:
+                raise ValueError(f"申请链接路由 {route.route_id} 引用了未知申请方式")
         return self
 
     def method(self, method_code: str | None = None) -> CatalogApplicationMethod:
@@ -137,7 +223,7 @@ class ProductReferenceData(BaseModel):
 
 
 class ProductExecutionSnapshot(BaseModel):
-    """Minimal product execution data frozen into a Job for stable retries."""
+    """Complete non-secret execution data frozen into a Job for stable retries."""
 
     model_config = ConfigDict(frozen=True, extra="forbid")
 
@@ -148,42 +234,12 @@ class ProductExecutionSnapshot(BaseModel):
     product_type: str
     method_code: str
     method_name: str
+    environment: str
     switch_field: str
     fields: tuple[str, ...]
     required_fields: tuple[str, ...]
-
-    @model_validator(mode="before")
-    @classmethod
-    def upgrade_legacy_snapshot(cls, value: Any) -> Any:
-        """Accept Jobs created before field metadata was flattened."""
-
-        if not isinstance(value, dict):
-            return value
-        data = dict(value)
-        definitions = data.pop("field_definitions", None)
-        source_names: dict[str, str] = {}
-        definition_required: list[str] = []
-        if isinstance(definitions, dict):
-            for name, raw_field in definitions.items():
-                if not isinstance(raw_field, dict):
-                    continue
-                source = str(raw_field.get("source") or f"application.{name}")
-                source_name = source.rsplit(".", 1)[-1]
-                source_names[name] = source_name
-                if raw_field.get("required"):
-                    definition_required.append(source_name)
-
-        data["fields"] = tuple(
-            source_names.get(str(name), str(name)) for name in data.get("fields", ())
-        )
-        required = data.get("required_fields") or definition_required
-        data["required_fields"] = tuple(source_names.get(str(name), str(name)) for name in required)
-        data.setdefault("product_type", "legacy")
-        data.setdefault("switch_field", data.get("switch_payload_field", ""))
-        data.pop("handler", None)
-        data.pop("operation", None)
-        data.pop("switch_payload_field", None)
-        return data
+    normalized_payload: dict[str, Any]
+    application_link_route: FrozenApplicationLinkRoute
 
 
 class ProductCatalog(BaseModel):
@@ -205,7 +261,11 @@ class ProductCatalog(BaseModel):
     def snapshot(
         self,
         product_code: str,
-        method_code: str | None = None,
+        method_code: str,
+        *,
+        environment: str,
+        normalized_payload: dict[str, Any],
+        application_link_route: FrozenApplicationLinkRoute,
     ) -> ProductExecutionSnapshot:
         """Resolve one executable Job snapshot directly from the source catalog."""
 
@@ -220,11 +280,14 @@ class ProductCatalog(BaseModel):
             product_type=product.productType,
             method_code=method.code,
             method_name=method.name,
+            environment=environment,
             switch_field=product.switchField,
             fields=tuple(field.name for field in enabled_fields),
             required_fields=tuple(
                 field.name for field in enabled_fields if field.required_for(method.code)
             ),
+            normalized_payload=normalized_payload,
+            application_link_route=application_link_route,
         )
 
     def to_ui_config(self) -> ProductApplicationConfig:
@@ -326,6 +389,11 @@ def _load_product_catalog(
                 )
         checksum = _checksum({"reference": reference_raw, "products": product_raw})
         catalog = ProductCatalog(reference=reference, products=products, checksum=checksum)
+        from apps.product_data.application_link_plan import (
+            validate_catalog_application_link_plans,
+        )
+
+        validate_catalog_application_link_plans(catalog)
         # Build once so cross-product UI definitions and reset references are validated too.
         catalog.to_ui_config()
         return catalog

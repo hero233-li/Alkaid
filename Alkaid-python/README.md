@@ -93,7 +93,9 @@ GET  /api/jobs/{id}/calls/{callId}
 
 Celery 将普通过程日志写入 `JobLog`，将每次外部 HTTP 请求的脱敏请求、响应、错误和耗时写入
 `JobApiCall`。日志窗口通过 ASGI SSE 增量接收日志；断线后使用最后一个 `afterId` 续传。
-外部系统 Adapter 使用 `HttpClient` 时传入 `JobHttpCallObserver`，即可记录结构化调用详情。
+外部系统只依赖中立 `IntegrationObserver`；Celery Task 组装
+`JobIntegrationObserver`，把结构化请求、响应与诊断写入 `JobApiCall`/`JobLog`。Integration 不再
+持有 `Job` ORM，也不直接调用 Job 日志服务。
 
 产品申请、申请链接、业务准入和核实审批分别拥有自己的业务目录和 Integration。Mock 响应放在
 各自的 `mock_transport.py`，不会写进 View、Service 或 Adapter；本地 Mock 与真实外系统共用
@@ -108,12 +110,19 @@ Celery 将普通过程日志写入 `JobLog`，将每次外部 HTTP 请求的脱�
 `redShieldEnabled`（红盾），产品 C 使用 `creditEnabled`（征信）。每个 Switch 直接定义在所属
 产品文件中；后端只接受当前产品配置的字段，提交其他产品的 Switch 会返回参数错误。
 
-Mock 产品执行流程同时演示两类认证：`product_flow` 在当前 Celery attempt 内先从登录响应体
-获取 Token，普通检查接口只使用不更新，刷新接口从响应 Header 更新 Token，后续申请接口使用
-新 Token；`fixed_external` 从 `MOCK_FIXED_SYSTEM_TOKEN` 环境变量读取固定 Token。认证策略由
-`EndpointSpec` 声明，Token 按单次请求注入且不会写入 Job payload、结果或明文审计日志。
-HTTP 连接、读写和连接池超时分别可配置；只有显式声明为 `RetryMode.SAFE` 的登录/查询类端点
-才会按 `Retry-After` 或指数退避重试，创建申请等写接口默认不自动重放。
+HTTP 连接、读写和连接池超时分别可配置。`RetryMode.NEVER` 不重试，
+`CONNECT_ONLY` 仅在能确认尚未发出请求的连接失败时重试，`IDEMPOTENT` 才允许对连接/读取失败和
+指定 5xx 重试；退避带 jitter。CJDK 的 Session、协议查询、预览和文档 POST 当前全部为
+`NEVER`，未自行添加幂等键。
+
+CJDK Session 目前只实现“打开申请页面、逐跳验证 URL、收集 Cookie/响应头、按环境
+`SessionRequirement` 判定状态”。真实 auth/TokenId 初始化接口尚未提供，因此没有猜测接口路径或
+字段；要求不满足时状态为 `page_opened`/`partial`，流程会在协议查询前停止。每个环境必须配置
+允许的 scheme/host/port、跨 Host 跳转规则和 Session Header 转发白名单。
+
+接口工作台生产默认关闭（`WORKBENCH_ENABLED=false`），关闭时后端路由不注册。若显式启用，还需
+配置 `WORKBENCH_ALLOWED_HOSTS`；目标 IP、重定向和敏感头会被检查，但当前项目没有用户认证与租户
+隔离能力，因此不应在生产启用。
 
 后端产品执行配置与前端展示配置不再分开维护。每个产品文件自包含页面字段、申请方式、必填规则
 和产品功能路由；运行时通过 Pydantic 加载并派生所需视图。产品调用顺序直接由业务服务表达，
@@ -125,8 +134,8 @@ HTTP 连接、读写和连接池超时分别可配置；只有显式声明为 `R
 .venv/bin/python scripts/compile_product_config.py --check
 ```
 
-该命令只做校验，不再生成另一份运行时 Catalog；同时检查产品到外系统端点的覆盖关系和全部
-原始报文结构。Catalog 在 Web/Worker 进程内缓存，修改 JSON 后需重启整组服务。创建 Job 时仍
+该命令只做校验，不再生成另一份运行时 Catalog；同时检查当前 CJDK-JYRC 原始报文结构。
+Catalog 在 Web/Worker 进程内缓存，修改 JSON 后需重启整组服务。创建 Job 时仍
 保存解析后的方法快照，已排队任务及重试不会因产品文件更新而改变执行方式。
 
 ## 代码边界

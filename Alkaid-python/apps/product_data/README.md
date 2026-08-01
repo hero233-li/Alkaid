@@ -4,7 +4,7 @@
 
 | 业务域 | 后端目录 | 执行方式 | 外系统目录 |
 | --- | --- | --- | --- |
-| 产品申请 | `product_applications/` | 异步 Job | `integrations/mock_product/` |
+| 产品申请 | `product_applications/` | 异步 Job | `integrations/cjdk_jyrc/` |
 | 申请链接 | `application_links/` | 异步 Job | `integrations/application_link/` |
 | 业务准入 | `business_access/` | 异步 Job，支持查询、失效、通知查询和推送 | `integrations/business_access/` |
 | 核实审批 | `verification_approval/` | 异步 Job，支持查询、领取、退回、刷新、核实项更新和快捷操作 | `integrations/verification_approval/` |

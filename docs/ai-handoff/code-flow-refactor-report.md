@@ -1,5 +1,9 @@
 # 申请链接代码顺序流程改造报告
 
+> 历史说明：本文主体记录早期申请链接 Flow 改造。2026-08-01 的产品申请 P1/P2 边界与可靠性
+> 收尾已替代其中 `EndpointExecutor`、Flow 持有 Job、Integration 直接持有
+> `JobHttpCallObserver` 等旧描述；当前事实以 `p1-p2-reliability-closure-2026-08-01.md` 为准。
+
 ## 1. 基准与范围
 
 - Repository：`hero233-li/Alkaid`
@@ -97,7 +101,7 @@ POST /api/product-data/tools/application-links/generate
 
 - 无
 
-保留了 `Alkaid-python/apps/product_data/tasks.py` 和 `apps.integrations.mock_product`。没有创建
+保留了 `Alkaid-python/apps/product_data/tasks.py`。没有创建
 `product_data/tasks/`、全局 `contexts/`、全局 `flows/` 或其他菜单的空 Flow 文件。
 
 ## 5. 为什么采用 feature-local Flow
@@ -205,7 +209,7 @@ DJANGO_SETTINGS_MODULE=config.settings.test CELERY_TASK_ALWAYS_EAGER=true \
 
 DJANGO_SETTINGS_MODULE=config.settings.test \
   .venv/bin/python scripts/compile_product_config.py --check
-通过：version=6，products=3，raw_messages=1
+通过：version=7，products=3，agreement_messages=3
 
 .venv/bin/python scripts/check_architecture.py
 Architecture checks passed
@@ -234,8 +238,7 @@ All checks passed
 6. mock API 成功路径和结果格式（原有端到端测试）；
 7. Celery 自动发现申请链接 Task；
 8. `apps.product_data.tasks` 可导入；
-9. `apps.integrations.mock_product` 可导入；
-10. readiness、Catalog、Job Runner 和 HTTP 审计相关回归。
+9. readiness、Catalog、Job Runner 和 HTTP 审计相关回归。
 
 全仓 `.venv/bin/ruff format --check .` 仍失败，原因是 10 个本次未修改的历史文件与当前
 Ruff 0.15.20 格式结果不一致。为避免扩大本次重构范围，没有批量改写这些无关文件；本次涉及

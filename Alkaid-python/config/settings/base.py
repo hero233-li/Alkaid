@@ -24,7 +24,9 @@ INSTALLED_APPS = [
     "django.contrib.messages",
     "django.contrib.staticfiles",
     "apps.jobs",
+    "apps.portal",
     "apps.product_data",
+    "apps.workbench",
 ]
 
 MIDDLEWARE = [
@@ -100,6 +102,14 @@ JOB_MAX_HTTP_BODY_BYTES = int(os.getenv("JOB_MAX_HTTP_BODY_BYTES", "65536"))
 JOB_RECONCILE_BATCH_SIZE = int(os.getenv("JOB_RECONCILE_BATCH_SIZE", "500"))
 JOB_SSE_POLL_SECONDS = float(os.getenv("JOB_SSE_POLL_SECONDS", "1"))
 JOB_SSE_HEARTBEAT_SECONDS = float(os.getenv("JOB_SSE_HEARTBEAT_SECONDS", "15"))
+WORKBENCH_MAX_RESPONSE_CHARS = int(os.getenv("WORKBENCH_MAX_RESPONSE_CHARS", "1000000"))
+WORKBENCH_ENABLED = env_bool("WORKBENCH_ENABLED", False)
+WORKBENCH_ALLOWED_HOSTS = tuple(
+    item.strip().lower()
+    for item in os.getenv("WORKBENCH_ALLOWED_HOSTS", "").split(",")
+    if item.strip()
+)
+WORKBENCH_MAX_UPLOAD_BYTES = int(os.getenv("WORKBENCH_MAX_UPLOAD_BYTES", "10485760"))
 PRODUCT_APPLICATION_TIMEOUT_SECONDS = int(os.getenv("PRODUCT_APPLICATION_TIMEOUT_SECONDS", "300"))
 APPLICATION_LINK_TIMEOUT_SECONDS = int(os.getenv("APPLICATION_LINK_TIMEOUT_SECONDS", "120"))
 BUSINESS_ACCESS_TIMEOUT_SECONDS = int(os.getenv("BUSINESS_ACCESS_TIMEOUT_SECONDS", "120"))
@@ -112,8 +122,6 @@ APPLICATION_DATA_MAX_RESULT_BYTES = int(
 )
 CARD_STATUS_TIMEOUT_SECONDS = int(os.getenv("CARD_STATUS_TIMEOUT_SECONDS", "120"))
 LOAN_STATUS_TIMEOUT_SECONDS = int(os.getenv("LOAN_STATUS_TIMEOUT_SECONDS", "120"))
-MOCK_FIXED_SYSTEM_TOKEN = os.getenv("MOCK_FIXED_SYSTEM_TOKEN", "mock-fixed-token")
-MOCK_PRODUCT_BASE_URL = os.getenv("MOCK_PRODUCT_BASE_URL", "").rstrip("/")
 APPLICATION_LINK_BASE_URL = os.getenv("APPLICATION_LINK_BASE_URL", "").rstrip("/")
 APPLICATION_LINK_URL_MODE = os.getenv("APPLICATION_LINK_URL_MODE", "internal").strip().lower()
 if APPLICATION_LINK_URL_MODE not in {"internal", "external"}:

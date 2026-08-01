@@ -10,7 +10,6 @@ if CELERY_TASK_ALWAYS_EAGER:  # noqa: F405
     raise ImproperlyConfigured("server settings forbid CELERY_TASK_ALWAYS_EAGER=true")
 
 required_external_settings = {
-    "MOCK_PRODUCT_BASE_URL": MOCK_PRODUCT_BASE_URL,  # noqa: F405
     "APPLICATION_LINK_BASE_URL": APPLICATION_LINK_BASE_URL,  # noqa: F405
     "APPLICATION_LINK_API_TOKEN": APPLICATION_LINK_API_TOKEN,  # noqa: F405
     "BUSINESS_ACCESS_BASE_URL": BUSINESS_ACCESS_BASE_URL,  # noqa: F405
@@ -25,9 +24,6 @@ if missing_external_settings:
     raise ImproperlyConfigured(
         "server external system settings are missing: " + ", ".join(missing_external_settings)
     )
-if MOCK_FIXED_SYSTEM_TOKEN == "mock-fixed-token":  # noqa: F405
-    raise ImproperlyConfigured("MOCK_FIXED_SYSTEM_TOKEN must be set for server mode")
-
 SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
 SESSION_COOKIE_SECURE = True
 CSRF_COOKIE_SECURE = True

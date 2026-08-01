@@ -4,6 +4,7 @@ import httpx
 import pytest
 from pydantic import BaseModel, Field
 
+from apps.integrations.cjdk_jyrc.response import validate_cjdk_business_response
 from apps.integrations.http import (
     ExternalServiceError,
     HttpClient,
@@ -52,34 +53,15 @@ def test_url_keeps_path_and_masks_auth_value() -> None:
     assert "mode=1" in value
 
 
-def test_business_failure_message_is_explicit() -> None:
-    transport = httpx.MockTransport(
-        lambda request: httpx.Response(
-            200,
-            json={
+def test_cjdk_business_failure_message_is_explicit() -> None:
+    with pytest.raises(Exception, match="获取客户端TokenId失败"):
+        validate_cjdk_business_response(
+            {
                 "biz_state": "F",
                 "rsp_code": "TOKEN_ERROR",
                 "rsp_msg": "获取客户端TokenId失败",
-            },
+            }
         )
-    )
-
-    with HttpClient(
-        HttpClientConfig(
-            base_url="http://example.test",
-            max_retries=0,
-        ),
-        transport=transport,
-    ) as client:
-        with pytest.raises(
-            Exception,
-            match="获取客户端TokenId失败",
-        ):
-            client.request(
-                "POST",
-                "/agreement",
-                response_model=ExpectedEnvelope,
-            )
 
 
 def test_invalid_schema_message_lists_actual_fields() -> None:

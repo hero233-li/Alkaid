@@ -6,5 +6,28 @@
     "mainClass": "实际Java主类全限定名",
     "outputEncoding": "gbk",
     "timeoutSeconds": 120
+  },
+  "secrets": {
+    "cjdkJyrc.applicationLink.appId": "本机实际 appId",
+    "cjdkJyrc.applicationLink.privateKey": "本机实际私钥",
+    "cjdkJyrc.applicationLink.publicKey": "本机实际公钥"
+  },
+  "environments": {
+    "UAT1": {
+      "agreementBaseUrl": "http://实际内网主机:8090",
+      "session": {
+        "requiredCookies": [],
+        "requiredHeaders": [],
+        "requiredAnyHeaders": []
+      },
+      "urlPolicy": {
+        "allowedSchemes": ["http"],
+        "allowedHosts": ["实际内网主机"],
+        "allowedPorts": [8090],
+        "allowCrossHostRedirect": false,
+        "forwardSessionHeadersToHosts": ["实际内网主机"],
+        "maxRedirects": 10
+      }
+    }
   }
 }

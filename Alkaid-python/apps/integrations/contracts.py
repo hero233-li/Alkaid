@@ -1,38 +1,53 @@
+from collections.abc import Mapping
 from dataclasses import dataclass
 from enum import Enum
-from typing import Any, Generic, TypeVar
+from typing import Any, Generic, Protocol, TypeVar
 
 from pydantic import BaseModel
 
 ResponseModel = TypeVar("ResponseModel", bound=BaseModel)
 
 
-class TokenSource(str, Enum):
-    RESPONSE_BODY = "response_body"
-    RESPONSE_HEADER = "response_header"
-
-
 class RetryMode(str, Enum):
     NEVER = "never"
-    SAFE = "safe"
+    CONNECT_ONLY = "connect_only"
+    IDEMPOTENT = "idempotent"
+
+
+class IntegrationObserver(Protocol):
+    def request_started(
+        self,
+        *,
+        step: str,
+        method: str,
+        url: str,
+        headers: Mapping[str, str],
+        body: Any,
+    ) -> object: ...
+
+    def request_finished(
+        self,
+        handle: object,
+        *,
+        status_code: int | None,
+        headers: Mapping[str, str],
+        body: Any,
+        duration_ms: int,
+        error: Exception | None,
+    ) -> None: ...
+
+    def diagnostic(
+        self,
+        *,
+        step: str,
+        title: str,
+        content: Any,
+        level: str = "INFO",
+    ) -> None: ...
 
 
 class BusinessResponseError(RuntimeError):
     pass
-
-
-@dataclass(frozen=True)
-class AuthSpec:
-    provider: str
-    header: str = "Authorization"
-    prefix: str = "Bearer "
-
-
-@dataclass(frozen=True)
-class TokenUpdateSpec:
-    provider: str
-    source: TokenSource
-    path: str
 
 
 @dataclass(frozen=True)
@@ -41,10 +56,6 @@ class EndpointSpec(Generic[ResponseModel]):
     method: str
     path: str
     response_model: type[ResponseModel]
-    auth: AuthSpec | None = None
-    token_update: TokenUpdateSpec | None = None
-    success_path: str | None = None
-    success_values: tuple[Any, ...] = ()
     retry_mode: RetryMode = RetryMode.NEVER
 
 

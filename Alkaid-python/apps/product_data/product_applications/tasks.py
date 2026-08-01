@@ -1,8 +1,13 @@
 from celery import shared_task
 from django.conf import settings
 
+from apps.integrations.cjdk_jyrc import config as cjdk_config
+from apps.integrations.cjdk_jyrc.adapter import CjdkJyrcAdapter
+from apps.jobs.integration_observer import JobIntegrationObserver
 from apps.jobs.task_runner import JobTaskContext, run_job_task
 from apps.product_data.product_applications.flow import ProductApplicationFlow
+from apps.product_data.product_applications.schemas import ProductApplicationSubmission
+from apps.product_data.product_applications.services import resolve_product_snapshot
 
 
 @shared_task(
@@ -15,8 +20,25 @@ from apps.product_data.product_applications.flow import ProductApplicationFlow
 )
 def execute_product_application(self, job_id: int) -> None:
     def execute(context: JobTaskContext):
-        return ProductApplicationFlow().execute(
-            job=context.job,
+        snapshot = resolve_product_snapshot(context.job, context.job.product)
+        submission = ProductApplicationSubmission(
+            name=context.job.name,
+            product=snapshot.product_code,
+            payload=dict(snapshot.normalized_payload),
+        )
+        integration_settings = cjdk_config.get_cjdk_jyrc_settings()
+        observer = JobIntegrationObserver(context.job)
+        adapter = CjdkJyrcAdapter(
+            settings=integration_settings,
+            observer=observer,
+            trace_id=context.job.trace_id,
+            environment=snapshot.environment,
+        )
+        return ProductApplicationFlow(adapter).execute(
+            job_id=context.job.id,
+            trace_id=context.job.trace_id,
+            submission=submission,
+            snapshot=snapshot,
             progress=context.progress,
         )
 

@@ -7,6 +7,12 @@ ROOT = Path(__file__).resolve().parents[1]
 APPS_ROOT = ROOT / "apps"
 FORBIDDEN_IMPORTS = {"requests", "httpx"}
 FRAMEWORK_MUTABLE_GLOBALS = {"urlpatterns"}
+INTEGRATION_FORBIDDEN_PREFIXES = {
+    "apps.product_data.catalog",
+    "apps.product_data.configs",
+    "apps.jobs.models",
+    "apps.jobs.services",
+}
 errors: list[str] = []
 
 for path in APPS_ROOT.rglob("*.py"):
@@ -17,11 +23,14 @@ for path in APPS_ROOT.rglob("*.py"):
             if (
                 isinstance(node, ast.ImportFrom)
                 and node.module
-                and node.module.startswith("apps.product_data")
+                and any(
+                    node.module == prefix or node.module.startswith(prefix + ".")
+                    for prefix in INTEGRATION_FORBIDDEN_PREFIXES
+                )
             ):
                 location = f"{path.relative_to(ROOT)}:{node.lineno}"
                 errors.append(
-                    f"{location}: integration adapter imports product-data business code"
+                    f"{location}: integration imports forbidden catalog/config/job dependency"
                 )
         continue
     for node in ast.walk(tree):

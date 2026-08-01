@@ -1,5 +1,6 @@
 import json
 import logging
+import random
 import time
 import uuid
 from collections.abc import Callable, Mapping
@@ -11,7 +12,12 @@ from urllib.parse import urlsplit, urlunsplit
 import httpx
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
-from apps.integrations.contracts import BusinessResponseError, HttpResult, ResponseModel
+from apps.integrations.contracts import (
+    BusinessResponseError,
+    HttpResult,
+    ResponseModel,
+    RetryMode,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -51,6 +57,7 @@ class HttpClientConfig(BaseModel):
     retry_backoff_seconds: float = Field(default=0.2, ge=0)
     retry_max_backoff_seconds: float = Field(default=5, gt=0)
     follow_redirects: bool = False
+    max_response_bytes: int = Field(default=5 * 1024 * 1024, gt=0)
 
 
 class ExternalServiceError(RuntimeError):
@@ -67,11 +74,13 @@ class HttpClient:
         config: HttpClientConfig,
         *,
         transport: httpx.BaseTransport | None = None,
+        random_uniform: Callable[[float, float], float] = random.uniform,
     ) -> None:
         headers = {"Accept": "application/json"}
         if config.token:
             headers["Authorization"] = f"Bearer {config.token}"
         self.config = config
+        self._random_uniform = random_uniform
         self._client = httpx.Client(
             base_url=config.base_url,
             timeout=httpx.Timeout(
@@ -134,7 +143,8 @@ class HttpClient:
                 params=params,
                 headers=request_headers,
             )
-            response.raise_for_status()
+            if response.status_code >= 400:
+                response.raise_for_status()
         except httpx.TransportError as exc:
             if observer and response_handle is not None:
                 observer.finished(
@@ -194,8 +204,9 @@ class HttpClient:
         headers: Mapping[str, str] | None = None,
         trace_id: str | None = None,
         observer: HttpCallObserver | None = None,
-        response_validator: Callable[[ResponseModel], None] | None = None,
+        response_validator: Callable[[Any], None] | None = None,
         max_retries: int | None = None,
+        retry_mode: RetryMode = RetryMode.NEVER,
     ) -> ResponseModel:
         return self.request_detailed(
             method,
@@ -209,6 +220,7 @@ class HttpClient:
             observer=observer,
             response_validator=response_validator,
             max_retries=max_retries,
+            retry_mode=retry_mode,
         ).data
 
     def request_detailed(
@@ -223,8 +235,9 @@ class HttpClient:
         headers: Mapping[str, str] | None = None,
         trace_id: str | None = None,
         observer: HttpCallObserver | None = None,
-        response_validator: Callable[[ResponseModel], None] | None = None,
+        response_validator: Callable[[Any], None] | None = None,
         max_retries: int | None = None,
+        retry_mode: RetryMode = RetryMode.NEVER,
     ) -> HttpResult[ResponseModel]:
         if body is not None and form_data is not None:
             raise ValueError("body 和 form_data 不能同时传递")
@@ -245,6 +258,8 @@ class HttpClient:
         request_headers.update(headers or {})
         request_headers["X-Trace-ID"] = trace_id
         request_retries = self.config.max_retries if max_retries is None else max_retries
+        if retry_mode == RetryMode.NEVER:
+            request_retries = 0
         if request_retries < 0 or request_retries > 5:
             raise ValueError("max_retries 必须在 0 到 5 之间")
 
@@ -271,7 +286,10 @@ class HttpClient:
                 else:
                     request_arguments["json"] = request_json
                 response = self._client.request(method, path, **request_arguments)
-                if response.status_code not in self.retryable_statuses:
+                if (
+                    retry_mode != RetryMode.IDEMPOTENT
+                    or response.status_code not in self.retryable_statuses
+                ):
                     break
                 if observer and response_handle is not None:
                     observer.finished(
@@ -297,7 +315,11 @@ class HttpClient:
                         error=exc,
                     )
                     response_handle = None
-                if attempt == request_retries:
+                retryable_transport = retry_mode == RetryMode.IDEMPOTENT or (
+                    retry_mode == RetryMode.CONNECT_ONLY
+                    and isinstance(exc, (httpx.ConnectError, httpx.ConnectTimeout))
+                )
+                if not retryable_transport or attempt == request_retries:
                     self._log(method, path, trace_id, started, None, attempt + 1)
                     raise ExternalServiceError("external service transport error") from exc
             if attempt < request_retries:
@@ -305,14 +327,18 @@ class HttpClient:
 
         if response is None:
             raise ExternalServiceError("external service returned no response")
+        if len(response.content) > self.config.max_response_bytes:
+            raise ExternalServiceError(
+                f"外系统响应体超过上限 {self.config.max_response_bytes} bytes",
+                status_code=response.status_code,
+            )
         self._log(method, path, trace_id, started, response.status_code, attempt + 1)
         raw_response_body = _response_body(response)
         try:
             response.raise_for_status()
-            _raise_business_failure(raw_response_body)
-            result = response_model.model_validate(raw_response_body)
             if response_validator:
-                response_validator(result)
+                response_validator(raw_response_body)
+            result = response_model.model_validate(raw_response_body)
         except httpx.HTTPStatusError as exc:
             if observer and response_handle is not None:
                 observer.finished(
@@ -388,7 +414,8 @@ class HttpClient:
         if retry_after is not None:
             return min(retry_after, self.config.retry_max_backoff_seconds)
         exponential = self.config.retry_backoff_seconds * (2**attempt)
-        return min(exponential, self.config.retry_max_backoff_seconds)
+        delay = min(exponential, self.config.retry_max_backoff_seconds)
+        return delay * self._random_uniform(0.8, 1.2)
 
     @staticmethod
     def _log(
@@ -410,27 +437,6 @@ class HttpClient:
                 "attempts": attempts,
             },
         )
-
-
-def _raise_business_failure(response_body: Any) -> None:
-    if not isinstance(response_body, Mapping):
-        return
-
-    state = response_body.get("biz_state", response_body.get("bizState"))
-    if str(state or "").strip().upper() not in {"F", "FAIL", "FAILED"}:
-        return
-
-    code = response_body.get("rsp_code", response_body.get("rspCode"))
-    message = response_body.get(
-        "rsp_msg",
-        response_body.get("rspMsg", response_body.get("message")),
-    )
-    raise BusinessResponseError(
-        "外系统业务失败："
-        f"biz_state={state!r}；"
-        f"rsp_code={code!r}；"
-        f"rsp_msg={message!r}"
-    )
 
 
 def _invalid_response_message(

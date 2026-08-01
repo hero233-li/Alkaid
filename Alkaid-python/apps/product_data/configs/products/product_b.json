@@ -89,6 +89,18 @@
       ]
     },
     {
+      "name": "cooperationProjectId",
+      "label": "合作项目",
+      "group": "selection",
+      "control": "select",
+      "options": [
+        {"label": "合作项目一", "value": "PROJECT-001"},
+        {"label": "合作项目二", "value": "PROJECT-002"},
+        {"label": "合作项目三", "value": "PROJECT-003"}
+      ],
+      "requiredFor": ["*"]
+    },
+    {
       "name": "personName",
       "label": "客户姓名",
       "group": "customerBase",
@@ -135,6 +147,7 @@
       "label": "客户类型",
       "group": "enterprise",
       "control": "switch",
+      "valueType": "boolean",
       "defaultValue": true,
       "submit": false,
       "persistDraft": true,
@@ -145,6 +158,7 @@
       "label": "红盾",
       "group": "redShield",
       "control": "switch",
+      "valueType": "boolean",
       "defaultValue": true,
       "checkedLabel": "开启",
       "uncheckedLabel": "关闭",
@@ -188,18 +202,85 @@
     }
   ],
   "features": {
+    "productApplication": true,
     "applicationLinks": [
       {
+        "routeId": "product-b-uat1-sun",
         "environment": "UAT1",
-        "category": "太阳码"
+        "applicationMethods": ["*"],
+        "categoryCode": "SUN_CODE",
+        "integrationProfileId": "cjdk-jyrc.application-link",
+        "integrationProfileVersion": 1,
+        "requiredFields": ["cooperationProjectId"],
+        "requestTemplate": {
+          "REQ_BODY": {
+            "request": {
+              "order_no": "XCXYXM_CJDK_JYRC",
+              "cooperator_id": "XCXYXM",
+              "cooperator_name": "小程序渠道码",
+              "loan_flow_stag": "1",
+              "selbl_prod_id": "",
+              "co_project_id": "",
+              "appl_chnl_cd": "5C"
+            }
+          }
+        },
+        "payloadBindings": {
+          "REQ_BODY.request.selbl_prod_id": "product",
+          "REQ_BODY.request.co_project_id": "payload.cooperationProjectId"
+        }
       },
       {
+        "routeId": "product-b-uat2-sun",
         "environment": "UAT2",
-        "category": "太阳码"
+        "applicationMethods": ["*"],
+        "categoryCode": "SUN_CODE",
+        "integrationProfileId": "cjdk-jyrc.application-link",
+        "integrationProfileVersion": 1,
+        "requiredFields": ["cooperationProjectId"],
+        "requestTemplate": {
+          "REQ_BODY": {
+            "request": {
+              "order_no": "XCXYXM_CJDK_JYRC",
+              "cooperator_id": "XCXYXM",
+              "cooperator_name": "小程序渠道码",
+              "loan_flow_stag": "1",
+              "selbl_prod_id": "",
+              "co_project_id": "",
+              "appl_chnl_cd": "5C"
+            }
+          }
+        },
+        "payloadBindings": {
+          "REQ_BODY.request.selbl_prod_id": "product",
+          "REQ_BODY.request.co_project_id": "payload.cooperationProjectId"
+        }
       },
       {
+        "routeId": "product-b-uatc-sun",
         "environment": "UATC",
-        "category": "太阳码"
+        "applicationMethods": ["*"],
+        "categoryCode": "SUN_CODE",
+        "integrationProfileId": "cjdk-jyrc.application-link",
+        "integrationProfileVersion": 1,
+        "requiredFields": ["cooperationProjectId"],
+        "requestTemplate": {
+          "REQ_BODY": {
+            "request": {
+              "order_no": "XCXYXM_CJDK_JYRC",
+              "cooperator_id": "XCXYXM",
+              "cooperator_name": "小程序渠道码",
+              "loan_flow_stag": "1",
+              "selbl_prod_id": "",
+              "co_project_id": "",
+              "appl_chnl_cd": "5C"
+            }
+          }
+        },
+        "payloadBindings": {
+          "REQ_BODY.request.selbl_prod_id": "product",
+          "REQ_BODY.request.co_project_id": "payload.cooperationProjectId"
+        }
       }
     ]
   }
