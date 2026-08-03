@@ -5,13 +5,13 @@
 
 ## 1. 调用链
 
-所有异步业务遵循同一边界：
+产品申请异步业务遵循同一边界：
 
 ```text
 React Page / Hook
-  → Django View（Schema 校验、创建 Job、投递 Celery）
+  → Django View（HTTP 解析、异常映射、提交后投递 Celery）
   → Celery Task（TaskRunner 管理状态、超时、取消）
-  → Product Service（业务步骤）
+  → Product Application Use Case（固定业务步骤）
   → Integration Adapter（外系统协议）
   → HttpClient / Mock Store
   → Job.result、JobLog、JobApiCall
@@ -20,20 +20,19 @@ React Page / Hook
 
 目录职责：
 
-- `apps/product_data/<feature>/`：Schema、View、Task 和业务 Service；不拼接真实外系统报文。
-- `apps/integrations/<system>/`：请求/响应模型、Adapter、Mock transport 和真实 HTTP 协议。
+- `apps/product_data/product_applications/`：Schema、View、Task、Use Case 和校验 Service。
+- `apps/integrations/cjdk_jyrc/`：请求/响应模型、Adapter、Mock transport 和真实协议。
 - `apps/jobs/`：Job 状态、幂等、重试、取消、超时、审计、SSE 和共享 TaskRunner。
 - `Alkaid-react/src/utils/jobPolling.ts`：150 秒前端轮询截止、AbortSignal 和终态处理。
 
-申请链接保持一次外部调用：
+产品申请保持固定调用顺序：
 
 ```text
-View → Job → Task → Service → Adapter
-  → msg_id + sign + timestamp + REQ_MESSAGE + biz_content
+View → Job → Task → Use Case → CjdkJyrcAdapter
+  → Java 申请链接 → Session → 协议模板 → 预览 → 文档读取
 ```
 
-`REQ_MESSAGE` 与 `biz_content` 使用同一份序列化业务报文。真实模式必须先完成协议确认并配置
-Signer。卡和贷款 Mock 状态存入 MySQL，Key 包含环境，支持多个 Worker 共享且避免环境串用。
+Java Gateway 使用冻结快照生成请求文件；协议 HTTP 报文由 CJDK 私有实现维护。
 
 ## 2. 环境变量
 
@@ -52,14 +51,13 @@ Signer。卡和贷款 Mock 状态存入 MySQL，Key 包含环境，支持多个 
 | MySQL | `MYSQL_HOST/PORT/DATABASE/USER/PASSWORD` | 开发、验证、生产必须使用不同数据库 |
 | Celery | `CELERY_BROKER_URL`、`CELERY_QUEUE`、`CELERY_TASK_ALWAYS_EAGER` | 生产禁止 eager；Broker 凭据不得提交 Git |
 | Job | `JOB_RETENTION_HOURS`、`JOB_LOG_RETENTION_HOURS`、`JOB_MAX_HTTP_BODY_BYTES` | 生命周期和审计大小限制 |
-| 超时 | `*_TIMEOUT_SECONDS` | 各业务 Job 的后端执行截止时间 |
-| 申请数据 | `APPLICATION_DATA_MAX_RESULT_BYTES` | 默认 2 MiB；单次条数硬上限为 1,000 |
-| 申请链接 | `APPLICATION_LINK_BASE_URL`、`APPLICATION_LINK_API_TOKEN` | 真实接口地址和 Token |
-| 申请链接门禁 | `APPLICATION_LINK_PROTOCOL_CONFIRMED`、`APPLICATION_LINK_SIGNER` | 真实模式 readiness 必查 |
-| 其他外系统 | `MOCK_PRODUCT_BASE_URL`、`BUSINESS_ACCESS_*`、`VERIFICATION_APPROVAL_*` | 真实模式必须配置 |
+| 超时 | `PRODUCT_APPLICATION_TIMEOUT_SECONDS` | 产品申请 Job 的执行截止时间 |
+| CJDK | `CJDK_JYRC_*` | 环境地址、协议字段与申请链接密钥 |
+| Java Gateway | `APPLICATION_LINK_JAVA_*` | SDK、Java、Jar、主类、编码和超时 |
+| 链接选择 | `APPLICATION_LINK_URL_MODE` | 选择 internal 或 external 申请链接 |
 
-示例文件只允许占位值。真实密码、Token、Signer 密钥和账号只通过部署环境注入，不写入仓库、
-Job payload、结果或审计日志。`VERIFICATION_APPROVAL_DEBUG_DELAY_SECONDS` 默认必须为 `0`。
+示例文件只允许占位值。真实密码、密钥和账号只通过部署环境注入，不写入仓库、Job payload、
+结果或审计日志。
 
 ## 3. 数据库变更
 
@@ -70,11 +68,12 @@ Jobs App 的迁移链完整顺序为：
 → 0002_job_execution_config
 → 0003_job_status_deadline_index
 → 0004_mocktoolstate
+→ 0005_delete_mocktoolstate
 ```
 
 - `0003` 为 `Job(status, deadline_at)` 增加超时收敛索引。
-- `0004` 新增 `MockToolState(namespace, key, payload, updated_at)`，并对
-  `(namespace, key)` 建立唯一约束，用于多 Worker 共享卡/贷款 Mock 状态。
+- `0004` 是历史迁移，曾新增 `MockToolState`。
+- `0005` 删除已经没有运行时消费者的 `MockToolState` 表；部署前应按常规流程备份数据库。
 - 已移除的 `workflows` App 不会自动 DROP 历史表。需要清理时由 DBA 在备份后单独执行，发布
   Migration 不做破坏性删除。
 
@@ -96,8 +95,6 @@ python manage.py migrate
 - 普通 Job 查询、重试和取消响应不返回原始 payload；仅 staff 可访问
   `GET /api/jobs/{id}/payload`。
 - 非幂等写 Job 进入 `running` 后拒绝取消和通用重试，避免外系统成功而本地误报取消。
-- 申请数据的 `birthDate` 是身份证号生日段的权威输入，并与 `age/currentDate` 校验。
-- 卡转账要求目标卡存在于同一环境，源卡扣款和目标卡入账在同一事务中完成。
 - `/health/ready/` 不调用真实业务接口；RabbitMQ 和 Worker 使用独立脚本验证。
 
 ## 5. 测试方式
@@ -127,9 +124,8 @@ cd Alkaid-python
 ../.venv/bin/python scripts/verify_celery_runtime.py --min-workers 2
 ```
 
-发布前还必须在隔离环境执行 Worker 强杀、外系统成功后进程退出演练，并完成核实审批仓库外
-调用方确认。真实申请链接只有在协议、时间戳、路径、成功码、响应字段和 Signer 全部联调完成后，
-才允许设置 `APPLICATION_LINK_PROTOCOL_CONFIRMED=true`。
+发布前还必须在隔离环境执行 Worker 强杀和外系统成功后进程退出演练；真实申请链接、Session、
+协议查询和文档读取需要在对应内网环境完成联调。
 
 ## 6. 合并前审计口径
 

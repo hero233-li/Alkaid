@@ -5,18 +5,20 @@ import pytest
 
 import apps.product_data.application_link_plan as plan_module
 import apps.product_data.catalog as catalog_module
-from apps.integrations.cjdk_jyrc.application_link_contract import FrozenApplicationLinkRoute
 from apps.integrations.cjdk_jyrc.request_builder import build_application_link_request
 from apps.jobs.services import create_job
 from apps.product_data.catalog import load_product_catalog
-from apps.product_data.product_applications.contracts import ApplicationLinksResult
-from apps.product_data.product_applications.flow import ProductApplicationFlow
-from apps.product_data.product_applications.schemas import ProductApplicationSubmission
-from apps.product_data.product_applications.services import (
-    ProductConfigurationError,
+from apps.product_data.product_applications.contracts import (
+    ApplicationLinksResult,
+    FrozenApplicationLinkRoute,
+)
+from apps.product_data.product_applications.preparation import (
     freeze_product_execution_snapshot,
     resolve_product_snapshot,
 )
+from apps.product_data.product_applications.schemas import ProductApplicationSubmission
+from apps.product_data.product_applications.use_cases import execute_product_application
+from apps.product_data.product_applications.validation import ProductConfigurationError
 
 
 class SnapshotSecretResolver:
@@ -34,7 +36,7 @@ def _submission() -> ProductApplicationSubmission:
             "location": "example-location",
             "branch": "example-branch",
             "outlet": "example-outlet",
-            "cooperationProjectId": "PROJECT-001",
+            "cooperationProjectId": "PROJECT-002",
             "personName": "测试用户",
             "certificateNo": "330101199001011234",
             "cardNo": "6222000000000000",
@@ -50,7 +52,11 @@ def _submission() -> ProductApplicationSubmission:
 @pytest.mark.django_db
 def test_worker_uses_frozen_v1_plan_without_loading_current_catalog(monkeypatch) -> None:
     submission = _submission()
-    snapshot = freeze_product_execution_snapshot(submission, load_product_catalog())
+    original_submission = submission.model_copy(deep=True)
+    prepared = freeze_product_execution_snapshot(submission, load_product_catalog())
+    snapshot = prepared.snapshot
+    assert submission == original_submission
+    assert prepared.submission is not submission
     serialized_snapshot = json.dumps(snapshot.model_dump(mode="json"), ensure_ascii=False)
     assert "PRIVATE-KEY" not in serialized_snapshot
     assert "PUBLIC-KEY" not in serialized_snapshot
@@ -107,15 +113,18 @@ def test_worker_uses_frozen_v1_plan_without_loading_current_catalog(monkeypatch)
         pass
 
     with pytest.raises(StopAfterApplicationLink):
-        ProductApplicationFlow(FrozenPlanPort()).execute(
-            job_id=job.id,
-            trace_id=job.trace_id,
+        execute_product_application(
+            runtime=FrozenPlanPort(),
+            application_links=FrozenPlanPort(),
+            external_session=FrozenPlanPort(),
+            agreements=FrozenPlanPort(),
             submission=ProductApplicationSubmission(
                 name=job.name,
                 product=snapshot.product_code,
                 payload=dict(snapshot.normalized_payload),
             ),
             snapshot=resolve_product_snapshot(job, job.product),
+            application_link_kind="internal",
         )
 
     assert changed_v2["REQ_BODY"]["request"]["order_no"] == "V2-MUST-NOT-BE-USED"

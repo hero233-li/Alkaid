@@ -13,11 +13,70 @@ INTEGRATION_FORBIDDEN_PREFIXES = {
     "apps.jobs.models",
     "apps.jobs.services",
 }
+PUBLIC_INTEGRATION_FILES = {
+    Path("integrations/contracts.py"),
+    Path("integrations/http.py"),
+}
+PUBLIC_INTEGRATION_FORBIDDEN_PREFIXES = {
+    "apps.integrations.cjdk_jyrc",
+    "apps.product_data",
+    "apps.jobs",
+    "apps.workbench",
+}
+PRIVATE_INTEGRATION_PREFIXES = {"apps.integrations.cjdk_jyrc"}
+PRIVATE_INTEGRATION_CONNECTOR_FILES = {
+    Path("core/readiness.py"),
+    Path("core/views.py"),
+    Path("jobs/dispatch.py"),
+    Path("product_data/application_link_plan.py"),
+    Path("product_data/product_applications/tasks.py"),
+}
 errors: list[str] = []
+
+
+def imported_modules(tree: ast.AST) -> set[tuple[str, int]]:
+    modules: set[tuple[str, int]] = set()
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Import):
+            modules.update((alias.name, node.lineno) for alias in node.names)
+        elif isinstance(node, ast.ImportFrom) and node.module:
+            modules.add((node.module, node.lineno))
+    return modules
+
+
+def matches_prefix(module: str, prefixes: set[str]) -> bool:
+    return any(module == prefix or module.startswith(prefix + ".") for prefix in prefixes)
+
 
 for path in APPS_ROOT.rglob("*.py"):
     relative = path.relative_to(APPS_ROOT)
     tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
+    modules = imported_modules(tree)
+    if relative in PUBLIC_INTEGRATION_FILES:
+        for module, lineno in modules:
+            if matches_prefix(module, PUBLIC_INTEGRATION_FORBIDDEN_PREFIXES):
+                errors.append(
+                    f"{path.relative_to(ROOT)}:{lineno}: public integration imports "
+                    f"private dependency {module}"
+                )
+    if relative == Path("product_data/catalog.py"):
+        for module, lineno in modules:
+            if module == "apps.integrations.cjdk_jyrc" or module.startswith(
+                "apps.integrations.cjdk_jyrc."
+            ):
+                errors.append(
+                    f"{path.relative_to(ROOT)}:{lineno}: product catalog imports CJDK private code"
+                )
+    if (
+        relative.parts[:2] != ("integrations", "cjdk_jyrc")
+        and relative not in PRIVATE_INTEGRATION_CONNECTOR_FILES
+    ):
+        for module, lineno in modules:
+            if matches_prefix(module, PRIVATE_INTEGRATION_PREFIXES):
+                errors.append(
+                    f"{path.relative_to(ROOT)}:{lineno}: non-composition module imports "
+                    f"private integration {module}"
+                )
     if relative.parts[0] == "integrations":
         for node in ast.walk(tree):
             if (

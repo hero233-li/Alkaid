@@ -6,9 +6,14 @@ from django.views.decorators.http import require_http_methods
 from pydantic import ValidationError
 
 from apps.core.responses import api_error, api_response
-from apps.workbench.models import WorkbenchHistory
+from apps.workbench.models import WorkbenchHistory, WorkbenchPackage, WorkbenchPackageRequest
 from apps.workbench.schemas import RenameHistorySubmission, WorkbenchRequest
-from apps.workbench.services import execute_request, serialize_history
+from apps.workbench.services import (
+    serialize_history,
+    serialize_package,
+    serialize_package_request_detail,
+)
+from apps.workbench.use_cases import execute_workbench_request, import_saz_package
 
 
 def _invalid(exc: Exception) -> JsonResponse:
@@ -31,7 +36,7 @@ def execute(request: HttpRequest) -> JsonResponse:
     except ValidationError as exc:
         return _invalid(exc)
     try:
-        return api_response(execute_request(submission))
+        return api_response(execute_workbench_request(submission).as_api_result())
     except ValueError as exc:
         return _invalid(exc)
 
@@ -46,7 +51,8 @@ def execute_multipart(request: HttpRequest) -> JsonResponse:
     except ValidationError as exc:
         return _invalid(exc)
     try:
-        return api_response(execute_request(submission, request.FILES))
+        outcome = execute_workbench_request(submission, request.FILES)
+        return api_response(outcome.as_api_result())
     except ValueError as exc:
         return _invalid(exc)
 
@@ -93,3 +99,53 @@ def rename_history(request: HttpRequest, history_id: int) -> JsonResponse:
     item.name = submission.name
     item.save(update_fields=["name"])
     return api_response(serialize_history(item))
+
+
+@csrf_exempt
+@require_http_methods(["GET"])
+def packages(request: HttpRequest) -> JsonResponse:
+    if disabled := _disabled():
+        return disabled
+    items = WorkbenchPackage.objects.prefetch_related("requests").all()
+    return api_response([serialize_package(item) for item in items])
+
+
+@csrf_exempt
+@require_http_methods(["POST"])
+def import_saz(request: HttpRequest) -> JsonResponse:
+    if disabled := _disabled():
+        return disabled
+    upload = request.FILES.get("file")
+    if upload is None:
+        return api_error("请选择要导入的 SAZ 文件", status=400, code="invalid_submission")
+    try:
+        package = import_saz_package(upload)
+    except ValueError as exc:
+        return _invalid(exc)
+    return api_response(serialize_package(package), status=201)
+
+
+@csrf_exempt
+@require_http_methods(["DELETE"])
+def package_detail(request: HttpRequest, package_id: int) -> JsonResponse:
+    if disabled := _disabled():
+        return disabled
+    package = get_object_or_404(WorkbenchPackage, pk=package_id)
+    package.delete()
+    return api_response(None)
+
+
+@require_http_methods(["GET"])
+def package_request_detail(
+    request: HttpRequest,
+    package_id: int,
+    request_id: int,
+) -> JsonResponse:
+    if disabled := _disabled():
+        return disabled
+    item = get_object_or_404(
+        WorkbenchPackageRequest,
+        pk=request_id,
+        package_id=package_id,
+    )
+    return api_response(serialize_package_request_detail(item))

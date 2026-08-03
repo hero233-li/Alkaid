@@ -34,6 +34,32 @@ export async function getHomeShortcutKeys() {
 }
 
 export async function saveHomeShortcutKeys(menuKeys: string[]) {
-  const { data } = await apiClient.put<ApiResponse<string[]>>('/portal/home-shortcuts', { menuKeys });
+  const { data } = await apiClient.put<ApiResponse<string[]>>('/portal/home-shortcuts', {
+    menuKeys,
+  });
   return unwrap(data, '保存首页入口失败');
+}
+
+export async function getHiddenMenuKeys() {
+  const { data } = await apiClient.get<ApiResponse<string[]>>('/portal/hidden-menus');
+  return unwrap(data, '获取菜单显示设置失败');
+}
+
+export async function saveHiddenMenuKeys(menuKeys: string[]) {
+  const { data } = await apiClient.put<ApiResponse<string[]>>('/portal/hidden-menus', {
+    menuKeys,
+  });
+  return unwrap(data, '保存菜单显示设置失败');
+}
+
+export async function getAutoExpandedMenuKeys() {
+  const { data } = await apiClient.get<ApiResponse<string[]>>('/portal/auto-expanded-menus');
+  return unwrap(data, '获取菜单自动展开设置失败');
+}
+
+export async function saveAutoExpandedMenuKeys(menuKeys: string[]) {
+  const { data } = await apiClient.put<ApiResponse<string[]>>('/portal/auto-expanded-menus', {
+    menuKeys,
+  });
+  return unwrap(data, '保存菜单自动展开设置失败');
 }

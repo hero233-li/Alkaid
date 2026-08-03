@@ -58,6 +58,32 @@ def test_hidden_menus_cannot_hide_home_or_system_settings(client) -> None:
 
 
 @pytest.mark.django_db
+def test_auto_expanded_menus_have_defaults_and_allow_saving_empty_list(client) -> None:
+    assert client.get("/api/portal/auto-expanded-menus").json()["data"] == [
+        "product-data",
+        "automation",
+        "system",
+    ]
+
+    saved = client.put(
+        "/api/portal/auto-expanded-menus",
+        data=json.dumps({"menuKeys": ["data-platform", "data-platform"]}),
+        content_type="application/json",
+    )
+    assert saved.status_code == 200
+    assert saved.json()["data"] == ["data-platform"]
+    assert client.get("/api/portal/auto-expanded-menus").json()["data"] == ["data-platform"]
+
+    cleared = client.put(
+        "/api/portal/auto-expanded-menus",
+        data=json.dumps({"menuKeys": []}),
+        content_type="application/json",
+    )
+    assert cleared.status_code == 200
+    assert client.get("/api/portal/auto-expanded-menus").json()["data"] == []
+
+
+@pytest.mark.django_db
 def test_portal_rejects_invalid_menu_keys(client) -> None:
     response = client.put(
         "/api/portal/hidden-menus",

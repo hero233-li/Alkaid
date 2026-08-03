@@ -22,39 +22,6 @@ if not defined CELERY_BROKER_URL (
   echo CELERY_BROKER_URL is required for release verification.
   exit /b 1
 )
-if not defined MOCK_PRODUCT_BASE_URL (
-  echo MOCK_PRODUCT_BASE_URL is required for release verification.
-  exit /b 1
-)
-if not defined APPLICATION_LINK_BASE_URL (
-  echo APPLICATION_LINK_BASE_URL is required for release verification.
-  exit /b 1
-)
-if not defined APPLICATION_LINK_API_TOKEN (
-  echo APPLICATION_LINK_API_TOKEN is required for release verification.
-  exit /b 1
-)
-if not defined BUSINESS_ACCESS_BASE_URL (
-  echo BUSINESS_ACCESS_BASE_URL is required for release verification.
-  exit /b 1
-)
-if not defined BUSINESS_ACCESS_API_TOKEN (
-  echo BUSINESS_ACCESS_API_TOKEN is required for release verification.
-  exit /b 1
-)
-if not defined VERIFICATION_APPROVAL_BASE_URL (
-  echo VERIFICATION_APPROVAL_BASE_URL is required for release verification.
-  exit /b 1
-)
-if not defined VERIFICATION_APPROVAL_API_TOKEN (
-  echo VERIFICATION_APPROVAL_API_TOKEN is required for release verification.
-  exit /b 1
-)
-if not defined MOCK_FIXED_SYSTEM_TOKEN (
-  echo MOCK_FIXED_SYSTEM_TOKEN is required for release verification.
-  exit /b 1
-)
-
 if "%~1"=="" (
   set "LAST_BUILT_FILE=%ALKAID_RUNTIME_DIR%\last-built-release.txt"
   if not exist "%LAST_BUILT_FILE%" (
@@ -101,14 +68,6 @@ set "VERIFY_RUNNER=%ALKAID_RUNTIME_DIR%\verify-%RELEASE_NAME%.bat"
 >>"%VERIFY_RUNNER%" echo set "CELERY_QUEUE=alkaid-verify-%RELEASE_NAME%"
 >>"%VERIFY_RUNNER%" echo set "CELERY_BROKER_URL=%CELERY_BROKER_URL%"
 >>"%VERIFY_RUNNER%" echo set "DJANGO_SECRET_KEY=%DJANGO_SECRET_KEY%"
->>"%VERIFY_RUNNER%" echo set "MOCK_PRODUCT_BASE_URL=%MOCK_PRODUCT_BASE_URL%"
->>"%VERIFY_RUNNER%" echo set "APPLICATION_LINK_BASE_URL=%APPLICATION_LINK_BASE_URL%"
->>"%VERIFY_RUNNER%" echo set "APPLICATION_LINK_API_TOKEN=%APPLICATION_LINK_API_TOKEN%"
->>"%VERIFY_RUNNER%" echo set "BUSINESS_ACCESS_BASE_URL=%BUSINESS_ACCESS_BASE_URL%"
->>"%VERIFY_RUNNER%" echo set "BUSINESS_ACCESS_API_TOKEN=%BUSINESS_ACCESS_API_TOKEN%"
->>"%VERIFY_RUNNER%" echo set "VERIFICATION_APPROVAL_BASE_URL=%VERIFICATION_APPROVAL_BASE_URL%"
->>"%VERIFY_RUNNER%" echo set "VERIFICATION_APPROVAL_API_TOKEN=%VERIFICATION_APPROVAL_API_TOKEN%"
->>"%VERIFY_RUNNER%" echo set "MOCK_FIXED_SYSTEM_TOKEN=%MOCK_FIXED_SYSTEM_TOKEN%"
 >>"%VERIFY_RUNNER%" echo set "APP_VERSION=verify-%RELEASE_NAME%"
 >>"%VERIFY_RUNNER%" echo set "FRONTEND_DIST_DIR=%FRONTEND_DIST_DIR%"
 >>"%VERIFY_RUNNER%" echo pushd "%RELEASE_DIR%\Alkaid-python"

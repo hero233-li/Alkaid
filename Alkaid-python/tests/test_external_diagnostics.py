@@ -44,9 +44,7 @@ def test_json_form_messages_keep_structure_but_mask_secrets() -> None:
 
 
 def test_url_keeps_path_and_masks_auth_value() -> None:
-    value = sanitize_url(
-        "http://example.test/index.html?auth=SECRET&mode=1#/page"
-    )
+    value = sanitize_url("http://example.test/index.html?auth=SECRET&mode=1#/page")
 
     assert "example.test/index.html" in value
     assert "auth=SECRET" not in value

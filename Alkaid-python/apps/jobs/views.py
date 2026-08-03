@@ -1,22 +1,20 @@
-from typing import Any
-
 from celery import current_app
-from django.db import transaction
+from django.db.models import Count, Q
 from django.http import HttpRequest, JsonResponse
 from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_GET, require_POST
 
 from apps.core.responses import api_error, api_response
 from apps.jobs.dispatch import enqueue_job
-from apps.jobs.models import Job, JobApiCall
+from apps.jobs.models import Job, JobApiCall, JobStatus
 from apps.jobs.services import (
     InvalidJobTransition,
-    add_job_log,
-    request_job_cancel,
-    request_job_retry,
+    serialize_api_call,
     serialize_job,
     serialize_log,
 )
+from apps.jobs.use_cases import cancel_job as cancel_job_use_case
+from apps.jobs.use_cases import retry_job as retry_job_use_case
 
 
 def _get_job(job_id: int) -> Job | None:
@@ -27,11 +25,72 @@ def _get_job(job_id: int) -> Job | None:
 
 
 @require_GET
+def job_list(request: HttpRequest) -> JsonResponse:
+    status = request.GET.get("status", "").strip()
+    valid_statuses = {value for value, _label in JobStatus.choices}
+    if status and status not in valid_statuses:
+        return api_error("status 参数无效", status=400)
+    try:
+        page = int(request.GET.get("page", "1"))
+        page_size = int(request.GET.get("pageSize", request.GET.get("limit", "5")))
+    except ValueError:
+        return api_error("page 和 pageSize 必须是整数", status=400)
+    if page < 1:
+        return api_error("page 必须大于等于 1", status=400)
+    if page_size < 1 or page_size > 100:
+        return api_error("pageSize 必须在 1 到 100 之间", status=400)
+
+    query = request.GET.get("query", "").strip()
+    jobs = Job.objects.all()
+    if status:
+        jobs = jobs.filter(status=status)
+    if query:
+        search = (
+            Q(name__icontains=query)
+            | Q(product__icontains=query)
+            | Q(kind__icontains=query)
+            | Q(trace_id__icontains=query)
+            | Q(idempotency_key__icontains=query)
+            | Q(error_message__icontains=query)
+            | Q(logs__message__icontains=query)
+            | Q(logs__step__icontains=query)
+            | Q(api_calls__step__icontains=query)
+            | Q(api_calls__method__icontains=query)
+            | Q(api_calls__url__icontains=query)
+            | Q(api_calls__error_message__icontains=query)
+        )
+        if query.isdigit():
+            search |= Q(id=int(query))
+        jobs = jobs.filter(search).distinct()
+    total = jobs.count()
+    offset = (page - 1) * page_size
+    jobs = jobs.annotate(api_call_count=Count("api_calls", distinct=True)).order_by(
+        "-created_at", "-id"
+    )[offset : offset + page_size]
+    items = [serialize_job(job, include_logs=False, include_api_calls=False) for job in jobs]
+    return api_response(
+        {
+            "items": items,
+            "page": page,
+            "pageSize": page_size,
+            "total": total,
+            "totalPages": (total + page_size - 1) // page_size,
+        }
+    )
+
+
+@require_GET
 def job_detail(request: HttpRequest, job_id: int) -> JsonResponse:
-    job = _get_job(job_id)
-    if job is None:
+    try:
+        job = Job.objects.prefetch_related("logs", "api_calls").get(id=job_id)
+    except Job.DoesNotExist:
         return api_error("Job 不存在", status=404)
-    return api_response(serialize_job(job))
+    include_payload = request.GET.get("includePayload", "").strip().lower() in {
+        "1",
+        "true",
+        "yes",
+    }
+    return api_response(serialize_job(job, include_api_calls=True, include_payload=include_payload))
 
 
 @require_GET
@@ -47,37 +106,27 @@ def job_payload_detail(request: HttpRequest, job_id: int) -> JsonResponse:
 @csrf_exempt
 @require_POST
 def retry_job(request: HttpRequest, job_id: int) -> JsonResponse:
-    if _get_job(job_id) is None:
-        return api_error("Job 不存在", status=404)
     try:
-        job = request_job_retry(job_id)
+        job = retry_job_use_case(job_id, enqueue=enqueue_job)
+    except Job.DoesNotExist:
+        return api_error("Job 不存在", status=404)
     except InvalidJobTransition as exc:
         return api_error(str(exc), status=409)
-    transaction.on_commit(lambda: enqueue_job(job))
     return api_response(serialize_job(job))
 
 
 @csrf_exempt
 @require_POST
 def cancel_job(request: HttpRequest, job_id: int) -> JsonResponse:
-    job = _get_job(job_id)
-    if job is None:
-        return api_error("Job 不存在", status=404)
     try:
-        job = request_job_cancel(job_id)
+        job = cancel_job_use_case(
+            job_id,
+            revoke=lambda task_id: current_app.control.revoke(task_id, terminate=False),
+        )
+    except Job.DoesNotExist:
+        return api_error("Job 不存在", status=404)
     except InvalidJobTransition as exc:
         return api_error(str(exc), status=409)
-    if job.celery_task_id:
-        try:
-            current_app.control.revoke(job.celery_task_id, terminate=False)
-        except Exception as exc:
-            add_job_log(
-                job,
-                "WARN",
-                f"向 Celery 发送撤销通知失败，将由任务状态阻止后续执行：{exc}",
-                step="cancel_requested",
-                celery_task_id=job.celery_task_id,
-            )
     return api_response(serialize_job(job))
 
 
@@ -94,34 +143,10 @@ def job_logs(request: HttpRequest, job_id: int) -> JsonResponse:
     return api_response([serialize_log(log) for log in logs])
 
 
-def _serialize_call(call: JobApiCall) -> dict[str, Any]:
-    return {
-        "id": call.id,
-        "jobId": call.job_id,
-        "taskId": call.celery_task_id,
-        "attempt": call.attempt,
-        "step": call.step,
-        "method": call.method,
-        "url": call.url,
-        "requestHeaders": call.request_headers,
-        "requestBody": call.request_body,
-        "responseStatus": call.response_status,
-        "responseHeaders": call.response_headers,
-        "responseBody": call.response_body,
-        "responseTruncated": call.response_truncated,
-        "durationMs": call.duration_ms,
-        "status": call.status,
-        "errorType": call.error_type or None,
-        "errorMessage": call.error_message or None,
-        "startedAt": call.started_at.isoformat(),
-        "finishedAt": call.finished_at.isoformat() if call.finished_at else None,
-    }
-
-
 @require_GET
 def api_call_detail(request: HttpRequest, job_id: int, call_id: int) -> JsonResponse:
     try:
         call = JobApiCall.objects.get(id=call_id, job_id=job_id)
     except JobApiCall.DoesNotExist:
         return api_error("接口调用记录不存在", status=404)
-    return api_response(_serialize_call(call))
+    return api_response(serialize_api_call(call))

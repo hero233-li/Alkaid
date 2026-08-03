@@ -1,4 +1,4 @@
-"""Dispatch persisted product-application Jobs without leaking broker failures into API responses."""
+"""Dispatch persisted Jobs without leaking broker failures into API responses."""
 
 import logging
 from typing import Any

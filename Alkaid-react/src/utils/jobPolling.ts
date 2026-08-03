@@ -16,9 +16,7 @@ export interface JobPollingOptions<T extends JobLike> {
   intervalMs?: number;
 }
 
-export async function pollJobUntilTerminal<T extends JobLike>(
-  options: JobPollingOptions<T>,
-) {
+export async function pollJobUntilTerminal<T extends JobLike>(options: JobPollingOptions<T>) {
   const deadline = Date.now() + (options.timeoutMs ?? 150_000);
   while (true) {
     if (options.signal?.aborted) throw abortError(options.cancelledMessage);

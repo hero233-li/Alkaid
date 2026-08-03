@@ -15,6 +15,5 @@ def validate_cjdk_business_response(response_body: Any) -> None:
     code = response_body.get("rsp_code", response_body.get("rspCode"))
     message = response_body.get("rsp_msg", response_body.get("rspMsg"))
     raise BusinessResponseError(
-        "CJDK-JYRC 业务处理失败："
-        f"biz_state={state!r}；rsp_code={code!r}；rsp_msg={message!r}"
+        f"CJDK-JYRC 业务处理失败：biz_state={state!r}；rsp_code={code!r}；rsp_msg={message!r}"
     )

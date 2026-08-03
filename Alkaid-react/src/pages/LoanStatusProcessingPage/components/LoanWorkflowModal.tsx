@@ -1,1 +1,29 @@
-import{Modal,Progress,Space,Tag,Typography}from'antd';import type{LoanActivity}from'../types';export default function LoanWorkflowModal({activity}:{activity:LoanActivity|null}){return <Modal title="贷款状态处理" open={Boolean(activity)} centered closable={false} keyboard={false} maskClosable={false} footer={null} zIndex={1300}>{activity&&<><Space style={{display:'flex',justifyContent:'space-between',marginBottom:18}}><Typography.Text strong>{activity.label}</Typography.Text><Tag color="processing">{activity.status}</Tag></Space><Progress percent={activity.progress||5} status="active" strokeWidth={13}/>{activity.currentStep&&<Typography.Text type="secondary">当前岗位：{activity.currentStep}</Typography.Text>}</>}</Modal>}
+import { Modal, Progress, Space, Tag, Typography } from 'antd';
+import type { LoanActivity } from '../types';
+export default function LoanWorkflowModal({ activity }: { activity: LoanActivity | null }) {
+  return (
+    <Modal
+      title="贷款状态处理"
+      open={Boolean(activity)}
+      centered
+      closable={false}
+      keyboard={false}
+      maskClosable={false}
+      footer={null}
+      zIndex={1300}
+    >
+      {activity && (
+        <>
+          <Space style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 18 }}>
+            <Typography.Text strong>{activity.label}</Typography.Text>
+            <Tag color="processing">{activity.status}</Tag>
+          </Space>
+          <Progress percent={activity.progress || 5} status="active" strokeWidth={13} />
+          {activity.currentStep && (
+            <Typography.Text type="secondary">当前岗位：{activity.currentStep}</Typography.Text>
+          )}
+        </>
+      )}
+    </Modal>
+  );
+}

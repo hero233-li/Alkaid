@@ -9,11 +9,15 @@ from apps.core.responses import api_error, api_response
 from apps.portal.models import ReleaseNote
 from apps.portal.schemas import MenuKeysSubmission, ReleaseNoteSubmission
 from apps.portal.services import (
+    AUTO_EXPANDED_MENUS_KEY,
     HIDDEN_MENUS_KEY,
     HOME_SHORTCUTS_KEY,
+    create_release_note,
+    delete_release_note,
     read_menu_keys,
     save_menu_keys,
     serialize_release_note,
+    update_release_note,
 )
 
 
@@ -28,7 +32,7 @@ def releases(request: HttpRequest) -> JsonResponse:
         return api_response([serialize_release_note(note) for note in ReleaseNote.objects.all()])
     try:
         submission = ReleaseNoteSubmission.model_validate_json(request.body)
-        note = ReleaseNote.objects.create(**submission.model_dump())
+        note = create_release_note(submission)
     except ValidationError as exc:
         return _validation_error(exc)
     except IntegrityError:
@@ -41,13 +45,11 @@ def releases(request: HttpRequest) -> JsonResponse:
 def release_detail(request: HttpRequest, release_id: int) -> JsonResponse:
     note = get_object_or_404(ReleaseNote, pk=release_id)
     if request.method == "DELETE":
-        note.delete()
+        delete_release_note(note)
         return api_response(None)
     try:
         submission = ReleaseNoteSubmission.model_validate_json(request.body)
-        note.version = submission.version
-        note.content = submission.content
-        note.save(update_fields=["version", "content", "updated_at"])
+        note = update_release_note(note, submission)
     except ValidationError as exc:
         return _validation_error(exc)
     except IntegrityError:
@@ -75,3 +77,9 @@ def home_shortcuts(request: HttpRequest) -> JsonResponse:
 @require_http_methods(["GET", "PUT"])
 def hidden_menus(request: HttpRequest) -> JsonResponse:
     return _menu_keys(request, HIDDEN_MENUS_KEY)
+
+
+@csrf_exempt
+@require_http_methods(["GET", "PUT"])
+def auto_expanded_menus(request: HttpRequest) -> JsonResponse:
+    return _menu_keys(request, AUTO_EXPANDED_MENUS_KEY)

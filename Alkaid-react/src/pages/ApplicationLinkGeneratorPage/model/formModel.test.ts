@@ -6,11 +6,13 @@ import type { ApplicationLinkConfig } from './types';
 
 const config: ApplicationLinkConfig = {
   environments: [{ label: '内网环境', value: 'env-internal' }],
-  products: [{
-    label: '产品 B',
-    value: 'product-b',
-    routes: [{ environment: 'env-internal', category: '太阳码', requiredFields: ['spcode'] }],
-  }],
+  products: [
+    {
+      label: '产品 B',
+      value: 'product-b',
+      routes: [{ environment: 'env-internal', category: '太阳码', requiredFields: ['spcode'] }],
+    },
+  ],
   cooperationProjects: [{ label: '合作项目一', value: 'PROJECT-001' }],
   loanTypes: ['首贷'],
 };

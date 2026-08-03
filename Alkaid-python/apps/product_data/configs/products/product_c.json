@@ -1,6 +1,7 @@
 {
   "code": "product-c",
   "name": "产品C",
+  "cooperationProjectId": "PROJECT-003",
   "productType": "credit_product",
   "switchField": "creditEnabled",
   "defaultApplicationMethod": "normal",
@@ -90,14 +91,7 @@
     },
     {
       "name": "cooperationProjectId",
-      "label": "合作项目",
-      "group": "selection",
-      "control": "select",
-      "options": [
-        {"label": "合作项目一", "value": "PROJECT-001"},
-        {"label": "合作项目二", "value": "PROJECT-002"},
-        {"label": "合作项目三", "value": "PROJECT-003"}
-      ],
+      "expose": false,
       "requiredFor": ["*"]
     },
     {

@@ -378,8 +378,7 @@ class HttpClient:
                     error=exc,
                 )
             raise ExternalServiceError(
-                "外系统响应无法解析："
-                f"{type(exc).__name__}: {exc}",
+                f"外系统响应无法解析：{type(exc).__name__}: {exc}",
                 status_code=response.status_code,
             ) from exc
         except BusinessResponseError as exc:
@@ -452,22 +451,12 @@ def _invalid_response_message(
             missing_fields.append(location)
 
     if isinstance(response_body, Mapping):
-        actual_fields = ", ".join(
-            sorted(str(key) for key in response_body)
-        ) or "<空对象>"
+        actual_fields = ", ".join(sorted(str(key) for key in response_body)) or "<空对象>"
     else:
         actual_fields = type(response_body).__name__
 
-    missing_text = (
-        ", ".join(missing_fields)
-        if missing_fields
-        else str(error).splitlines()[0]
-    )
-    return (
-        "外系统响应结构不符合预期："
-        f"缺少/错误字段={missing_text}；"
-        f"实际顶层字段={actual_fields}"
-    )
+    missing_text = ", ".join(missing_fields) if missing_fields else str(error).splitlines()[0]
+    return f"外系统响应结构不符合预期：缺少/错误字段={missing_text}；实际顶层字段={actual_fields}"
 
 
 def _response_body(response: httpx.Response) -> Any:

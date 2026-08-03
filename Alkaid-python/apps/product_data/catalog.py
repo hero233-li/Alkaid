@@ -6,7 +6,7 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
-from apps.integrations.cjdk_jyrc.application_link_contract import (
+from apps.product_data.product_applications.contracts import (
     ApplicationLinkCategory,
     FrozenApplicationLinkRoute,
 )
@@ -50,6 +50,8 @@ class CatalogField(ProductField):
     def validate_constraints(self) -> "CatalogField":
         import re
 
+        if self.control == "switch" and self.valueType != "boolean":
+            raise ValueError(f"开关字段 {self.name} 的 valueType 必须是 boolean")
         if (
             self.minLength is not None
             and self.maxLength is not None
@@ -81,9 +83,20 @@ class CatalogField(ProductField):
         """
         content = self.model_dump(
             exclude={
-                "group", "enabledFor", "requiredFor", "expose", "execution",
-                "valueType", "nullable", "minLength", "maxLength", "pattern",
-                "strip", "minimum", "maximum", "allowedValues",
+                "group",
+                "enabledFor",
+                "requiredFor",
+                "expose",
+                "execution",
+                "valueType",
+                "nullable",
+                "minLength",
+                "maxLength",
+                "pattern",
+                "strip",
+                "minimum",
+                "maximum",
+                "allowedValues",
             }
         )
         content["required"] = False
@@ -149,6 +162,7 @@ class ProductCatalogSource(BaseModel):
 
     code: str = Field(min_length=1, max_length=128)
     name: str = Field(min_length=1, max_length=128)
+    cooperationProjectId: str = Field(min_length=1, max_length=128)
     productType: str = Field(min_length=1, max_length=128)
     switchField: str = Field(min_length=1, max_length=128)
     defaultApplicationMethod: str = Field(min_length=1, max_length=128)
@@ -218,7 +232,6 @@ class ProductReferenceData(BaseModel):
     id: str = Field(min_length=1, max_length=128)
     version: int = Field(ge=1)
     environments: tuple[ProductOption, ...] = Field(min_length=1)
-    cooperationProjects: tuple[ProductOption, ...] = ()
     cascadeResetMap: dict[str, tuple[str, ...]] = Field(default_factory=dict)
 
 
@@ -319,6 +332,7 @@ class ProductCatalog(BaseModel):
                 ProductDefinition(
                     label=product.name,
                     value=product.code,
+                    cooperationProjectId=product.cooperationProjectId,
                     environments=product.environments,
                     locations=product.locations,
                     fieldSets=tuple(product_groups),

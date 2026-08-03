@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import ipaddress
 import socket
-import time
 from collections.abc import Mapping
 from typing import Any
 from urllib.parse import urlsplit
@@ -10,8 +9,7 @@ from urllib.parse import urlsplit
 from django.conf import settings
 from django.core.files.uploadedfile import UploadedFile
 
-from apps.integrations.workbench import execute_workbench_http
-from apps.workbench.models import WorkbenchHistory
+from apps.workbench.models import WorkbenchHistory, WorkbenchPackage, WorkbenchPackageRequest
 from apps.workbench.schemas import WorkbenchRequest
 
 RESTRICTED_HEADERS = {
@@ -42,18 +40,19 @@ def validate_workbench_target(url: str, *, resolve_dns: bool = True) -> None:
         raise ValueError("接口工作台 URL 禁止包含用户名或密码")
     if parsed.scheme not in {"http", "https"} or not host:
         raise ValueError("接口工作台仅支持有效的 HTTP/HTTPS URL")
+    allowed_hosts = set(settings.WORKBENCH_ALLOWED_HOSTS)
+    if "*" in allowed_hosts:
+        return
     if host == "localhost" or host.endswith(".localhost"):
         raise ValueError("接口工作台禁止访问内部或保留地址：localhost")
-    if host not in set(settings.WORKBENCH_ALLOWED_HOSTS):
+    if host not in allowed_hosts:
         raise ValueError(f"接口工作台目标 Host 未获允许：{host}")
     addresses: set[str] = set()
     try:
         addresses.add(str(ipaddress.ip_address(host)))
     except ValueError:
         if resolve_dns:
-            addresses.update(
-                item[4][0] for item in socket.getaddrinfo(host, parsed.port or 443)
-            )
+            addresses.update(item[4][0] for item in socket.getaddrinfo(host, parsed.port or 443))
     for address in addresses:
         ip = ipaddress.ip_address(address)
         if (
@@ -68,23 +67,27 @@ def validate_workbench_target(url: str, *, resolve_dns: bool = True) -> None:
             raise ValueError(f"接口工作台禁止访问内部或保留地址：{address}")
 
 
-def _display_name(method: str, url: str) -> str:
+def display_name(method: str, url: str) -> str:
     parsed = urlsplit(url)
     path = parsed.path.rstrip("/") or "/"
     return f"{method} {parsed.hostname or ''}{path}"[:255]
 
 
-def _request_arguments(
+def request_arguments(
     submission: WorkbenchRequest,
     uploads: Mapping[str, UploadedFile],
 ) -> tuple[dict[str, Any], list[UploadedFile]]:
     arguments: dict[str, Any] = {"headers": submission.headers}
     opened_uploads: list[UploadedFile] = []
     fields = [field for field in submission.formFields if field.enabled]
+    form_data: dict[str, list[str]] = {}
+    for field in fields:
+        if field.type == "text":
+            form_data.setdefault(field.name, []).append(field.value)
     if submission.bodyMode == "form-urlencoded":
-        arguments["data"] = [(field.name, field.value) for field in fields if field.type == "text"]
+        arguments["data"] = form_data
     elif submission.bodyMode == "form-data":
-        arguments["data"] = [(field.name, field.value) for field in fields if field.type == "text"]
+        arguments["data"] = form_data
         files: list[tuple[str, tuple[str, UploadedFile, str]]] = []
         for field in fields:
             if field.type != "file" or not field.filePartName:
@@ -105,14 +108,13 @@ def _request_arguments(
     return arguments, opened_uploads
 
 
-def execute_request(
+def normalize_request(
     submission: WorkbenchRequest,
     uploads: Mapping[str, UploadedFile] | None = None,
     *,
-    transport: object | None = None,
-) -> dict[str, Any]:
-    started = time.monotonic()
-    validate_workbench_target(submission.url, resolve_dns=transport is None)
+    resolve_dns: bool = True,
+) -> tuple[WorkbenchRequest, dict[str, Any]]:
+    validate_workbench_target(submission.url, resolve_dns=resolve_dns)
     safe_headers = {
         name: value
         for name, value in submission.headers.items()
@@ -124,49 +126,8 @@ def execute_request(
                 f"上传文件 {upload.name} 超过上限 {settings.WORKBENCH_MAX_UPLOAD_BYTES} bytes"
             )
     normalized = submission.model_copy(update={"headers": safe_headers})
-    arguments, _ = _request_arguments(normalized, uploads or {})
-    result = execute_workbench_http(
-        method=normalized.method,
-        url=normalized.url,
-        headers=safe_headers,
-        request_arguments={name: value for name, value in arguments.items() if name != "headers"},
-        timeout_seconds=normalized.timeoutSeconds,
-        max_response_chars=settings.WORKBENCH_MAX_RESPONSE_CHARS,
-        transport=transport,
-    )
-    location_values = result.headers.get("location", [])
-    for location in location_values:
-        from urllib.parse import urljoin
-
-        validate_workbench_target(urljoin(normalized.url, location), resolve_dns=transport is None)
-
-    duration_ms = round((time.monotonic() - started) * 1000)
-    history = WorkbenchHistory.objects.create(
-        name=_display_name(normalized.method, normalized.url),
-        method=normalized.method,
-        url=normalized.url,
-        request_headers=safe_headers,
-        request_payload=normalized.model_dump(mode="json"),
-        response_status=result.status_code,
-        duration_ms=duration_ms,
-        success=result.success,
-        error_message=result.error_message,
-        response_headers={
-            name: values
-            for name, values in result.headers.items()
-            if name.lower() not in SENSITIVE_HEADERS
-        },
-        response_body=result.body,
-    )
-    return {
-        "success": result.success,
-        "statusCode": result.status_code or 0,
-        "durationMs": duration_ms,
-        "headers": result.headers,
-        "body": result.body,
-        "errorMessage": result.error_message or None,
-        "historyId": history.id,
-    }
+    arguments, _ = request_arguments(normalized, uploads or {})
+    return normalized, {name: value for name, value in arguments.items() if name != "headers"}
 
 
 def serialize_history(history: WorkbenchHistory, *, detail: bool = False) -> dict[str, Any]:
@@ -190,4 +151,46 @@ def serialize_history(history: WorkbenchHistory, *, detail: bool = False) -> dic
                 "responseBody": history.response_body,
             }
         )
+    return data
+
+
+def serialize_package(package: WorkbenchPackage) -> dict[str, Any]:
+    requests = list(package.requests.all())
+    return {
+        "id": package.id,
+        "name": package.name,
+        "sourceFilename": package.source_filename,
+        "requestCount": len(requests),
+        "createdAt": package.created_at.isoformat(),
+        "requests": [serialize_package_request(item) for item in requests],
+    }
+
+
+def serialize_package_request(item: WorkbenchPackageRequest) -> dict[str, Any]:
+    return {
+        "id": item.id,
+        "packageId": item.package_id,
+        "position": item.position,
+        "name": item.name,
+        "method": item.method,
+        "url": item.url,
+        "responseStatus": item.response_status,
+    }
+
+
+def serialize_package_request_detail(item: WorkbenchPackageRequest) -> dict[str, Any]:
+    data = serialize_package_request(item)
+    data.update(
+        {
+            "requestPayload": item.request_payload,
+            "response": {
+                "success": bool(item.response_status and 200 <= item.response_status < 400),
+                "statusCode": item.response_status or 0,
+                "durationMs": 0,
+                "headers": item.response_headers,
+                "body": item.response_body,
+                "errorMessage": None,
+            },
+        }
+    )
     return data

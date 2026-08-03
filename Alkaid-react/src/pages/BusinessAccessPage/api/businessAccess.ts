@@ -2,6 +2,7 @@ import type { ApiResponse } from '../../../types';
 import { apiClient } from '../../../api/client';
 import { terminalBusinessAccessJobStatuses } from '../model/jobModel';
 import { createWorkflowHeaders } from '../../../utils/requestId';
+import { pollJobUntilTerminal } from '../../../utils/jobPolling';
 import type {
   BusinessAccessJobDetail,
   BusinessAccessJobSubmission,
@@ -79,27 +80,26 @@ export async function pushBusinessAccessNotification(
   return unwrap(data, '提交通知推送失败');
 }
 
-export async function getBusinessAccessJob(id: number) {
-  const { data } = await apiClient.get<ApiResponse<BusinessAccessJobDetail>>(
-    `/jobs/${id}`,
-    pollingRequestConfig,
-  );
+export async function getBusinessAccessJob(id: number, signal?: AbortSignal) {
+  const { data } = await apiClient.get<ApiResponse<BusinessAccessJobDetail>>(`/jobs/${id}`, {
+    ...pollingRequestConfig,
+    signal,
+  });
   return unwrap(data, '获取业务准入 Job 进度失败');
 }
 
 export async function pollBusinessAccessJob(
   id: number,
   onProgress: (detail: BusinessAccessJobDetail) => void,
+  options: { signal?: AbortSignal; timeoutMs?: number } = {},
 ) {
-  while (true) {
-    const detail = await getBusinessAccessJob(id);
-    onProgress(detail);
-    if (detail.status === 'success') {
-      return detail;
-    }
-    if (terminalBusinessAccessJobStatuses.has(detail.status)) {
-      throw new Error(detail.errorMessage || `业务准入 Job 执行失败：${detail.status}`);
-    }
-    await new Promise((resolve) => window.setTimeout(resolve, 500));
-  }
+  return pollJobUntilTerminal({
+    fetchJob: (signal) => getBusinessAccessJob(id, signal),
+    onProgress,
+    terminalStatuses: terminalBusinessAccessJobStatuses,
+    timeoutMessage: '业务准入 Job 轮询超时，请稍后查询任务状态',
+    cancelledMessage: '业务准入 Job 轮询已取消',
+    failureMessage: (detail) => `业务准入 Job 执行失败：${detail.status}`,
+    ...options,
+  });
 }

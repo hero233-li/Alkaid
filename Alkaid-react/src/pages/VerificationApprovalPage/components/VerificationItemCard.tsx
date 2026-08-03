@@ -21,12 +21,12 @@ export default function VerificationItemCard({
     <Card
       size="small"
       className={`verification-item-card${completed ? ' verification-item-card--completed' : ''}`}
-      title={(
+      title={
         <span className="verification-item-heading">
           <span>{item.title}</span>
           <Tag color={completed ? 'blue' : 'default'}>{completed ? '已完成' : '未完成'}</Tag>
         </span>
-      )}
+      }
     >
       <Space className="verification-item-actions">
         <Button type="primary" icon={<Check size={14} />} disabled={disabled} onClick={onComplete}>

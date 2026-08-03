@@ -80,9 +80,13 @@ export default function WelcomePage({ shortcuts, onNavigate }: WelcomePageProps)
               <button className="latest-release" type="button" onClick={() => setHistoryOpen(true)}>
                 <div className="latest-release-heading">
                   <Typography.Title level={4}>{latestRelease.version}</Typography.Title>
-                  <Typography.Text type="secondary">{formatDate(latestRelease.createdAt)}</Typography.Text>
+                  <Typography.Text type="secondary">
+                    {formatDate(latestRelease.createdAt)}
+                  </Typography.Text>
                 </div>
-                <Typography.Paragraph ellipsis={{ rows: 4 }}>{latestRelease.content}</Typography.Paragraph>
+                <Typography.Paragraph ellipsis={{ rows: 4 }}>
+                  {latestRelease.content}
+                </Typography.Paragraph>
                 <span className="latest-release-more">
                   查看全部历史版本 <ArrowRight size={15} />
                 </span>
@@ -104,7 +108,12 @@ export default function WelcomePage({ shortcuts, onNavigate }: WelcomePageProps)
             {enabledShortcuts.length ? (
               <div className="shortcut-grid">
                 {enabledShortcuts.map((shortcut) => (
-                  <button key={shortcut.key} type="button" className="shortcut-item" onClick={() => onNavigate(shortcut.key)}>
+                  <button
+                    key={shortcut.key}
+                    type="button"
+                    className="shortcut-item"
+                    onClick={() => onNavigate(shortcut.key)}
+                  >
                     <span className="shortcut-icon">{shortcut.icon}</span>
                     <span>{shortcut.label}</span>
                     <ArrowRight className="shortcut-arrow" size={16} />
@@ -112,13 +121,22 @@ export default function WelcomePage({ shortcuts, onNavigate }: WelcomePageProps)
                 ))}
               </div>
             ) : (
-              <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="请在系统管理中配置首页入口" />
+              <Empty
+                image={Empty.PRESENTED_IMAGE_SIMPLE}
+                description="请在系统管理中配置首页入口"
+              />
             )}
           </Card>
         </div>
       </Spin>
 
-      <Modal title="历史版本" open={historyOpen} onCancel={() => setHistoryOpen(false)} footer={null} width={720}>
+      <Modal
+        title="历史版本"
+        open={historyOpen}
+        onCancel={() => setHistoryOpen(false)}
+        footer={null}
+        width={720}
+      >
         <List
           className="release-history-list"
           dataSource={releaseNotes}
@@ -132,7 +150,11 @@ export default function WelcomePage({ shortcuts, onNavigate }: WelcomePageProps)
                     <Typography.Text type="secondary">{formatDate(item.createdAt)}</Typography.Text>
                   </div>
                 }
-                description={<Typography.Paragraph className="release-history-content">{item.content}</Typography.Paragraph>}
+                description={
+                  <Typography.Paragraph className="release-history-content">
+                    {item.content}
+                  </Typography.Paragraph>
+                }
               />
             </List.Item>
           )}

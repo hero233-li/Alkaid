@@ -41,6 +41,4 @@ def validate_external_url(
 
 def may_forward_session_headers(url: str, policy: UrlPolicy) -> bool:
     host = (urlsplit(url).hostname or "").lower().rstrip(".")
-    return host in {
-        item.lower().rstrip(".") for item in policy.forward_session_headers_to_hosts
-    }
+    return host in {item.lower().rstrip(".") for item in policy.forward_session_headers_to_hosts}

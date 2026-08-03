@@ -189,9 +189,7 @@ class CjdkJyrcClient:
         previous_url: str | None = None
         chain: list[dict[str, Any]] = []
         page_opened = False
-        redirect_limit = min(
-            policy.max_redirects, self._settings.response_limits.max_redirects
-        )
+        redirect_limit = min(policy.max_redirects, self._settings.response_limits.max_redirects)
         for redirect_count in range(redirect_limit + 1):
             validate_external_url(current_url, policy, previous_url=previous_url)
             page_headers = {"Accept": "text/html,application/xhtml+xml"}
@@ -206,8 +204,7 @@ class CjdkJyrcClient:
             )
             if len(response.content) > self._settings.response_limits.max_html_bytes:
                 raise RuntimeError(
-                    "申请页面响应体超过上限 "
-                    f"{self._settings.response_limits.max_html_bytes} bytes"
+                    f"申请页面响应体超过上限 {self._settings.response_limits.max_html_bytes} bytes"
                 )
             self._capture_session(dict(response.headers))
             chain.append({"statusCode": response.status_code, "url": str(response.url)})
@@ -223,9 +220,7 @@ class CjdkJyrcClient:
             previous_url = current_url
             current_url = urljoin(current_url, location)
 
-        self._session_state = self._evaluate_session(
-            page_opened=page_opened, final_url=current_url
-        )
+        self._session_state = self._evaluate_session(page_opened=page_opened, final_url=current_url)
         self._observer.diagnostic(
             step="application_link.acquire_session",
             title="Session 当前获取结果",
@@ -240,11 +235,7 @@ class CjdkJyrcClient:
                 "missingAnyHeaders": list(self._session_state.missing_any_headers),
                 "warning": "尚未实现 auth 换取 TokenId 的真实 Session 初始化接口",
             },
-            level=(
-                "INFO"
-                if self._session_state.status == SessionStatus.ESTABLISHED
-                else "ERROR"
-            ),
+            level=("INFO" if self._session_state.status == SessionStatus.ESTABLISHED else "ERROR"),
         )
         return self._session_state
 

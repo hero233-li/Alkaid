@@ -9,9 +9,9 @@ from apps.integrations.cjdk_jyrc.url_policy import (
 )
 from apps.product_data.catalog import load_product_catalog
 from apps.product_data.product_applications.contracts import ApplicationLinksResult, SessionStatus
-from apps.product_data.product_applications.flow import ProductApplicationFlow
+from apps.product_data.product_applications.preparation import freeze_product_execution_snapshot
 from apps.product_data.product_applications.schemas import ProductApplicationSubmission
-from apps.product_data.product_applications.services import freeze_product_execution_snapshot
+from apps.product_data.product_applications.use_cases import execute_product_application
 
 REQUIREMENT = SessionRequirement(
     requiredCookies=("JSESSIONID", "token_id"),
@@ -96,7 +96,7 @@ def test_partial_session_stops_before_agreement_query() -> None:
             "location": "example-location",
             "branch": "example-branch",
             "outlet": "example-outlet",
-            "cooperationProjectId": "PROJECT-001",
+            "cooperationProjectId": "PROJECT-002",
             "personName": "测试用户",
             "certificateNo": "330101199001011234",
             "cardNo": "6222000000000000",
@@ -106,7 +106,7 @@ def test_partial_session_stops_before_agreement_query() -> None:
             "redShieldEnabled": True,
         },
     )
-    snapshot = freeze_product_execution_snapshot(submission, load_product_catalog())
+    prepared = freeze_product_execution_snapshot(submission, load_product_catalog())
 
     class PartialPort:
         application_link_url_mode = "internal"
@@ -137,10 +137,13 @@ def test_partial_session_stops_before_agreement_query() -> None:
 
     port = PartialPort()
     with pytest.raises(RuntimeError, match="停止协议查询"):
-        ProductApplicationFlow(port).execute(
-            job_id=1,
-            trace_id="trace",
-            submission=submission,
-            snapshot=snapshot,
+        execute_product_application(
+            runtime=port,
+            application_links=port,
+            external_session=port,
+            agreements=port,
+            submission=prepared.submission,
+            snapshot=prepared.snapshot,
+            application_link_kind="internal",
         )
     assert port.queried is False

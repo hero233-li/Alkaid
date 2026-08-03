@@ -62,7 +62,7 @@ OMITTED_CONTENT_KEYS = {
 _TEXT_SECRET_PATTERNS = (
     re.compile(
         r'(?i)("?(?:myPrivateKey|privateKey|apigwPublicKey|'
-        r'certificateNo|cardNo|phone|token_id|JSESSIONID|'
+        r"certificateNo|cardNo|phone|token_id|JSESSIONID|"
         r'X-Token|X-FCOS-SESSIONID|X-Sd)"?\s*[:=]\s*)'
         r'("[^"]*"|[^,\s;&]+)'
     ),
@@ -133,10 +133,7 @@ def sanitize(value: Any, *, key: str = "") -> Any:
     if compact_key in {item.replace("_", "") for item in URL_KEYS}:
         return sanitize_url(str(value))
 
-    if compact_key in {
-        item.replace("_", "")
-        for item in OMITTED_CONTENT_KEYS
-    }:
+    if compact_key in {item.replace("_", "") for item in OMITTED_CONTENT_KEYS}:
         size = len(str(value))
         return f"<binary/base64 content omitted: {size} chars>"
 
@@ -159,8 +156,7 @@ def sanitize(value: Any, *, key: str = "") -> Any:
 
     if isinstance(value, Mapping):
         return {
-            str(item_key): sanitize(item, key=str(item_key))
-            for item_key, item in value.items()
+            str(item_key): sanitize(item, key=str(item_key)) for item_key, item in value.items()
         }
 
     if isinstance(value, (list, tuple)):
@@ -253,10 +249,7 @@ class JobHttpCallObserver:
             "headers": safe_headers,
             "body": safe_body,
         }
-        detail_message = (
-            "外部请求内容（敏感值已脱敏）：\n"
-            f"{format_log_value(request_details)}"
-        )
+        detail_message = f"外部请求内容（敏感值已脱敏）：\n{format_log_value(request_details)}"
         add_job_log(
             self.job,
             "INFO",
@@ -296,11 +289,7 @@ class JobHttpCallObserver:
         call.response_body = safe_body
         call.response_truncated = truncated
         call.duration_ms = max(0, duration_ms)
-        call.status = (
-            ApiCallStatus.FAILED
-            if error
-            else ApiCallStatus.SUCCESS
-        )
+        call.status = ApiCallStatus.FAILED if error else ApiCallStatus.SUCCESS
         call.error_type = type(error).__name__ if error else ""
         call.error_message = str(error)[:4000] if error else ""
         call.finished_at = timezone.now()
@@ -319,19 +308,11 @@ class JobHttpCallObserver:
         )
 
         outcome = "失败" if error else "成功"
-        status_text = (
-            str(status_code)
-            if status_code is not None
-            else "无响应"
-        )
+        status_text = str(status_code) if status_code is not None else "无响应"
         add_job_log(
             self.job,
             "ERROR" if error else "INFO",
-            (
-                f"外部接口{outcome}："
-                f"{call.method} {call.url} -> "
-                f"{status_text} ({duration_ms}ms)"
-            ),
+            (f"外部接口{outcome}：{call.method} {call.url} -> {status_text} ({duration_ms}ms)"),
             step=self.step,
             celery_task_id=self.job.celery_task_id,
             metadata={
@@ -350,10 +331,7 @@ class JobHttpCallObserver:
             "errorType": type(error).__name__ if error else None,
             "errorMessage": str(error) if error else None,
         }
-        detail_message = (
-            "外部响应内容（敏感值已脱敏）：\n"
-            f"{format_log_value(response_details)}"
-        )
+        detail_message = f"外部响应内容（敏感值已脱敏）：\n{format_log_value(response_details)}"
         add_job_log(
             self.job,
             "ERROR" if error else "INFO",

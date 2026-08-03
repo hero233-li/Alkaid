@@ -8,7 +8,7 @@
 
 ## 已实现执行顺序
 
-`ProductApplicationFlow.execute()` 直接通过 Python 方法顺序控制：
+`execute_product_application()` 直接通过 Python 函数顺序控制：
 
 ```text
 parse_submission
@@ -112,7 +112,7 @@ CJDK_JYRC_BASE_URLS={"uat1":"http://agreement-uat1-host:8090"}
 
 ## Context
 
-`ProductApplicationContext` 保存：
+冻结的 `ProductApplicationOutcome` 只保存最终输出：
 
 ```text
 submission

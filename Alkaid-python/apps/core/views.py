@@ -3,19 +3,12 @@ import mimetypes
 from pathlib import Path
 
 from django.conf import settings
-from django.db import connection
 from django.http import FileResponse, Http404, JsonResponse
 from django.views.decorators.http import require_GET
 
+from apps.core.readiness import collect_readiness
 from apps.core.responses import api_response
-from apps.integrations.cjdk_jyrc.config import (
-    get_cjdk_jyrc_settings,
-    validate_cjdk_jyrc_readiness,
-)
-from apps.integrations.cjdk_jyrc.messages import (
-    validate_message_catalog as validate_agreement_message_catalog,
-)
-from apps.product_data.catalog import load_product_catalog
+from apps.integrations.cjdk_jyrc.config import get_cjdk_jyrc_settings
 
 logger = logging.getLogger(__name__)
 
@@ -27,35 +20,25 @@ def health(request):
 
 @require_GET
 def readiness(request):
-    checks: dict[str, object] = {}
-    try:
-        with connection.cursor() as cursor:
-            cursor.execute("SELECT 1")
-            cursor.fetchone()
-        checks["database"] = "ok"
-
-        catalog = load_product_catalog()
-        checks["catalog"] = {
-            "status": "ok",
-            "version": catalog.reference.version,
-            "products": len(catalog.products),
-        }
-        checks["agreementMessages"] = {
-            "status": "ok",
-            **validate_agreement_message_catalog(),
-        }
-        environments = {
-            environment
-            for product in catalog.products.values()
-            for environment in product.environments
-        }
-        validate_cjdk_jyrc_readiness(environments)
-        checks["cjdkJyrc"] = "ok"
-    except Exception as exc:
-        logger.exception("readiness_check_failed")
-        checks["error"] = type(exc).__name__
-        return JsonResponse({"status": "not_ready", "checks": checks}, status=503)
-    return JsonResponse({"status": "ready", "checks": checks})
+    report = collect_readiness()
+    if not report.ready:
+        logger.error(
+            "readiness_check_failed",
+            exc_info=(
+                type(report.error),
+                report.error,
+                report.error.__traceback__,
+            )
+            if report.error is not None
+            else None,
+        )
+    return JsonResponse(
+        {
+            "status": "ready" if report.ready else "not_ready",
+            "checks": report.checks,
+        },
+        status=200 if report.ready else 503,
+    )
 
 
 @require_GET

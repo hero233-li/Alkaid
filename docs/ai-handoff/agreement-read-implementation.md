@@ -8,7 +8,7 @@ queryAgreementTemplateInfoListEA.do
 -> showDocumentByDocIdList.ajax
 ```
 
-Execution order is controlled by `ProductApplicationFlow.execute()`. JSON files contain fixed
+Execution order is controlled by `execute_product_application()`. JSON files contain fixed
 request message shapes only and never contain workflow steps.
 
 ## Environment routing
@@ -60,7 +60,7 @@ Their values are treated as sensitive and are masked from Job API-call logs.
 
 ## Runtime context
 
-`ProductApplicationContext` stores:
+The frozen `ProductApplicationOutcome` stores only the completed output:
 
 ```text
 agreement_templates

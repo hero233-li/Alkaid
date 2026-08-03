@@ -33,35 +33,18 @@
 | `GET` | `/health/ready/` | 数据库、静态配置及真实申请链接门禁检查 |
 | `GET` | `/api/product-data/applications/config` | 获取产品申请表单配置 |
 | `POST` | `/api/product-data/applications` | 创建或幂等返回产品申请 Job |
-| `GET` | `/api/product-data/tools/application-links/config` | 获取申请链接环境、产品和路由配置 |
-| `POST` | `/api/product-data/tools/application-links/generate` | 创建申请链接生成 Job |
-| `GET` | `/api/product-data/business-access/config` | 获取业务准入环境配置 |
-| `POST` | `/api/product-data/business-access/search` | 创建业务准入查询 Job |
-| `POST` | `/api/product-data/business-access/{recordId}/invalidate` | 创建准入记录失效 Job |
-| `POST` | `/api/product-data/business-access/{recordId}/notifications/query` | 创建通知查询 Job |
-| `POST` | `/api/product-data/business-access/{recordId}/notifications/{notificationId}/{push-new\|push-old}` | 创建通知推送 Job |
-| `GET` | `/api/product-data/verification-approval/config` | 获取核实审批搜索配置 |
-| `POST` | `/api/product-data/verification-approval/search` | 创建核实审批查询 Job |
-| `POST` | `/api/product-data/verification-approval/{taskId}/claim` | 创建领取核实任务 Job |
-| `POST` | `/api/product-data/verification-approval/{taskId}/return` | 创建退回核实任务 Job |
-| `POST` | `/api/product-data/verification-approval/{taskId}/refresh` | 创建刷新核实任务 Job |
-| `POST` | `/api/product-data/verification-approval/{taskId}/items/{itemId}` | 创建核实项更新 Job |
-| `POST` | `/api/product-data/verification-approval/{taskId}/actions/{action}` | 创建核实审批快捷操作 Job |
-| `GET` | `/api/product-data/tools/application-data/config` | 获取申请数据生成配置 |
-| `POST` | `/api/product-data/tools/application-data/generate` | 创建 Mock 申请数据生成 Job |
-| `GET` | `/api/product-data/tools/cards/config` | 获取卡状态配置 |
-| `POST` | `/api/product-data/tools/cards/search` | 创建客户卡片查询 Job |
-| `POST` | `/api/product-data/tools/cards/{cardNo}/actions/{action}` | 创建卡片操作 Job |
-| `GET` | `/api/product-data/tools/loans/config` | 获取贷款状态配置 |
-| `POST` | `/api/product-data/tools/loans/search` | 创建客户贷款查询 Job |
-| `POST` | `/api/product-data/tools/loans/{contractNo}/actions/{action}` | 创建贷款操作 Job |
-| `GET` | `/api/jobs/{jobId}` | 查询 Job 详情和已保存日志 |
+| `GET` | `/api/jobs/` | 查询最近 Job，可按状态和关键词筛选 |
+| `GET` | `/api/jobs/{jobId}` | 查询 Job 详情、日志和内部调用记录 |
 | `GET` | `/api/jobs/{jobId}/payload` | staff 权限读取 Job 原始 payload |
 | `POST` | `/api/jobs/{jobId}/retry` | 重试失败、超时或已取消 Job |
 | `POST` | `/api/jobs/{jobId}/cancel` | 请求取消 Job |
 | `GET` | `/api/jobs/{jobId}/logs` | 增量查询 Job 日志 |
 | `GET` | `/api/jobs/{jobId}/logs/stream` | 订阅 Job 日志与状态（SSE） |
 | `GET` | `/api/jobs/{jobId}/calls/{callId}` | 查询一次外部接口调用审计记录 |
+| `GET` | `/api/workbench/packages` | 查询接口工作台的接口包文件树 |
+| `POST` | `/api/workbench/packages/import-saz` | 导入 Fiddler SAZ 并生成接口包 |
+| `GET` | `/api/workbench/packages/{packageId}/requests/{requestId}` | 读取接口文件 |
+| `DELETE` | `/api/workbench/packages/{packageId}` | 删除接口包及其接口文件 |
 
 ## 2. 健康检查
 
@@ -77,8 +60,7 @@
 
 ### `GET /health/ready/`
 
-检查数据库查询、产品 Catalog、产品外系统接口覆盖和全部原始报文结构。真实模式还会检查
-`APPLICATION_LINK_PROTOCOL_CONFIRMED=true`、Signer 已配置且可加载。全部正常返回 `200` 和
+检查数据库查询、产品 Catalog、协议消息和 CJDK 配置。全部正常返回 `200` 和
 `{"status":"ready","checks":...}`；任一项失败返回 `503`。该接口不主动调用真实外系统，
 因此不会产生业务副作用；Worker/Broker 可用性仍由进程监管和运行监控负责。
 
@@ -166,81 +148,7 @@
 
 成功响应的 `data` 是 [Job 对象](#41-job-对象)。
 
-### 3.3 申请链接生成
-
-`GET /api/product-data/tools/application-links/config` 返回环境、产品路由以及合作项目选项。
-合作项目使用 `{label, value}`；客户端展示 `label`，提交稳定的 `value`。
-
-`POST /api/product-data/tools/application-links/generate` 创建异步 Job。规范请求体为：
-
-```json
-{
-  "env": "env-1",
-  "product": "product-b",
-  "category": "太阳码",
-  "cooperationProjectId": "PROJECT-001",
-  "payload": {"loanType": "首贷"}
-}
-```
-
-外层路由字段是权威值，不能在 `payload` 中用不同值重复声明。成功 Job 的
-`result.links` 固定包含 `internalUrl`、`externalUrl`、`generatedAt`。后端 Python 会根据类别
-对外发起一次五字段表单请求，不再执行“创建申请 + 生成链接”的两段式流程。
-
-### 3.4 核实审批异步操作与上下文
-
-除配置 GET 外，核实审批接口均返回 HTTP `202 + Job`（相同幂等键返回已有 Job 时为 `200`），
-不再同步返回任务对象。客户端应轮询 `/api/jobs/{jobId}`，在 Job 成功后从 `result.task` 读取任务；
-查询无结果时该字段为 `null`。这是一项响应协议变化，仓库外调用方必须同步适配。
-
-查询 Job 的 `result.task` 是后续操作的完整上下文快照。
-领取、退回、核实项完成/取消和快捷操作必须直接携带该对象，不应再次调用查询接口补充字段。
-
-领取和退回请求体：
-
-```json
-{"context": {"id": "VERIFY-...", "contractNo": "...", "tellerNo": "T1027", "organizationNo": "510001", "productName": "...", "ownershipStatus": "unclaimed", "taskStatus": "待领取", "node": "核实审批", "items": []}}
-```
-
-核实项请求体在此基础上增加 `status`；快捷操作请求体增加与 URL 一致的 `action`：
-
-```json
-{"status": "completed", "context": {}}
-{"action": "submit", "context": {}}
-```
-
-示例中的空 `context` 仅表示省略重复字段，实际请求必须传入完整任务对象。后端会校验
-`context.id` 与 URL 中的 `taskId` 一致，并将上下文继续传递给外部系统。
-
-刷新使用相同上下文结构：
-
-```json
-{"context": {"id": "VERIFY-...", "contractNo": "...", "items": []}}
-```
-
-真实外系统刷新路径当前按 `/verification/tasks/{taskId}/refresh` 对接；路径、完整 Context 要求、
-返回模型和无副作用语义必须在真实联调时确认。
-
-## 4. Mock 申请数据、卡状态和贷款状态
-
-三个工具均保持 `View → Job → RabbitMQ → Celery Task → Service → Mock Adapter` 的异步链路。
-申请数据生成支持单次 1–1000 条，并受 `APPLICATION_DATA_MAX_RESULT_BYTES` 结果大小保护；
-`birthDate` 是身份证号生日段的权威值，后端会校验它与 `age/currentDate` 一致。接口返回姓名、
-身份证号、银行卡号、手机号、开卡柜员、公司/个体名称、统一社会信用代码和组织机构代码。
-统一社会信用代码使用 17 位权重与 31 模校验字符算法。
-
-卡状态使用 `/tools/cards/*`，贷款状态使用独立的 `/tools/loans/*`，不再复用卡片 URL。
-查询结果分别位于 `result.cards`；mutation 的统一结果位于：
-
-```json
-{"actionResult": {"card": {}, "message": "处理成功"}}
-```
-
-当前 Adapter 只实现 Mock 模式；`EXTERNAL_SYSTEM_MODE=real` 时会明确报真实外系统尚未配置，
-不会静默返回 Mock 数据。卡/贷款 Mock 状态保存在数据库共享表中，可跨 Celery Worker 读取。
-卡/贷款 mutation 属于非幂等写操作，不能通过通用 Job retry 重放。
-
-## 5. Job 状态与对象
+## 4. Job 状态与对象
 
 产品申请创建后，其状态依次可能为：
 
@@ -251,7 +159,7 @@ pending / retrying → running → success | failed | cancelled | timed_out
 
 `success`、`failed`、`cancelled`、`timed_out` 为终态。`cancel_requested` 表示运行中的 worker 已收到取消意图，实际结束由 worker 处理。
 
-### 5.1 Job 对象
+### 4.1 Job 对象
 
 除外部调用明细外，创建、详情、重试、取消接口都返回下列对象：
 
@@ -287,13 +195,20 @@ pending / retrying → running → success | failed | cancelled | timed_out
 }
 ```
 
-## 6. Job 接口
+## 5. Job 接口
+
+### `GET /api/jobs/?status={status}&query={query}&page={page}&pageSize={pageSize}`
+
+返回按创建时间倒序排列的任务列表。`status` 可选且必须是合法 Job 状态；`query` 可搜索 Job ID、
+任务名称、产品、类型、Trace ID、幂等键、失败信息、运行日志和内部调用记录。`page` 默认 1，
+`pageSize` 默认 5、范围为 1–100。响应 `data` 包含 `items`、`page`、`pageSize`、`total` 和
+`totalPages`；列表项返回 `apiCallCount`，但不展开日志、内部调用详情或原始 payload。
 
 ### `GET /api/jobs/{jobId}`
 
-返回 Job 详情和所有当前保留的日志，始终省略原始 `payload`；`includePayload` 查询参数不再生效。
-重试和取消响应同样不返回 payload。
-Job 不存在时返回 `404`。
+返回 Job 详情、所有当前保留日志、`apiCallCount` 和完整 `apiCalls` 请求/响应审计记录。默认省略
+原始 `payload`；任务中心需要显示请求信息时使用 `includePayload=true` 显式读取。列表、重试和取消
+响应仍不返回 payload。Job 不存在时返回 `404`。
 
 ### `GET /api/jobs/{jobId}/payload`
 
@@ -359,6 +274,17 @@ data: {"status":"running","progress":40}
 - `status` 在状态或进度变化时发送。
 - 连接空闲约 15 秒会发送 `: heartbeat` 注释。
 - 服务端不会因 Job 进入终态自动关闭连接。客户端收到终态状态后应主动断开，并在断线重连时使用最后一个 `log.id`。
+
+## 6. 接口工作台 SAZ 接口包
+
+`POST /api/workbench/packages/import-saz` 使用 multipart 字段 `file` 上传 Fiddler `.saz` 文件。
+服务端不把压缩包解压到磁盘，而是读取 `raw/<序号>_c.txt` 和对应 `_s.txt`，将每组 HTTP 会话
+转换为一个接口文件。支持 JSON、URL 编码表单和 Raw 请求体；multipart 等其他报文按 Raw 内容
+导入，重新发送文件上传请求前需要在工作台重新选择本地文件。
+
+导入过程限制上传大小、ZIP 条目数、解压后总大小和最多 500 个请求，并拒绝加密压缩包及不安全路径。
+`GET /api/workbench/packages` 返回接口包及接口文件摘要；点击文件后通过详情接口读取请求参数和原始
+响应。删除接口包会级联删除其全部接口文件，不影响请求历史。
 
 ## 7. 客户端调用建议
 

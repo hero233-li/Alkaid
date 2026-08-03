@@ -33,10 +33,7 @@ export default function CardResultList({
             {cardStatusConfig.actions.map((item) => (
               <Button
                 key={item.value}
-                disabled={
-                  busy
-                  || !selected
-                }
+                disabled={busy || !selected}
                 onClick={() => onAction(item.value)}
               >
                 {item.label}
@@ -68,8 +65,18 @@ export default function CardResultList({
           { title: '客户号', dataIndex: 'customerNo', width: 140 },
           { title: '证件号', dataIndex: 'certificateNo', width: 190 },
           { title: '卡号', dataIndex: 'cardNo', width: 190 },
-          { title: '卡余额', dataIndex: 'balance', width: 110, render: (value) => `¥${Number(value).toFixed(2)}` },
-          { title: '卡状态', dataIndex: 'status', width: 100, render: (value) => <Tag color={value === '正常' ? 'success' : 'warning'}>{value}</Tag> },
+          {
+            title: '卡余额',
+            dataIndex: 'balance',
+            width: 110,
+            render: (value) => `¥${Number(value).toFixed(2)}`,
+          },
+          {
+            title: '卡状态',
+            dataIndex: 'status',
+            width: 100,
+            render: (value) => <Tag color={value === '正常' ? 'success' : 'warning'}>{value}</Tag>,
+          },
         ]}
       />
     </Card>

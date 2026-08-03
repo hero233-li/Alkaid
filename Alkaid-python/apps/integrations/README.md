@@ -4,9 +4,9 @@
 
 ```text
 Job 冻结快照
-→ Task 创建 JobIntegrationObserver 与 CjdkJyrcAdapter
-→ ProductApplicationFlow（中立 Command / Result / Port）
-→ CjdkJyrcAdapter（CJDK 报文转换）
+→ Task 创建 JobIntegrationObserver 与 CjdkJyrcRuntime
+→ execute_product_application Use Case（中立 Command / Outcome / 小型 Gateway Protocol）
+→ CjdkApplicationLinkGateway / CjdkExternalSessionGateway / CjdkAgreementGateway
 → JavaApplicationLinkGateway / CjdkJyrcClient
 → HttpClient
 ```
@@ -21,10 +21,13 @@ Java 主类唯一业务参数；cwd、classpath、输出编码、超时和 `ALKA
 `biz_state`/`rsp_code`/`rsp_msg` 在 `cjdk_jyrc/response.py` 中解释。CJDK POST 当前均为
 `RetryMode.NEVER`。
 
+`CjdkJyrcRuntime` 只管理共享 `CjdkJyrcClient` 的生命周期；三个能力 Gateway 共享同一个 Client、
+Cookie/Session 和 Observer，Gateway 与 Runtime 都不保存业务执行结果。
+
 Session 真实初始化接口尚未实现。现有代码只安全打开申请链接并按环境 `SessionRequirement` 判断
 `not_started`、`page_opened`、`partial`、`established`、`failed` 状态；未满足要求时禁止查询协议。
-真实 TokenId 接口资料确认后，只在 `CjdkJyrcAdapter.initialize_session()` 或专用 Session Client
-中接入，Flow 不感知其字段和路径。
+真实 TokenId 接口资料确认后，只在 `CjdkExternalSessionGateway` 或专用 Session Client 中接入，
+Use Case 不感知其字段和路径。
 
 响应限制集中在 `responseLimits`：JSON/HTML 原始响应、重定向次数、模板/预览数量、Base64 字符、
 单文档解码大小和累计文档大小。真实 Java SDK 与内网协议接口仍需在对应网络环境验证。

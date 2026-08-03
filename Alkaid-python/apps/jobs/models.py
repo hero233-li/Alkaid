@@ -39,6 +39,7 @@ class Job(models.Model):
     result = models.JSONField(default=dict)
     execution_config_version = models.PositiveIntegerField(default=1)
     execution_config_snapshot = models.JSONField(default=dict)
+    error_code = models.CharField(max_length=128, blank=True, default="")
     error_message = models.TextField(blank=True, default="")
     trace_id = models.CharField(max_length=128, db_index=True)
     idempotency_key = models.CharField(max_length=128, unique=True)
@@ -107,20 +108,3 @@ class JobApiCall(models.Model):
     class Meta:
         ordering = ["id"]
         indexes = [models.Index(fields=["job", "id"], name="job_call_job_id_idx")]
-
-
-class MockToolState(models.Model):
-    """Shared mutable state for Mock tools executed by independent Celery workers."""
-
-    namespace = models.CharField(max_length=64)
-    key = models.CharField(max_length=255)
-    payload = models.JSONField(default=dict)
-    updated_at = models.DateTimeField(auto_now=True)
-
-    class Meta:
-        constraints = [
-            models.UniqueConstraint(
-                fields=["namespace", "key"],
-                name="mock_state_namespace_key_uniq",
-            )
-        ]

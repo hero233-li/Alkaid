@@ -2,12 +2,14 @@ from celery import shared_task
 from django.conf import settings
 
 from apps.integrations.cjdk_jyrc import config as cjdk_config
-from apps.integrations.cjdk_jyrc.adapter import CjdkJyrcAdapter
+from apps.integrations.cjdk_jyrc.runtime import CjdkJyrcRuntime
 from apps.jobs.integration_observer import JobIntegrationObserver
 from apps.jobs.task_runner import JobTaskContext, run_job_task
-from apps.product_data.product_applications.flow import ProductApplicationFlow
+from apps.product_data.product_applications.preparation import resolve_product_snapshot
 from apps.product_data.product_applications.schemas import ProductApplicationSubmission
-from apps.product_data.product_applications.services import resolve_product_snapshot
+from apps.product_data.product_applications.use_cases import (
+    execute_product_application as execute_product_application_use_case,
+)
 
 
 @shared_task(
@@ -28,17 +30,20 @@ def execute_product_application(self, job_id: int) -> None:
         )
         integration_settings = cjdk_config.get_cjdk_jyrc_settings()
         observer = JobIntegrationObserver(context.job)
-        adapter = CjdkJyrcAdapter(
+        runtime = CjdkJyrcRuntime(
             settings=integration_settings,
             observer=observer,
             trace_id=context.job.trace_id,
             environment=snapshot.environment,
         )
-        return ProductApplicationFlow(adapter).execute(
-            job_id=context.job.id,
-            trace_id=context.job.trace_id,
+        return execute_product_application_use_case(
+            runtime=runtime,
+            application_links=runtime.application_links,
+            external_session=runtime.external_session,
+            agreements=runtime.agreements,
             submission=submission,
             snapshot=snapshot,
+            application_link_kind=integration_settings.application_link_url_mode,
             progress=context.progress,
         )
 

@@ -1,0 +1,5 @@
+# Install under the MySQL server's conf.d directory, then restart MySQL.
+[mysqld]
+max_allowed_packet=256M
+net_read_timeout=120
+net_write_timeout=120

@@ -4,10 +4,10 @@ from collections.abc import Mapping
 from copy import deepcopy
 from typing import Any
 
-from apps.integrations.cjdk_jyrc.application_link_contract import (
+from apps.integrations.cjdk_jyrc.profiles import load_integration_profile
+from apps.product_data.product_applications.contracts import (
     CompiledApplicationLinkPlan,
 )
-from apps.integrations.cjdk_jyrc.profiles import load_integration_profile
 
 
 class ApplicationLinkPlanError(ValueError):

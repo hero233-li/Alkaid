@@ -38,20 +38,7 @@ if (args.includes('--worker')) {
     env,
     stdio: 'inherit',
   });
-
-  for (const signal of ['SIGINT', 'SIGTERM']) {
-    process.on(signal, () => {
-      child.kill(signal);
-    });
-  }
-
-  child.on('exit', (code, signal) => {
-    if (signal) {
-      process.kill(process.pid, signal);
-      return;
-    }
-    process.exit(code ?? 0);
-  });
+  superviseChild(child);
 }
 
 function runWorker(envValues) {
@@ -68,8 +55,33 @@ function runWorker(envValues) {
     env: envValues,
     stdio: 'inherit',
   });
+  superviseChild(child);
+}
+
+function superviseChild(child) {
+  let stopping = false;
+
+  for (const signal of ['SIGINT', 'SIGTERM']) {
+    process.on(signal, () => {
+      if (stopping) return;
+      stopping = true;
+
+      // Windows broadcasts Ctrl+C to every process attached to the current
+      // console. Forwarding SIGINT again can also interrupt the parent shell
+      // (for example PyCharm's PowerShell terminal) and close the whole tab.
+      if (!(isWindows && signal === 'SIGINT')) {
+        child.kill(signal);
+      }
+    });
+  }
 
   child.on('exit', (code, signal) => {
+    if (isWindows) {
+      // Never re-send a console signal on Windows. Exiting with the conventional
+      // code stops npm while leaving the interactive PowerShell process alive.
+      process.exit(code ?? (signal === 'SIGINT' ? 130 : 1));
+      return;
+    }
     if (signal) {
       process.kill(process.pid, signal);
       return;

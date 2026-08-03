@@ -1,6 +1,7 @@
 import { apiClient } from '../../../api/client';
 import { createWorkflowHeaders } from '../../../utils/requestId';
 import { pollJobUntilTerminal } from '../../../utils/jobPolling';
+import type { JobSubmission } from '../../../types/jobs';
 import type {
   CardAction,
   CardActionValues,
@@ -10,7 +11,6 @@ import type {
   CardSearchValues,
 } from '../types';
 
-interface Submission { id: number; status: CardJobStatus; progress: number }
 const requestConfig = { showGlobalProgress: false, useResponseDelay: false };
 const terminal = new Set<CardJobStatus>(['success', 'failed', 'cancelled', 'timed_out']);
 
@@ -24,8 +24,10 @@ function workflowConfig() {
 }
 
 export async function submitCardSearch(values: CardSearchValues) {
-  const { data } = await apiClient.post<CardApiResponse<Submission>>(
-    '/product-data/tools/cards/search', values, workflowConfig(),
+  const { data } = await apiClient.post<CardApiResponse<JobSubmission>>(
+    '/product-data/tools/cards/search',
+    values,
+    workflowConfig(),
   );
   return unwrap(data, '提交卡查询失败');
 }
@@ -35,7 +37,7 @@ export async function submitCardAction(
   action: CardAction,
   values: CardActionValues,
 ) {
-  const { data } = await apiClient.post<CardApiResponse<Submission>>(
+  const { data } = await apiClient.post<CardApiResponse<JobSubmission>>(
     `/product-data/tools/cards/${encodeURIComponent(cardNo)}/actions/${action}`,
     values,
     workflowConfig(),
@@ -50,9 +52,10 @@ export async function pollCardJob(
 ) {
   return pollJobUntilTerminal({
     fetchJob: async (signal) => {
-      const { data } = await apiClient.get<CardApiResponse<CardJob>>(
-        `/jobs/${id}`, { ...requestConfig, signal },
-      );
+      const { data } = await apiClient.get<CardApiResponse<CardJob>>(`/jobs/${id}`, {
+        ...requestConfig,
+        signal,
+      });
       return unwrap(data, '获取卡处理 Job 失败');
     },
     onProgress,

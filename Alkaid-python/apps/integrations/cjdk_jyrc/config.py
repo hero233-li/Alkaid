@@ -47,9 +47,7 @@ class SessionRequirement(BaseModel):
 
     required_cookies: tuple[str, ...] = Field(default_factory=tuple, alias="requiredCookies")
     required_headers: tuple[str, ...] = Field(default_factory=tuple, alias="requiredHeaders")
-    required_any_headers: tuple[str, ...] = Field(
-        default_factory=tuple, alias="requiredAnyHeaders"
-    )
+    required_any_headers: tuple[str, ...] = Field(default_factory=tuple, alias="requiredAnyHeaders")
 
 
 class UrlPolicy(BaseModel):
@@ -73,9 +71,7 @@ class ResponseLimits(BaseModel):
     max_redirects: int = Field(default=10, alias="maxRedirects", ge=0, le=20)
     max_agreement_templates: int = Field(default=50, alias="maxAgreementTemplates", gt=0)
     max_preview_documents: int = Field(default=50, alias="maxPreviewDocuments", gt=0)
-    max_base64_characters: int = Field(
-        default=28 * 1024 * 1024, alias="maxBase64Characters", gt=0
-    )
+    max_base64_characters: int = Field(default=28 * 1024 * 1024, alias="maxBase64Characters", gt=0)
     max_decoded_document_bytes: int = Field(
         default=20 * 1024 * 1024, alias="maxDecodedDocumentBytes", gt=0
     )
@@ -91,9 +87,7 @@ class CjdkJyrcSettings(BaseModel):
     application_link_url_mode: Literal["internal", "external"]
     java_gateway: JavaGatewaySettings
     environments: dict[str, EnvironmentSettings]
-    response_limits: ResponseLimits = Field(
-        default_factory=ResponseLimits, alias="responseLimits"
-    )
+    response_limits: ResponseLimits = Field(default_factory=ResponseLimits, alias="responseLimits")
 
     @model_validator(mode="after")
     def validate_real_environment_urls(self) -> CjdkJyrcSettings:
@@ -408,7 +402,11 @@ def _load_local_environment_config() -> dict[str, object]:
     if not isinstance(raw, dict):
         raise ImproperlyConfigured("CJDK-JYRC 环境配置根节点必须是 JSON 对象")
     allowed = {
-        "mode", "applicationLinkUrlMode", "javaGateway", "environments", "secrets",
+        "mode",
+        "applicationLinkUrlMode",
+        "javaGateway",
+        "environments",
+        "secrets",
         "responseLimits",
     }
     unknown = set(raw) - allowed

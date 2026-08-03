@@ -2,9 +2,48 @@ from __future__ import annotations
 
 from collections.abc import Mapping
 from enum import Enum
-from typing import Any, Protocol
+from typing import Any, Literal, Protocol
 
 from pydantic import BaseModel, ConfigDict, Field
+
+ApplicationLinkKind = Literal["internal", "external"]
+
+
+class ProgressReporter(Protocol):
+    def __call__(self, *, stage: str, progress: int, message: str) -> None: ...
+
+
+class ApplicationLinkCategory(str, Enum):
+    SUN_CODE = "SUN_CODE"
+    DYNAMIC_LINK = "DYNAMIC_LINK"
+
+    @property
+    def display_name(self) -> str:
+        return {
+            ApplicationLinkCategory.SUN_CODE: "太阳码",
+            ApplicationLinkCategory.DYNAMIC_LINK: "动态链接",
+        }[self]
+
+
+class FrozenApplicationLinkRoute(BaseModel):
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    route_id: str = Field(min_length=1, max_length=255)
+    environment: str = Field(min_length=1, max_length=128)
+    application_methods: tuple[str, ...] = Field(min_length=1)
+    category_code: ApplicationLinkCategory
+    integration_profile_id: str = Field(min_length=1, max_length=255)
+    integration_profile_version: int = Field(ge=1)
+    integration_profile_checksum: str = Field(pattern=r"^sha256:[0-9a-f]{64}$")
+    required_fields: tuple[str, ...]
+    compiled_request_template: dict[str, Any]
+    payload_bindings: dict[str, str]
+    secret_bindings: dict[str, str]
+
+
+class CompiledApplicationLinkPlan(FrozenApplicationLinkRoute):
+    def freeze(self) -> FrozenApplicationLinkRoute:
+        return FrozenApplicationLinkRoute.model_validate(self.model_dump(mode="python"))
 
 
 class ApplicationLinkCommand(BaseModel):
@@ -78,17 +117,27 @@ class AgreementDocumentResult(BaseModel):
     content_bytes: int | None = None
 
 
-class ProductApplicationPort(Protocol):
-    def __enter__(self) -> ProductApplicationPort: ...
+class ProductApplicationRuntime(Protocol):
+    """Own only the lifetime of shared external infrastructure."""
+
+    def __enter__(self) -> ProductApplicationRuntime: ...
 
     def __exit__(self, *args: object) -> None: ...
 
+
+class ApplicationLinkGateway(Protocol):
     def generate_application_link(
         self, command: ApplicationLinkCommand
     ) -> ApplicationLinksResult: ...
 
+
+class ExternalSessionGateway(Protocol):
     def initialize_session(self, application_url: str) -> SessionState: ...
 
+    def session_state(self) -> SessionState: ...
+
+
+class AgreementGateway(Protocol):
     def query_agreement_templates(
         self, payload: Mapping[str, Any]
     ) -> tuple[AgreementTemplateResult, ...]: ...
@@ -99,6 +148,6 @@ class ProductApplicationPort(Protocol):
         templates: tuple[AgreementTemplateResult, ...],
     ) -> AgreementPreviewResult: ...
 
-    def read_agreement_document(self, doc_id: str) -> AgreementDocumentResult: ...
-
-    def session_state(self) -> SessionState: ...
+    def read_agreement_documents(
+        self, doc_ids: tuple[str, ...]
+    ) -> tuple[AgreementDocumentResult, ...]: ...

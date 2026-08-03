@@ -167,13 +167,10 @@ class JavaApplicationLinkGateway:
                 )
             except subprocess.TimeoutExpired as exc:
                 raise RuntimeError(
-                    "申请链接 Java SDK 执行超时："
-                    f"{gateway_settings.timeout_seconds} 秒"
+                    f"申请链接 Java SDK 执行超时：{gateway_settings.timeout_seconds} 秒"
                 ) from exc
             except OSError as exc:
-                raise RuntimeError(
-                    f"申请链接 Java SDK 无法启动：{exc}"
-                ) from exc
+                raise RuntimeError(f"申请链接 Java SDK 无法启动：{exc}") from exc
 
         self._write_diagnostic(
             "JavaGateway 执行结果",
@@ -213,13 +210,11 @@ class JavaApplicationLinkGateway:
             normalized = line.strip()
             if not normalized.startswith(RESULT_PREFIX):
                 continue
-            result_json = normalized[len(RESULT_PREFIX):]
+            result_json = normalized[len(RESULT_PREFIX) :]
             try:
                 result = json.loads(result_json)
             except json.JSONDecodeError as exc:
-                raise RuntimeError(
-                    "Java ALKAID_RESULT 不是有效 JSON"
-                ) from exc
+                raise RuntimeError("Java ALKAID_RESULT 不是有效 JSON") from exc
             if not isinstance(result, dict):
                 raise RuntimeError("Java 返回结果不是 JSON 对象")
             return result
@@ -245,19 +240,21 @@ class JavaApplicationLinkGateway:
 
     @staticmethod
     def _mock_result(java_request: dict[str, Any]) -> dict[str, str]:
-        digest = hashlib.sha256(
-            json.dumps(
-                java_request,
-                ensure_ascii=False,
-                sort_keys=True,
-            ).encode("utf-8")
-        ).hexdigest()[:12].upper()
+        digest = (
+            hashlib.sha256(
+                json.dumps(
+                    java_request,
+                    ensure_ascii=False,
+                    sort_keys=True,
+                ).encode("utf-8")
+            )
+            .hexdigest()[:12]
+            .upper()
+        )
         link_id = f"LINK-{digest}"
         return {
             "internal_url": f"https://cjdk-jyrc.mock/application-entry/{link_id}",
-            "external_url": (
-                f"https://cjdk-jyrc.mock/application-entry/{link_id}?scope=external"
-            ),
+            "external_url": (f"https://cjdk-jyrc.mock/application-entry/{link_id}?scope=external"),
         }
 
     @staticmethod

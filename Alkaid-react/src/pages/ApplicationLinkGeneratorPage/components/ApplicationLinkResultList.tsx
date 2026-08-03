@@ -72,7 +72,9 @@ export default function ApplicationLinkResultList({
             title: '链接地址',
             dataIndex: 'url',
             render: (value: string, record) => (
-              <Typography.Text className={`application-link-value application-link-value--${record.key}`}>
+              <Typography.Text
+                className={`application-link-value application-link-value--${record.key}`}
+              >
                 {value}
               </Typography.Text>
             ),

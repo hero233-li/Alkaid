@@ -7,4 +7,9 @@ urlpatterns = [
     path("releases/<int:release_id>", views.release_detail, name="portal-release-detail"),
     path("home-shortcuts", views.home_shortcuts, name="portal-home-shortcuts"),
     path("hidden-menus", views.hidden_menus, name="portal-hidden-menus"),
+    path(
+        "auto-expanded-menus",
+        views.auto_expanded_menus,
+        name="portal-auto-expanded-menus",
+    ),
 ]

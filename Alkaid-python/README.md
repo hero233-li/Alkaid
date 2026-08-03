@@ -32,6 +32,37 @@ make migrate
 make run
 ```
 
+数据中心的文档、在线表格、多维表格及文件夹通过 `apps.documents` 持久化到 MySQL。
+部署新版本后必须执行 `make migrate`，以创建文档、文件夹和图片资源表。列表接口只返回
+元数据，正文由文件详情接口按需读取；创建、修改、移动和删除均使用单文件接口，不再重建
+整个 workspace。编辑器图片通过 `/api/documents/assets` 单独上传，正文仅保留图片 URL，避免
+Base64 令正文和浏览器缓存膨胀。
+
+正文及请求默认上限是 128 MiB，单张图片默认上限是 32 MiB，可通过以下变量调整：
+
+```text
+DATA_DOCUMENT_MAX_CONTENT_BYTES=134217728
+DATA_DOCUMENT_MAX_ASSET_BYTES=33554432
+DJANGO_MAX_REQUEST_BYTES=268435456
+DJANGO_FILE_MEMORY_THRESHOLD_BYTES=2621440
+```
+
+Nginx 和 MySQL 还需要采用 `deploy/nginx/alkaid-upload.conf.example` 与
+`deploy/mysql/alkaid-large-documents.cnf.example` 中的匹配上限。图片拆分后，即使一个文档的
+全部资源超过 100 MiB，列表和正文也不会重复传输所有图片；但浏览器一次渲染大量原始大图
+仍会消耗内存，生产环境建议在上传阶段进一步生成缩略图和 WebP/AVIF。
+
+旧版 `.doc` 导入和在线 Word 的 `.docx` 导出按以下顺序选择转换能力：LibreOffice、Windows
+上已安装的 Microsoft Word（PowerShell COM）、macOS 系统自带 `textutil`。因此 Windows
+已经安装 Word 或 macOS 使用系统组件时，无需安装 LibreOffice。自定义 LibreOffice 路径可设置：
+
+```text
+LIBREOFFICE_BINARY=C:\Program Files\LibreOffice\program\soffice.exe
+```
+
+纯 Linux 服务器仍建议安装 `libreoffice-writer`。Windows 如果既没有 Microsoft Word 也没有
+LibreOffice，二进制 `.doc` 无法仅靠纯 Python 可靠保留图片、表格和复杂排版。
+
 离线安装时可以把 wheel 文件放到本地目录，再传给 pip：
 
 ```bash

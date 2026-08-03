@@ -109,9 +109,41 @@ def test_product_binding_cannot_overwrite_profile_secrets(tmp_path) -> None:
     _edit_product(
         product_root,
         "product_b.json",
-        lambda source: source["features"]["applicationLinks"][0][
-            "payloadBindings"
-        ].update({"REQ_BODY": "payload"}),
+        lambda source: source["features"]["applicationLinks"][0]["payloadBindings"].update(
+            {"REQ_BODY": "payload"}
+        ),
     )
     with pytest.raises(ProductCatalogError, match="不允许覆盖秘密字段"):
+        _load(product_root, reference_path)
+
+
+def test_product_cooperation_project_is_required_and_excluded_from_ui_fields(
+    tmp_path,
+) -> None:
+    product_root, reference_path = _catalog_copy(tmp_path)
+    catalog = _load(product_root, reference_path)
+    config = catalog.to_ui_config()
+
+    product = next(item for item in config.products if item.value == "product-b")
+    assert product.cooperationProjectId == "PROJECT-002"
+    assert "cooperationProjectId" not in {field.name for field in config.fields}
+
+    _edit_product(
+        product_root,
+        "product_b.json",
+        lambda source: source.pop("cooperationProjectId"),
+    )
+    with pytest.raises(ProductCatalogError, match="cooperationProjectId"):
+        _load(product_root, reference_path)
+
+
+def test_switch_field_must_declare_boolean_value_type(tmp_path) -> None:
+    product_root, reference_path = _catalog_copy(tmp_path)
+
+    def break_switch_type(source):
+        field = next(item for item in source["fields"] if item["name"] == "redShieldEnabled")
+        field.pop("valueType")
+
+    _edit_product(product_root, "product_a.json", break_switch_type)
+    with pytest.raises(ProductCatalogError, match="valueType 必须是 boolean"):
         _load(product_root, reference_path)

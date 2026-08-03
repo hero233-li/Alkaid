@@ -3,10 +3,28 @@ from typing import Any
 from django.db import transaction
 
 from apps.portal.models import PortalPreference, ReleaseNote
+from apps.portal.schemas import ReleaseNoteSubmission
 
 HOME_SHORTCUTS_KEY = "home_shortcuts"
 HIDDEN_MENUS_KEY = "hidden_menus"
+AUTO_EXPANDED_MENUS_KEY = "auto_expanded_menus"
+DEFAULT_AUTO_EXPANDED_MENU_KEYS = ["product-data", "automation", "system"]
 PROTECTED_MENU_KEYS = {"home", "settings"}
+
+
+def create_release_note(submission: ReleaseNoteSubmission) -> ReleaseNote:
+    return ReleaseNote.objects.create(**submission.model_dump())
+
+
+def update_release_note(note: ReleaseNote, submission: ReleaseNoteSubmission) -> ReleaseNote:
+    note.version = submission.version
+    note.content = submission.content
+    note.save(update_fields=["version", "content", "updated_at"])
+    return note
+
+
+def delete_release_note(note: ReleaseNote) -> None:
+    note.delete()
 
 
 def serialize_release_note(note: ReleaseNote) -> dict[str, Any]:
@@ -21,6 +39,8 @@ def serialize_release_note(note: ReleaseNote) -> dict[str, Any]:
 
 def read_menu_keys(key: str) -> list[str]:
     value = PortalPreference.objects.filter(key=key).values_list("value", flat=True).first()
+    if value is None and key == AUTO_EXPANDED_MENUS_KEY:
+        return DEFAULT_AUTO_EXPANDED_MENU_KEYS.copy()
     return [item for item in value or [] if isinstance(item, str)]
 
 

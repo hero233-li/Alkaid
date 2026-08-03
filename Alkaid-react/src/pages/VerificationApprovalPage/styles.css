@@ -46,7 +46,10 @@
   min-width: 0;
   border: 1px solid #e2e8f0;
   background: #ffffff;
-  transition: background-color 0.18s ease, border-color 0.18s ease, box-shadow 0.18s ease;
+  transition:
+    background-color 0.18s ease,
+    border-color 0.18s ease,
+    box-shadow 0.18s ease;
 }
 
 .verification-item-card--completed {
@@ -106,12 +109,10 @@
   .verification-item-grid {
     grid-template-columns: repeat(2, minmax(260px, 310px));
   }
-
 }
 
 @media (max-width: 720px) {
   .verification-item-grid {
     grid-template-columns: minmax(260px, 310px);
   }
-
 }

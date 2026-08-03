@@ -82,9 +82,7 @@ export default function NotificationPushOverlay({
           loading,
           pagination: false,
           locale: {
-            emptyText: loading
-              ? 'Workflow 正在加载通知记录...'
-              : '暂无通知记录',
+            emptyText: loading ? 'Workflow 正在加载通知记录...' : '暂无通知记录',
           },
           scroll: { x: 990 },
           size: 'small',

@@ -53,13 +53,17 @@ def _generate_application_link(request: httpx.Request) -> httpx.Response:
 
     message = json.loads(raw_message)
     application_request = message["REQ_BODY"]["request"]
-    digest = hashlib.sha256(
-        json.dumps(
-            application_request,
-            ensure_ascii=False,
-            sort_keys=True,
-        ).encode("utf-8")
-    ).hexdigest()[:12].upper()
+    digest = (
+        hashlib.sha256(
+            json.dumps(
+                application_request,
+                ensure_ascii=False,
+                sort_keys=True,
+            ).encode("utf-8")
+        )
+        .hexdigest()[:12]
+        .upper()
+    )
     link_id = f"LINK-{digest}"
     return httpx.Response(
         200,

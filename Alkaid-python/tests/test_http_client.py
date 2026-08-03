@@ -66,9 +66,12 @@ def test_connect_only_retries_connect_error_but_not_read_error(monkeypatch) -> N
         HttpClientConfig(base_url="https://example.test", max_retries=1),
         transport=httpx.MockTransport(connect_then_success),
     ) as client:
-        assert client.request(
-            "GET", "/items", response_model=Response, retry_mode=RetryMode.CONNECT_ONLY
-        ).code == "0000"
+        assert (
+            client.request(
+                "GET", "/items", response_model=Response, retry_mode=RetryMode.CONNECT_ONLY
+            ).code
+            == "0000"
+        )
     assert calls == 2
 
     calls = 0
@@ -103,9 +106,7 @@ def test_idempotent_retries_5xx_and_jitter_is_applied(monkeypatch) -> None:
         )
 
     with HttpClient(
-        HttpClientConfig(
-            base_url="https://example.test", max_retries=1, retry_backoff_seconds=1
-        ),
+        HttpClientConfig(base_url="https://example.test", max_retries=1, retry_backoff_seconds=1),
         transport=httpx.MockTransport(handler),
         random_uniform=lambda low, high: 1.2,
     ) as client:

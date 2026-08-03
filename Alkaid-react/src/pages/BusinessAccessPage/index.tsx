@@ -23,7 +23,12 @@ export default function BusinessAccessPage() {
     <div className="page-surface business-access-page">
       <div className="business-access-stack">
         {businessAccessForm.configError && (
-          <Alert type="error" showIcon message="业务准入配置加载失败" description={businessAccessForm.configError} />
+          <Alert
+            type="error"
+            showIcon
+            message="业务准入配置加载失败"
+            description={businessAccessForm.configError}
+          />
         )}
         <BusinessAccessSearchForm
           form={businessAccessForm.form}
@@ -51,7 +56,9 @@ export default function BusinessAccessPage() {
         busy={businessAccess.busy}
         pushingKey={businessAccess.pushingKey}
         onClose={businessAccess.closeNotifications}
-        onPush={(notification, versionType) => void businessAccess.pushNotification(notification, versionType)}
+        onPush={(notification, versionType) =>
+          void businessAccess.pushNotification(notification, versionType)
+        }
       />
       <BusinessAccessWorkflowModal activity={businessAccess.activity} />
     </div>

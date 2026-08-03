@@ -22,5 +22,5 @@ export async function executeProductApplication(payload: ProductApplicationSubmi
   if (!data.ok) {
     throw new Error(data.message || '产品申请执行失败');
   }
-  return data.data;
+  return { ...data.data, payload: payload.payload };
 }

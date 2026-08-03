@@ -32,7 +32,9 @@ describe('verification job polling', () => {
 
     const controller = new AbortController();
     controller.abort();
-    await expect(pollVerificationJob(7, vi.fn(), { signal: controller.signal })).rejects.toMatchObject({
+    await expect(
+      pollVerificationJob(7, vi.fn(), { signal: controller.signal }),
+    ).rejects.toMatchObject({
       name: 'AbortError',
     });
   });

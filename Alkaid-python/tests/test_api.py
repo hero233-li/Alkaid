@@ -25,7 +25,7 @@ def _product_b_submission() -> dict[str, object]:
             "applicationMethod": "normal",
             "redShieldEnabled": True,
             "idType": "01",
-            "projectId": "PROJECT-001",
+            "projectId": "PROJECT-002",
         },
     }
 
@@ -76,7 +76,7 @@ def test_product_application_freezes_catalog_and_reads_agreement(
     assert job.status == JobStatus.SUCCESS
     assert job.execution_config_snapshot["product_code"] == "product-b"
     assert job.payload["environment"] == "UAT1"
-    assert job.payload["environment"] == "UAT1"
+    assert job.payload["cooperationProjectId"] == "PROJECT-002"
     assert job.result["applicationLink"]["category"] == "太阳码"
     assert job.result["externalSession"]["established"] is True
     assert job.result["agreementReadCompleted"] is True

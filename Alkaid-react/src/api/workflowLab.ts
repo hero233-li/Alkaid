@@ -50,7 +50,8 @@ export async function getWorkflowLabGuide() {
 }
 
 export async function getWorkflowRuntime() {
-  const { data } = await apiClient.get<ApiResponse<WorkflowRuntimeSnapshot>>('/workflow-lab/runtime');
+  const { data } =
+    await apiClient.get<ApiResponse<WorkflowRuntimeSnapshot>>('/workflow-lab/runtime');
   if (!data.ok) {
     throw new Error(data.message || '获取 Worker 运行状态失败');
   }
@@ -63,12 +64,16 @@ export async function submitWorkflowLab(payload: {
   simulateFailure: boolean;
 }) {
   const requestId = crypto.randomUUID();
-  const { data } = await apiClient.post<ApiResponse<WorkflowLabJob>>('/workflow-lab/jobs', payload, {
-    headers: {
-      'X-Idempotency-Key': requestId,
-      'X-Trace-ID': requestId.split('-').join(''),
+  const { data } = await apiClient.post<ApiResponse<WorkflowLabJob>>(
+    '/workflow-lab/jobs',
+    payload,
+    {
+      headers: {
+        'X-Idempotency-Key': requestId,
+        'X-Trace-ID': requestId.split('-').join(''),
+      },
     },
-  });
+  );
   if (!data.ok) {
     throw new Error(data.message || '提交 Workflow 实验失败');
   }

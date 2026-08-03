@@ -4,10 +4,8 @@ from collections.abc import Mapping
 from copy import deepcopy
 from typing import Any, Protocol
 
-from apps.integrations.cjdk_jyrc.application_link_contract import (
-    FrozenApplicationLinkRoute,
-)
 from apps.integrations.cjdk_jyrc.models import GenerateApplicationLinkRequest
+from apps.product_data.product_applications.contracts import FrozenApplicationLinkRoute
 
 _MISSING = object()
 

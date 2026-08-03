@@ -5,10 +5,9 @@ function randomHex(bytes: number) {
     cryptoApi.getRandomValues(values);
     return Array.from(values, (value) => value.toString(16).padStart(2, '0')).join('');
   }
-  return Array.from(
-    { length: bytes * 2 },
-    () => Math.floor(Math.random() * 16).toString(16),
-  ).join('');
+  return Array.from({ length: bytes * 2 }, () => Math.floor(Math.random() * 16).toString(16)).join(
+    '',
+  );
 }
 
 export function createRequestId() {
