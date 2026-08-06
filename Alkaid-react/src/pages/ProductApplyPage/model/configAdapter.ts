@@ -24,6 +24,17 @@ function asString(value: unknown, context: string) {
   return value;
 }
 
+function asOptionalString(value: unknown, context: string): string | undefined {
+  if (value == null) {
+    return undefined;
+  }
+  if (typeof value !== 'string') {
+    throw new Error(`${context}格式错误`);
+  }
+  const normalized = value.trim();
+  return normalized || undefined;
+}
+
 function asStringArray(value: unknown, context: string) {
   if (!Array.isArray(value) || value.some((item) => typeof item !== 'string')) {
     throw new Error(`${context}格式错误`);
@@ -81,7 +92,7 @@ function asProducts(value: unknown): ProductDefinitionConfig[] {
     return {
       label: asString(product.label, `products[${index}].label`),
       value: asString(product.value, `products[${index}].value`),
-      cooperationProjectId: asString(
+      cooperationProjectId: asOptionalString(
         product.cooperationProjectId,
         `products[${index}].cooperationProjectId`,
       ),
