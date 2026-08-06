@@ -36,7 +36,7 @@ export interface ProductLocationConfig extends ProductOption {
 }
 
 export interface ProductDefinitionConfig extends ProductOption {
-  cooperationProjectId: string;
+  cooperationProjectId?: string | null;
   environments: string[];
   locations: ProductLocationConfig[];
   fieldSets: string[];
