@@ -29,16 +29,26 @@ class JavaGatewaySettings(BaseModel):
 
 
 class EnvironmentSettings(BaseModel):
-    model_config = ConfigDict(frozen=True, extra="forbid")
+    model_config = ConfigDict(frozen=True, extra="forbid", populate_by_name=True)
 
     agreement_base_url: str
+    session_url_template: str | None = Field(default=None, alias="sessionUrlTemplate")
+    session_method: Literal["GET", "POST"] = Field(default="GET", alias="sessionMethod")
+    verify_ssl: bool = Field(default=True, alias="verifySsl")
     session: SessionRequirement = Field(default_factory=lambda: SessionRequirement())
     url_policy: UrlPolicy | None = Field(default=None, alias="urlPolicy")
 
     @model_validator(mode="after")
-    def provide_url_policy(self) -> EnvironmentSettings:
+    def normalize_environment_settings(self) -> EnvironmentSettings:
         if self.url_policy is None:
             object.__setattr__(self, "url_policy", _default_url_policy(self.agreement_base_url))
+        if self.session_url_template is not None:
+            template = self.session_url_template.strip()
+            if not template:
+                raise ValueError("sessionUrlTemplate 不能为空")
+            if "{auth}" not in template:
+                raise ValueError("sessionUrlTemplate 必须包含 {auth} 占位符")
+            object.__setattr__(self, "session_url_template", template)
         return self
 
 
@@ -371,7 +381,14 @@ def _environment_settings(raw: object, *, mode: str) -> dict[str, EnvironmentSet
     for raw_name, raw_environment in local.items():
         name = _normalize_environment(str(raw_name))
         values = _mapping(raw_environment, f"environments.{name}")
-        unknown = set(values) - {"agreementBaseUrl", "session", "urlPolicy"}
+        unknown = set(values) - {
+            "agreementBaseUrl",
+            "sessionUrlTemplate",
+            "sessionMethod",
+            "verifySsl",
+            "session",
+            "urlPolicy",
+        }
         if unknown:
             raise ValueError(f"environments.{name} 包含未知字段：{', '.join(sorted(unknown))}")
         fallback_url = str(values.get("agreementBaseUrl", "")).strip().rstrip("/")
@@ -381,6 +398,18 @@ def _environment_settings(raw: object, *, mode: str) -> dict[str, EnvironmentSet
         base_url = fallback_url or (fallback.agreement_base_url if fallback else "")
         result[name] = EnvironmentSettings(
             agreement_base_url=base_url,
+            sessionUrlTemplate=values.get(
+                "sessionUrlTemplate",
+                fallback.session_url_template if fallback else None,
+            ),
+            sessionMethod=values.get(
+                "sessionMethod",
+                fallback.session_method if fallback else "GET",
+            ),
+            verifySsl=values.get(
+                "verifySsl",
+                fallback.verify_ssl if fallback else True,
+            ),
             session=values.get("session", fallback.session if fallback else {}),
             urlPolicy=values.get(
                 "urlPolicy", fallback.url_policy if fallback else _default_url_policy(base_url)
