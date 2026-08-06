@@ -20,7 +20,7 @@ class ProductLocation(ProductOption):
 
 
 class ProductDefinition(ProductOption):
-    cooperationProjectId: str = Field(min_length=1, max_length=128)
+    cooperationProjectId: str | None = Field(default=None, min_length=1, max_length=128)
     environments: tuple[str, ...]
     locations: tuple[ProductLocation, ...]
     fieldSets: tuple[str, ...] = Field(min_length=1)
