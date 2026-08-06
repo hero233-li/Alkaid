@@ -15,15 +15,25 @@
   "environments": {
     "UAT1": {
       "agreementBaseUrl": "http://实际内网主机:8090",
+      "sessionUrlTemplate": "http://实际内网主机:8090/h5main/microservice/startSceneLoanOpenBankApply.ajax?auth={auth}",
+      "sessionMethod": "POST",
+      "verifySsl": false,
       "session": {
-        "requiredCookies": [],
-        "requiredHeaders": [],
+        "requiredCookies": [
+          "token_id",
+          "JSESSIONID",
+          "X-FCOS-SESSIONID"
+        ],
+        "requiredHeaders": [
+          "X-Sd",
+          "X-Token"
+        ],
         "requiredAnyHeaders": []
       },
       "urlPolicy": {
-        "allowedSchemes": ["http"],
+        "allowedSchemes": ["http", "https"],
         "allowedHosts": ["实际内网主机"],
-        "allowedPorts": [8090],
+        "allowedPorts": [8090, 443],
         "allowCrossHostRedirect": false,
         "forwardSessionHeadersToHosts": ["实际内网主机"],
         "maxRedirects": 10
