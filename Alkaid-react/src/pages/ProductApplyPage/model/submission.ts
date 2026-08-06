@@ -23,7 +23,10 @@ export function buildProductSubmission(
   if (!product) {
     throw new Error(`产品配置不存在：${productCode}`);
   }
-  payload.cooperationProjectId = product.cooperationProjectId;
+  const cooperationProjectId = product.cooperationProjectId?.trim();
+  if (cooperationProjectId) {
+    payload.cooperationProjectId = cooperationProjectId;
+  }
   const companyName = String(values.companyName || '').trim();
   payload.customerType = companyName
     ? values.legalPerson === false
