@@ -162,7 +162,7 @@ class ProductCatalogSource(BaseModel):
 
     code: str = Field(min_length=1, max_length=128)
     name: str = Field(min_length=1, max_length=128)
-    cooperationProjectId: str = Field(min_length=1, max_length=128)
+    cooperationProjectId: str | None = Field(default=None, min_length=1, max_length=128)
     productType: str = Field(min_length=1, max_length=128)
     switchField: str = Field(min_length=1, max_length=128)
     defaultApplicationMethod: str = Field(min_length=1, max_length=128)
