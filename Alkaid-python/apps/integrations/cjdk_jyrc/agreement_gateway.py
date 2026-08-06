@@ -26,6 +26,25 @@ class AgreementProtocolError(RuntimeError):
     pass
 
 
+def _optional_payload_text(payload: Mapping[str, Any], key: str) -> str | None:
+    value = payload.get(key)
+    if value is None:
+        return None
+    normalized = str(value).strip()
+    return normalized or None
+
+
+def _required_payload_text(
+    payload: Mapping[str, Any],
+    key: str,
+    label: str,
+) -> str:
+    value = _optional_payload_text(payload, key)
+    if value is None:
+        raise AgreementProtocolError(f"当前任务缺少{label}：{key}")
+    return value
+
+
 class CjdkAgreementGateway:
     def __init__(
         self,
@@ -41,16 +60,21 @@ class CjdkAgreementGateway:
     ) -> tuple[AgreementTemplateResult, ...]:
         message = new_message("query_agreement_templates_v1")
         request = message["REQ_BODY"]["request"]
+        product_id = _required_payload_text(payload, "product", "产品编号")
+        cooperation_project_id = _optional_payload_text(payload, "cooperationProjectId")
         request.update(
             {
                 "x-channel": config.channel(),
                 "scene": config.scene(),
-                "selbProdId": config.product_id(),
+                "selbProdId": product_id,
                 "branchId": str(payload["branch"]),
                 "prodSubdvDmsn": config.product_subdivision(),
-                "prodSubdvDmsnEncode": config.product_subdivision_encode(),
             }
         )
+        request.pop("prodSubdvDmsnEncode", None)
+        if cooperation_project_id is not None:
+            request["prodSubdvDmsnEncode"] = cooperation_project_id
+
         response = self._client.request(
             step="agreement.query_templates",
             endpoint=QUERY_AGREEMENT_TEMPLATES,
@@ -83,33 +107,50 @@ class CjdkAgreementGateway:
         ] or list(config.default_template_numbers())
         if not template_numbers:
             raise AgreementProtocolError("没有可用于生成协议预览的模板编号")
+
         message = new_message("query_preview_image_v1")
         request = message["REQ_BODY"]["request"]
         auth_values = {
             "custNme": str(payload.get("personName") or ""),
             "idNo": str(payload.get("certificateNo") or ""),
-            "idType": str(payload.get("idType") or config.default_id_type()),
             "orgCode": str(payload.get("branch") or ""),
         }
+        id_type = str(payload.get("idType") or config.default_id_type()).strip()
+        if id_type:
+            auth_values["idType"] = id_type
+        template_auth_variables = request.get("authVariableList", [])
+        request["authVariableList"] = [
+            {
+                **item,
+                "value": auth_values.get(
+                    str(item.get("code") or ""),
+                    str(item.get("value") or ""),
+                ),
+            }
+            for item in template_auth_variables
+        ]
+
+        product_id = _required_payload_text(payload, "product", "产品编号")
         request.update(
             {
                 "x-channel": config.channel(),
-                "authVariableList": [
-                    {"code": code, "value": value} for code, value in auth_values.items()
-                ],
-                "selbProdId": config.product_id(),
+                "selbProdId": product_id,
                 "businessNo": config.business_no(),
-                "fcosTemplateNoList": [{"fcosTemplateNo": number} for number in template_numbers],
-                "coprProjeId": str(
-                    payload.get("projectId")
-                    or payload.get("cooperationProjectId")
-                    or config.default_project_id()
-                ),
-                "prodSubdvDmsnEncode": config.product_subdivision_encode(),
+                "fcosTemplateNoList": [
+                    {"fcosTemplateNo": number} for number in template_numbers
+                ],
             }
         )
+        cooperation_project_id = _optional_payload_text(payload, "cooperationProjectId")
+        request.pop("coprProjeId", None)
+        request.pop("prodSubdvDmsnEncode", None)
+        if cooperation_project_id is not None:
+            request["prodSubdvDmsnEncode"] = cooperation_project_id
+
         response = self._client.request(
-            step="agreement.query_preview", endpoint=QUERY_PREVIEW_IMAGE, message=message
+            step="agreement.query_preview",
+            endpoint=QUERY_PREVIEW_IMAGE,
+            message=message,
         )
         preview = response.rsp_body.response
         if preview.success_flag != "Y":
