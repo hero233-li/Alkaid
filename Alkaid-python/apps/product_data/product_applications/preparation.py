@@ -27,16 +27,22 @@ def freeze_product_execution_snapshot(
     payload["environment"] = environment
     payload["product"] = submission.product
     payload["applicationMethod"] = method.code
+
+    configured_project_id = product.cooperationProjectId
     provided_project_ids = (
         payload.pop("projectId", None),
-        payload.get("cooperationProjectId"),
+        payload.pop("cooperationProjectId", None),
     )
-    if any(
-        value not in {None, ""} and value != product.cooperationProjectId
-        for value in provided_project_ids
-    ):
-        raise ProductConfigurationError("合作项目与产品配置不一致")
-    payload["cooperationProjectId"] = product.cooperationProjectId
+    if configured_project_id is None:
+        if any(value not in {None, ""} for value in provided_project_ids):
+            raise ProductConfigurationError("当前产品未绑定合作项目")
+    else:
+        if any(
+            value not in {None, ""} and value != configured_project_id
+            for value in provided_project_ids
+        ):
+            raise ProductConfigurationError("合作项目与产品配置不一致")
+        payload["cooperationProjectId"] = configured_project_id
 
     payload = validate_and_normalize_payload(
         product=product,
