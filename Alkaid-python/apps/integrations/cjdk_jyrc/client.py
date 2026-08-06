@@ -1,11 +1,15 @@
 from __future__ import annotations
 
 import json
+import logging
+import os
+import re
 import uuid
 from collections.abc import Mapping
 from typing import Any
-from urllib.parse import parse_qs, urljoin, urlsplit
+from urllib.parse import parse_qs, quote, urljoin, urlsplit
 
+import httpx
 from django.conf import settings as django_settings
 from django.utils import timezone
 
@@ -20,7 +24,10 @@ from apps.integrations.contracts import EndpointSpec, IntegrationObserver, Respo
 from apps.integrations.http import HttpCallObserver, HttpClient, HttpClientConfig
 from apps.product_data.product_applications.contracts import SessionState, SessionStatus
 
-SESSION_RESPONSE_HEADERS = ("X-Token", "X-FCOS-SESSIONID", "X-Sd")
+logger = logging.getLogger(__name__)
+
+SESSION_COOKIE_NAMES = ("token_id", "JSESSIONID", "X-FCOS-SESSIONID")
+SESSION_RESPONSE_HEADERS = ("X-Sd", "X-Token", "X-FCOS-SESSIONID")
 REDIRECT_STATUSES = {301, 302, 303, 307, 308}
 
 
@@ -129,10 +136,16 @@ class CjdkJyrcClient:
         )
         self._http_client: HttpClient | None = None
         self._session_headers: dict[str, str] = {}
+        self._session_cookies: dict[str, str] = {}
         self._session_state = SessionState()
 
     def __enter__(self) -> CjdkJyrcClient:
         limits = self._settings.response_limits
+        transport: httpx.BaseTransport | None
+        if self._settings.mode == "mock":
+            transport = create_mock_transport()
+        else:
+            transport = httpx.HTTPTransport(verify=self._environment.verify_ssl)
         self._http_client = HttpClient(
             HttpClientConfig(
                 base_url=self.base_url,
@@ -146,7 +159,7 @@ class CjdkJyrcClient:
                 follow_redirects=False,
                 max_response_bytes=limits.max_json_bytes,
             ),
-            transport=create_mock_transport() if self._settings.mode == "mock" else None,
+            transport=transport,
         )
         return self
 
@@ -166,37 +179,80 @@ class CjdkJyrcClient:
             self._session_state = SessionState(status=SessionStatus.FAILED)
             raise
 
+    def _extract_application_auth(self, application_url: str) -> str | None:
+        parsed = urlsplit(application_url)
+        query_candidates: list[str] = []
+        if parsed.query:
+            query_candidates.append(parsed.query)
+        if "?" in parsed.fragment:
+            _, fragment_query = parsed.fragment.split("?", 1)
+            query_candidates.append(fragment_query)
+        for query in query_candidates:
+            auth_values = parse_qs(query, keep_blank_values=True).get("auth", [])
+            if auth_values and auth_values[0].strip():
+                return auth_values[0].strip()
+        return None
+
+    def _build_session_request_url(self, application_url: str, auth: str | None) -> str:
+        template = self._environment.session_url_template
+        if not template:
+            return application_url
+        if not auth:
+            raise RuntimeError("申请链接中缺少有效的 auth 参数")
+        return template.replace("{auth}", quote(auth, safe=""))
+
     def _acquire_session(self, application_url: str) -> SessionState:
         client = self._require_client()
         policy = self._environment.url_policy
         validate_external_url(application_url, policy)
-        auth_values = parse_qs(urlsplit(application_url).query, keep_blank_values=True).get(
-            "auth", []
-        )
+        auth = self._extract_application_auth(application_url)
+        session_request_url = self._build_session_request_url(application_url, auth)
+        validate_external_url(session_request_url, policy)
+        request_method = self._environment.session_method
+
         self._observer.diagnostic(
             step="application_link.acquire_session",
             title="Session 初始化入口",
             content={
-                "currentImplementation": "GET application URL and validate redirects",
-                "applicationUrl": application_url,
-                "authParameterPresent": bool(auth_values),
-                "authParameterLength": len(auth_values[0]) if auth_values else 0,
+                "currentImplementation": (
+                    f"extract auth and {request_method} composed session URL"
+                ),
+                "sourceApplicationHost": urlsplit(application_url).hostname,
+                "sessionRequestUrl": session_request_url.split("?", 1)[0],
+                "authParameterPresent": bool(auth),
+                "authParameterLength": len(auth) if auth else 0,
                 "environment": self.environment,
             },
         )
 
-        current_url = application_url
+        current_url = session_request_url
         previous_url: str | None = None
         chain: list[dict[str, Any]] = []
         page_opened = False
         redirect_limit = min(policy.max_redirects, self._settings.response_limits.max_redirects)
+        raw_session_debug = (
+            os.getenv("CJDK_SESSION_RAW_LOG", "false").strip().lower()
+            in {"1", "true", "yes", "on"}
+        )
         for redirect_count in range(redirect_limit + 1):
             validate_external_url(current_url, policy, previous_url=previous_url)
-            page_headers = {"Accept": "text/html,application/xhtml+xml"}
-            if not may_forward_session_headers(current_url, policy):
+            page_headers = {"Accept": "application/json,text/plain,*/*"}
+            if request_method == "POST":
+                page_headers["Content-Type"] = (
+                    "application/x-www-form-urlencoded;charset=UTF-8"
+                )
+            if may_forward_session_headers(current_url, policy):
+                page_headers.update(self._session_headers)
+            else:
                 page_headers["Cookie"] = ""
+
+            if raw_session_debug:
+                logger.warning("SESSION_RAW request_method=%s", request_method)
+                logger.warning("SESSION_RAW request_url=%s", current_url)
+                logger.warning("SESSION_RAW request_headers=%r", page_headers)
+
             response = client.open_url(
-                "GET",
+                request_method,
                 current_url,
                 headers=page_headers,
                 trace_id=self._trace_id,
@@ -204,10 +260,27 @@ class CjdkJyrcClient:
             )
             if len(response.content) > self._settings.response_limits.max_html_bytes:
                 raise RuntimeError(
-                    f"申请页面响应体超过上限 {self._settings.response_limits.max_html_bytes} bytes"
+                    f"Session 响应体超过上限 {self._settings.response_limits.max_html_bytes} bytes"
                 )
-            self._capture_session(dict(response.headers))
-            chain.append({"statusCode": response.status_code, "url": str(response.url)})
+            self._capture_session(
+                dict(response.headers),
+                set_cookie_values=tuple(response.headers.get_list("set-cookie")),
+            )
+            if raw_session_debug:
+                logger.warning("SESSION_RAW response_status=%s", response.status_code)
+                logger.warning(
+                    "SESSION_RAW set_cookie=%r",
+                    response.headers.get_list("set-cookie"),
+                )
+                logger.warning("SESSION_RAW response_headers=%r", dict(response.headers))
+
+            chain.append(
+                {
+                    "statusCode": response.status_code,
+                    "url": str(response.url),
+                    "method": request_method,
+                }
+            )
             page_opened = True
             if response.status_code not in REDIRECT_STATUSES:
                 current_url = str(response.url)
@@ -219,6 +292,8 @@ class CjdkJyrcClient:
                 raise RuntimeError(f"外系统重定向次数超过上限 {redirect_limit}")
             previous_url = current_url
             current_url = urljoin(current_url, location)
+            if response.status_code in {301, 302, 303}:
+                request_method = "GET"
 
         self._session_state = self._evaluate_session(page_opened=page_opened, final_url=current_url)
         self._observer.diagnostic(
@@ -233,7 +308,9 @@ class CjdkJyrcClient:
                 "missingCookies": list(self._session_state.missing_cookies),
                 "missingHeaders": list(self._session_state.missing_headers),
                 "missingAnyHeaders": list(self._session_state.missing_any_headers),
-                "warning": "尚未实现 auth 换取 TokenId 的真实 Session 初始化接口",
+                "sessionInitialized": (
+                    self._session_state.status == SessionStatus.ESTABLISHED
+                ),
             },
             level=("INFO" if self._session_state.status == SessionStatus.ESTABLISHED else "ERROR"),
         )
@@ -284,8 +361,11 @@ class CjdkJyrcClient:
         return result.data
 
     def _evaluate_session(self, *, page_opened: bool, final_url: str | None) -> SessionState:
-        cookies = self._http_client.cookie_names if self._http_client else ()
-        headers = tuple(sorted(self._session_headers))
+        http_cookie_names = self._http_client.cookie_names if self._http_client else ()
+        cookies = tuple(sorted(set(http_cookie_names) | set(self._session_cookies)))
+        headers = tuple(
+            sorted(name for name in self._session_headers if name.lower() != "cookie")
+        )
         return evaluate_session_state(
             page_opened=page_opened,
             cookie_names=cookies,
@@ -294,8 +374,32 @@ class CjdkJyrcClient:
             final_url=final_url,
         )
 
-    def _capture_session(self, response_headers: Mapping[str, str]) -> None:
+    def _capture_session(
+        self,
+        response_headers: Mapping[str, str],
+        *,
+        set_cookie_values: tuple[str, ...] = (),
+    ) -> None:
         normalized = {name.lower(): value for name, value in response_headers.items()}
+        raw_set_cookie = "\n".join(set_cookie_values) or normalized.get("set-cookie", "")
+        target_cookie_names = tuple(
+            dict.fromkeys((*SESSION_COOKIE_NAMES, *self._environment.session.required_cookies))
+        )
+        for cookie_name in target_cookie_names:
+            pattern = (
+                rf"(?i)(?:^|[\r\n,;]\s*){re.escape(cookie_name)}=([^;,\r\n]+)"
+            )
+            match = re.search(pattern, raw_set_cookie)
+            if match:
+                self._session_cookies[cookie_name] = match.group(1).strip()
+
+        if self._session_cookies:
+            self._session_headers["Cookie"] = "; ".join(
+                f"{cookie_name}={self._session_cookies[cookie_name]}"
+                for cookie_name in target_cookie_names
+                if cookie_name in self._session_cookies
+            )
+
         for header_name in SESSION_RESPONSE_HEADERS:
             value = normalized.get(header_name.lower())
             if value:
