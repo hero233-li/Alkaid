@@ -16,15 +16,18 @@ def new_message(name: str) -> dict[str, Any]:
 
 @lru_cache(maxsize=1)
 def _message_catalog() -> dict[str, dict[str, Any]]:
-    path = RAW_MESSAGE_ROOT / "agreement.json"
-    raw = json.loads(path.read_text(encoding="utf-8"))
-    if not isinstance(raw, dict):
-        raise ValueError("CJDK-JYRC agreement.json 必须是 JSON 对象")
     messages: dict[str, dict[str, Any]] = {}
-    for name, message in raw.items():
-        if not isinstance(message, dict):
-            raise ValueError(f"CJDK-JYRC 报文 {name} 必须是 JSON 对象")
-        messages[str(name)] = message
+    for path in sorted(RAW_MESSAGE_ROOT.glob("*.json")):
+        raw = json.loads(path.read_text(encoding="utf-8"))
+        if not isinstance(raw, dict):
+            raise ValueError(f"CJDK-JYRC {path.name} 必须是 JSON 对象")
+        for name, message in raw.items():
+            if not isinstance(message, dict):
+                raise ValueError(f"CJDK-JYRC 报文 {name} 必须是 JSON 对象")
+            key = str(name)
+            if key in messages:
+                raise ValueError(f"CJDK-JYRC 原始报文重复：{key}")
+            messages[key] = message
     return messages
 
 
@@ -34,6 +37,14 @@ def validate_message_catalog() -> dict[str, int]:
         "query_agreement_templates_v1",
         "query_preview_image_v1",
         "show_document_by_doc_id_v1",
+        "identity_get_public_key_v1",
+        "identity_get_prepare_mobile_v1",
+        "identity_ali_sdk_params_v1",
+        "identity_ali_video_check_u12_v1",
+        "identity_ali_video_check_uc_v1",
+        "identity_sms_code_send_v1",
+        "identity_sms_code_check_v1",
+        "identity_card_verify_v1",
     }
     missing = required - catalog.keys()
     if missing:

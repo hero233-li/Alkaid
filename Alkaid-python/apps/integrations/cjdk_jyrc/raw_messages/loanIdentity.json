@@ -1,0 +1,114 @@
+{
+  "identity_get_public_key_v1": {
+    "REQ_HEAD": {},
+    "REQ_BODY": {
+      "request": {
+        "x-channel": 13,
+        "selblProdId": "",
+        "businessNo": "",
+        "applyPhraseId": "1"
+      }
+    }
+  },
+  "identity_get_prepare_mobile_v1": {
+    "REQ_HEAD": {},
+    "REQ_BODY": {
+      "request": {
+        "x-channel": 13,
+        "custName": "",
+        "identityNo": "",
+        "branchNo": "",
+        "cardNo": "",
+        "identityType": "0102"
+      }
+    }
+  },
+  "identity_ali_sdk_params_v1": {
+    "REQ_HEAD": {},
+    "REQ_BODY": {
+      "request": {
+        "x-channel": 13,
+        "traceNumber": "",
+        "selblProdId": "",
+        "applyNo": ""
+      }
+    }
+  },
+  "identity_ali_video_check_u12_v1": {
+    "REQ_HEAD": {},
+    "REQ_BODY": {
+      "request": {
+        "x-channel": 13,
+        "selblProdId": "",
+        "idNo": "",
+        "idName": "",
+        "traceNumber": "",
+        "branchNo": "",
+        "bizId": "",
+        "license": "",
+        "applyNo": "",
+        "mobile": ""
+      }
+    }
+  },
+  "identity_ali_video_check_uc_v1": {
+    "REQ_HEAD": {},
+    "REQ_BODY": {
+      "request": {
+        "x-channel": 13,
+        "selblProdId": "",
+        "idNo": "",
+        "idName": "",
+        "traceNumber": "",
+        "branchNo": "",
+        "bizId": "",
+        "license": "",
+        "applyNo": "",
+        "mobile": ""
+      }
+    }
+  },
+  "identity_sms_code_send_v1": {
+    "REQ_HEAD": {},
+    "REQ_BODY": {
+      "request": {
+        "x-channel": 13,
+        "mobile": "",
+        "branchNo": "",
+        "selblProdId": "",
+        "captchTraceid": ""
+      }
+    }
+  },
+  "identity_sms_code_check_v1": {
+    "REQ_HEAD": {},
+    "REQ_BODY": {
+      "request": {
+        "x-channel": 13,
+        "cryptFlowNo": "",
+        "mobile": "",
+        "mobileCode": "",
+        "captchTraceid": "",
+        "selblProdId": "",
+        "businessNo": ""
+      }
+    }
+  },
+  "identity_card_verify_v1": {
+    "REQ_HEAD": {},
+    "REQ_BODY": {
+      "request": {
+        "x-channel": 13,
+        "selblProdId": "",
+        "businessNo": "",
+        "applyNo": "",
+        "custName": "",
+        "identityNo": "",
+        "mobile": "",
+        "captchTraceid": "",
+        "smsMessageId": "",
+        "cryptFlowNo": ""
+      }
+    }
+  }
+}

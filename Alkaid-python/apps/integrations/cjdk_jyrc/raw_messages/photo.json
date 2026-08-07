@@ -1,0 +1,8 @@
+{
+  "delete_certificate_photo_v1": {
+    "REQ_HEAD": {},
+    "REQ_BODY": {
+      "idNo": ""
+    }
+  }
+}
