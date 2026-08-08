@@ -12,7 +12,7 @@ urlpatterns = [
     path("api/jobs/", include("apps.jobs.urls")),
     path("api/documents/", include("apps.documents.urls")),
     path("api/portal/", include("apps.portal.urls")),
-    path("api/product-data/", include("apps.product_data.urls")),
+    path("api/product-data/", include("apps.product_applications.urls")),
 ]
 
 if settings.WORKBENCH_ENABLED:

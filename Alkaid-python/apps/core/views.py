@@ -8,7 +8,7 @@ from django.views.decorators.http import require_GET
 
 from apps.core.readiness import collect_readiness
 from apps.core.responses import api_response
-from apps.integrations.cjdk_jyrc.config import get_cjdk_jyrc_settings
+from apps.product_applications.cjdk.config import get_cjdk_jyrc_settings
 
 logger = logging.getLogger(__name__)
 

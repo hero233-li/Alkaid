@@ -4,7 +4,7 @@ import pytest
 from django.test import override_settings
 
 from apps.jobs.models import Job, JobStatus
-from apps.product_data.product_applications.tasks import execute_product_application
+from apps.product_applications.tasks import execute_product_application
 
 
 def _product_b_submission() -> dict[str, object]:
@@ -38,7 +38,7 @@ def test_readiness_checks_database_catalog_and_messages(client) -> None:
     assert response.status_code == 200
     assert body["status"] == "ready"
     assert body["checks"]["catalog"]["products"] == 3
-    assert body["checks"]["agreementMessages"]["messages"] == 3
+    assert body["checks"]["agreementMessages"]["messages"] == 12
 
 
 def test_capabilities_match_current_backend_routes(client) -> None:
@@ -80,9 +80,22 @@ def test_product_application_freezes_catalog_and_reads_agreement(
     assert job.result["applicationLink"]["category"] == "太阳码"
     assert job.result["externalSession"]["established"] is True
     assert job.result["agreementReadCompleted"] is True
+    assert job.result["identityVerificationCompleted"] is True
     assert job.result["agreementDocuments"][0]["fileName"] == "mock-agreement.pdf"
     # Each validated redirect hop is audited independently.
-    assert job.api_calls.count() == 6
+    assert job.api_calls.count() == 16
+    identity_steps = list(
+        job.api_calls.filter(step__startswith="identity.").values_list("step", flat=True)
+    )
+    assert identity_steps == [
+        "identity.get_public_key",
+        "identity.get_prepare_mobile",
+        "identity.ali_sdk_params",
+        "identity.ali_video_check",
+        "identity.sms_code_send",
+        "identity.sms_code_check",
+        "identity.card_verify",
+    ]
 
 
 @pytest.mark.django_db

@@ -2,13 +2,14 @@ from copy import deepcopy
 
 import pytest
 
-from apps.product_data.catalog import CatalogField, load_product_catalog
-from apps.product_data.product_applications.preparation import freeze_product_execution_snapshot
-from apps.product_data.product_applications.schemas import ProductApplicationSubmission
-from apps.product_data.product_applications.validation import (
+from apps.product_applications.api import (
+    ProductApplicationSubmission,
     ProductConfigurationError,
     validate_and_normalize_payload,
 )
+from apps.product_applications.cjdk.runtime import compile_application_link_plan
+from apps.product_applications.workflow import freeze_product_execution_snapshot
+from apps.product_data.catalog import CatalogField, load_product_catalog
 
 
 def _product_with(field: CatalogField):
@@ -126,8 +127,9 @@ def test_product_cooperation_project_is_injected_and_conflicts_are_rejected() ->
     prepared = freeze_product_execution_snapshot(
         ProductApplicationSubmission(name="产品B申请", product="product-b", payload=payload),
         catalog,
+        plan_compiler=compile_application_link_plan,
     )
-    assert prepared.submission.payload["cooperationProjectId"] == "PROJECT-002"
+    assert prepared[0].payload["cooperationProjectId"] == "PROJECT-002"
 
     conflicting = {**payload, "cooperationProjectId": "PROJECT-001"}
     with pytest.raises(ProductConfigurationError, match="合作项目与产品配置不一致"):
@@ -136,4 +138,5 @@ def test_product_cooperation_project_is_injected_and_conflicts_are_rejected() ->
                 name="产品B申请", product="product-b", payload=conflicting
             ),
             catalog,
+            plan_compiler=compile_application_link_plan,
         )

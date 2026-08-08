@@ -1,6 +1,6 @@
 from django.urls import path
 
-from apps.product_data.product_applications.views import (
+from apps.product_applications.api import (
     create_product_application,
     product_application_config,
 )

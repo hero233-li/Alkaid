@@ -1,19 +1,23 @@
 import pytest
 
-from apps.integrations.cjdk_jyrc.client import evaluate_session_state
-from apps.integrations.cjdk_jyrc.config import SessionRequirement, UrlPolicy
-from apps.integrations.cjdk_jyrc.url_policy import (
+from apps.product_applications.api import ProductApplicationSubmission
+from apps.product_applications.cjdk.config import EnvironmentSettings
+from apps.product_applications.cjdk.runtime import (
+    SessionStatus,
     UnsafeExternalUrl,
+    compile_application_link_plan,
+    evaluate_session_state,
     may_forward_session_headers,
     validate_external_url,
 )
+from apps.product_applications.workflow import (
+    execute_product_application,
+    freeze_product_execution_snapshot,
+)
 from apps.product_data.catalog import load_product_catalog
-from apps.product_data.product_applications.contracts import ApplicationLinksResult, SessionStatus
-from apps.product_data.product_applications.preparation import freeze_product_execution_snapshot
-from apps.product_data.product_applications.schemas import ProductApplicationSubmission
-from apps.product_data.product_applications.use_cases import execute_product_application
 
-REQUIREMENT = SessionRequirement(
+REQUIREMENT = EnvironmentSettings(
+    agreement_base_url="http://12.244.142.116:8090",
     requiredCookies=("JSESSIONID", "token_id"),
     requiredAnyHeaders=("X-Token", "X-FCOS-SESSIONID"),
 )
@@ -43,8 +47,9 @@ def test_session_is_established_only_when_requirements_are_met() -> None:
     assert state.status == SessionStatus.ESTABLISHED
 
 
-def _policy(**updates) -> UrlPolicy:
+def _policy(**updates) -> EnvironmentSettings:
     values = {
+        "agreement_base_url": "http://12.244.142.116:8090",
         "allowedSchemes": ["http"],
         "allowedHosts": ["12.244.142.116", "allowed.internal"],
         "allowedPorts": [8090],
@@ -52,7 +57,7 @@ def _policy(**updates) -> UrlPolicy:
         "forwardSessionHeadersToHosts": ["12.244.142.116"],
     }
     values.update(updates)
-    return UrlPolicy.model_validate(values)
+    return EnvironmentSettings.model_validate(values)
 
 
 def test_url_policy_checks_scheme_credentials_host_port_and_redirects() -> None:
@@ -106,7 +111,11 @@ def test_partial_session_stops_before_agreement_query() -> None:
             "redShieldEnabled": True,
         },
     )
-    prepared = freeze_product_execution_snapshot(submission, load_product_catalog())
+    prepared = freeze_product_execution_snapshot(
+        submission,
+        load_product_catalog(),
+        plan_compiler=compile_application_link_plan,
+    )
 
     class PartialPort:
         application_link_url_mode = "internal"
@@ -118,32 +127,27 @@ def test_partial_session_stops_before_agreement_query() -> None:
         def __exit__(self, *args):
             return None
 
-        def generate_application_link(self, command):
-            return ApplicationLinksResult(
-                internal_url="http://allowed/link", external_url="http://allowed/link"
-            )
-
-        def initialize_session(self, application_url):
-            return evaluate_session_state(
+        def open_application(self, **kwargs):
+            state = evaluate_session_state(
                 page_opened=True,
                 cookie_names=("unrelated",),
                 header_names=(),
                 requirement=REQUIREMENT,
             )
+            if state.status != SessionStatus.ESTABLISHED:
+                raise RuntimeError("停止协议查询")
+            return {}
 
-        def query_agreement_templates(self, payload):
+        def read_agreements(self, **kwargs):
             self.queried = True
-            return ()
+            return {}
 
     port = PartialPort()
     with pytest.raises(RuntimeError, match="停止协议查询"):
         execute_product_application(
             runtime=port,
-            application_links=port,
-            external_session=port,
-            agreements=port,
-            submission=prepared.submission,
-            snapshot=prepared.snapshot,
+            submission=prepared[0],
+            snapshot=prepared[1],
             application_link_kind="internal",
         )
     assert port.queried is False

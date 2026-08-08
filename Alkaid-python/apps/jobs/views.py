@@ -2,7 +2,7 @@ from celery import current_app
 from django.db.models import Count, Q
 from django.http import HttpRequest, JsonResponse
 from django.views.decorators.csrf import csrf_exempt
-from django.views.decorators.http import require_GET, require_POST
+from django.views.decorators.http import require_GET, require_http_methods, require_POST
 
 from apps.core.responses import api_error, api_response
 from apps.jobs.dispatch import enqueue_job
@@ -14,6 +14,7 @@ from apps.jobs.services import (
     serialize_log,
 )
 from apps.jobs.use_cases import cancel_job as cancel_job_use_case
+from apps.jobs.use_cases import delete_all_jobs as delete_all_jobs_use_case
 from apps.jobs.use_cases import retry_job as retry_job_use_case
 
 
@@ -24,8 +25,12 @@ def _get_job(job_id: int) -> Job | None:
         return None
 
 
-@require_GET
+@csrf_exempt
+@require_http_methods(["GET", "DELETE"])
 def job_list(request: HttpRequest) -> JsonResponse:
+    if request.method == "DELETE":
+        result = delete_all_jobs_use_case()
+        return api_response(result, message="已结束任务记录已全部清除")
     status = request.GET.get("status", "").strip()
     valid_statuses = {value for value, _label in JobStatus.choices}
     if status and status not in valid_statuses:

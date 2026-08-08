@@ -1,30 +1,50 @@
+from __future__ import annotations
+
+import json
 import re
 from collections.abc import Mapping
 from copy import deepcopy
 from decimal import Decimal
+from enum import Enum
 from typing import Any
 
+from django.conf import settings
+from django.db import transaction
+from django.http import HttpRequest, JsonResponse
+from django.views.decorators.csrf import csrf_exempt
+from django.views.decorators.http import require_GET, require_POST
+from pydantic import BaseModel, Field, ValidationError
+
+from apps.core.responses import api_error, api_response
+from apps.jobs.dispatch import enqueue_job
+from apps.jobs.services import JobConflict, serialize_job
 from apps.product_data.catalog import (
     CatalogField,
     ProductCatalog,
+    ProductCatalogError,
     ProductCatalogSource,
     ProductExecutionSnapshot,
+    load_product_ui_config,
 )
-from apps.product_data.product_applications.schemas import (
-    CustomerType,
-    ProductApplicationSubmission,
-)
+
+
+class ProductApplicationSubmission(BaseModel):
+    name: str = Field(min_length=1, max_length=255)
+    product: str = Field(min_length=1, max_length=128)
+    payload: dict[str, Any]
+
+
+class CustomerType(str, Enum):
+    FARMER = "farmer"
+    LEGAL_PERSON = "legal_person"
+    SHAREHOLDER = "shareholder"
 
 
 class ProductConfigurationError(ValueError):
     pass
 
 
-INTEGRATION_OPTIONAL_FIELDS = {
-    "idType",
-    "projectId",
-    "cooperationProjectId",
-}
+INTEGRATION_OPTIONAL_FIELDS = {"idType", "projectId", "cooperationProjectId"}
 
 
 def validate_submission(
@@ -34,14 +54,12 @@ def validate_submission(
 ) -> None:
     if execution_snapshot.product_code != submission.product:
         raise ProductConfigurationError("Job 执行配置与提交产品不一致")
-
     payload = submission.payload
     if payload.get("product") not in {None, submission.product}:
         raise ProductConfigurationError("payload.product 与提交产品不一致")
     environment = str(payload.get("environment") or "").strip().upper()
     if environment != execution_snapshot.environment:
         raise ProductConfigurationError("环境与 Job 执行配置不一致")
-
     customer_type = validate_customer_type(payload)
     if payload.get("applicationMethod") != execution_snapshot.method_code:
         raise ProductConfigurationError("申请方式与 Job 执行配置不一致")
@@ -55,7 +73,6 @@ def validate_submission(
     ]
     if missing:
         raise ProductConfigurationError(f"缺少必填字段：{', '.join(sorted(missing))}")
-
     if catalog is not None:
         try:
             product = catalog.product(submission.product)
@@ -73,12 +90,10 @@ def validate_submission(
 def normalize_environment(value: object, catalog: ProductCatalog) -> str:
     if not isinstance(value, str) or not value.strip():
         raise ProductConfigurationError("环境不能为空")
-
     normalized = value.strip().upper()
     for option in catalog.reference.environments:
         if normalized in {option.value.upper(), option.label.upper()}:
             return option.value
-
     allowed = ", ".join(option.value for option in catalog.reference.environments)
     raise ProductConfigurationError(f"环境必须是以下值之一：{allowed}")
 
@@ -91,12 +106,13 @@ def validate_customer_type(payload: Mapping[str, Any]) -> CustomerType:
     except (TypeError, ValueError):
         allowed = ", ".join(item.value for item in CustomerType)
         raise ProductConfigurationError(f"customerType 必须是以下值之一：{allowed}") from None
-
     company_value = payload.get("companyName")
-    if company_value is not None and not isinstance(company_value, str):
+    if company_value is not None and (not isinstance(company_value, str)):
         raise ProductConfigurationError("企业名称必须是字符串")
     company_name = (company_value or "").strip()
-    if customer_type in {CustomerType.LEGAL_PERSON, CustomerType.SHAREHOLDER} and not company_name:
+    if customer_type in {CustomerType.LEGAL_PERSON, CustomerType.SHAREHOLDER} and (
+        not company_name
+    ):
         raise ProductConfigurationError("法人或股东类型必须填写企业名称")
     if customer_type == CustomerType.FARMER and company_name:
         raise ProductConfigurationError("填写企业名称后，客户类型必须是法人或股东")
@@ -108,13 +124,9 @@ def validate_customer_rules(payload: Mapping[str, Any]) -> None:
 
 
 def validate_and_normalize_payload(
-    *,
-    product: ProductCatalogSource,
-    method_code: str,
-    raw_payload: Mapping[str, Any],
+    *, product: ProductCatalogSource, method_code: str, raw_payload: Mapping[str, Any]
 ) -> dict[str, Any]:
     """Strictly validate declared product fields without mutating caller data."""
-
     normalized = deepcopy(dict(raw_payload))
     fields = product.enabled_execution_fields(method_code)
     for field in fields:
@@ -173,11 +185,13 @@ def _validate_field_constraints(field: CatalogField, value: Any) -> None:
             raise ProductConfigurationError(f"字段 {name} 长度不能超过 {field.maxLength}")
         if field.pattern and re.fullmatch(field.pattern, value) is None:
             raise ProductConfigurationError(f"字段 {name} 格式不符合 pattern")
-    if field.allowedValues and not any(
-        type(value) is type(allowed) and value == allowed for allowed in field.allowedValues
+    if field.allowedValues and (
+        not any(
+            type(value) is type(allowed) and value == allowed for allowed in field.allowedValues
+        )
     ):
         raise ProductConfigurationError(f"字段 {name} 必须是 allowedValues 中的值")
-    if isinstance(value, (int, float, Decimal)) and not isinstance(value, bool):
+    if isinstance(value, (int, float, Decimal)) and (not isinstance(value, bool)):
         if field.minimum is not None and value < field.minimum:
             raise ProductConfigurationError(f"字段 {name} 不能小于 {field.minimum}")
         if field.maximum is not None and value > field.maximum:
@@ -193,3 +207,44 @@ def _validate_location_hierarchy(locations: tuple[Any, ...], payload: Mapping[st
         raise ProductConfigurationError("机构配置无效")
     if not any(item.value == payload.get("outlet") for item in branch.outlets):
         raise ProductConfigurationError("网点配置无效")
+
+
+@require_GET
+def product_application_config(request: HttpRequest) -> JsonResponse:
+    try:
+        config = load_product_ui_config()
+    except ProductCatalogError as exc:
+        return api_error(str(exc), status=500)
+    return api_response(config.model_dump(mode="json"))
+
+
+@csrf_exempt
+@require_POST
+def create_product_application(request: HttpRequest) -> JsonResponse:
+    from apps.product_applications.cjdk.runtime import compile_application_link_plan
+    from apps.product_applications.workflow import submit_product_application
+
+    try:
+        submission = ProductApplicationSubmission.model_validate_json(request.body)
+        created = submit_product_application(
+            submission,
+            idempotency_key=request.headers.get("X-Idempotency-Key"),
+            trace_id=request.headers.get("X-Trace-ID"),
+            timeout_seconds=settings.PRODUCT_APPLICATION_TIMEOUT_SECONDS,
+            plan_compiler=compile_application_link_plan,
+        )
+    except JobConflict as exc:
+        return api_error(str(exc), status=409)
+    except (
+        ValidationError,
+        ProductConfigurationError,
+        ProductCatalogError,
+        ValueError,
+        json.JSONDecodeError,
+    ) as exc:
+        return api_error(f"产品申请参数无效：{exc}", status=400)
+    if created.created:
+        transaction.on_commit(lambda: enqueue_job(created.job))
+    return api_response(
+        serialize_job(created.job, include_payload=True), status=202 if created.created else 200
+    )

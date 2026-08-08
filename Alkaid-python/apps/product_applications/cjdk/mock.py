@@ -1,81 +1,67 @@
 import base64
 import hashlib
 import json
+from collections.abc import Callable, Mapping
+from typing import Any
 from urllib.parse import parse_qs
 
 import httpx
+
+from apps.integrations.mock import MockTransportRouter
 
 MOCK_TEMPLATE_NO = "2209201448031"
 MOCK_PREVIEW_DOC_ID = "MOCK-DOC-ID-001"
 
 
 def create_mock_transport() -> httpx.MockTransport:
-    return httpx.MockTransport(_handle_request)
-
-
-def _handle_request(request: httpx.Request) -> httpx.Response:
-    path = request.url.path
-    if request.method == "POST" and path in {"/links/sun-code", "/links/dynamic"}:
-        return _generate_application_link(request)
-    if request.method == "GET" and path.startswith("/application-entry/"):
-        link_id = path.rsplit("/", 1)[-1]
-        return httpx.Response(
-            302,
-            headers=[
-                ("Location", f"/h5/application/session/bootstrap?linkId={link_id}"),
-                ("Set-Cookie", "link_entry=mock-link-entry; Path=/; HttpOnly"),
-            ],
-        )
-    if request.method == "GET" and path == "/h5/application/session/bootstrap":
-        return _establish_session()
-
-    message = _request_message(request)
-    if path.endswith("/queryAgreementTemplateInfoListEA.do"):
-        _require_session_cookie(request)
-        return _query_agreements(message)
-    if path.endswith("/queryPreviewImage.ajax"):
-        _require_session_cookie(request)
-        return _query_preview(message)
-    if path.endswith("/showDocumentByDocIdList.ajax"):
-        _require_session_cookie(request)
-        return _show_document(message)
-    return httpx.Response(404, json={"message": "mock endpoint not found"})
-
-
-def _generate_application_link(request: httpx.Request) -> httpx.Response:
-    form = parse_qs(request.content.decode("utf-8"), keep_blank_values=True)
-    required = {"msg_id", "sign", "timestamp", "REQ_MESSAGE", "biz_content"}
-    if set(form) != required:
-        return httpx.Response(400, json={"code": "INVALID_FORM", "data": {}})
-    raw_message = form["REQ_MESSAGE"][0]
-    if form["biz_content"][0] != raw_message:
-        return httpx.Response(400, json={"code": "MESSAGE_MISMATCH", "data": {}})
-
-    message = json.loads(raw_message)
-    application_request = message["REQ_BODY"]["request"]
-    digest = (
-        hashlib.sha256(
-            json.dumps(
-                application_request,
-                ensure_ascii=False,
-                sort_keys=True,
-            ).encode("utf-8")
-        )
-        .hexdigest()[:12]
-        .upper()
+    router = MockTransportRouter()
+    router.register("GET", "/application-entry/", _open_application_entry, prefix=True)
+    router.register("GET", "/h5/application/session/bootstrap", lambda _: _establish_session())
+    router.register_matcher(
+        lambda request: request.url.path.endswith("/queryAgreementTemplateInfoListEA.do"),
+        _with_session_message(_query_agreements),
     )
-    link_id = f"LINK-{digest}"
+    router.register_matcher(
+        lambda request: request.url.path.endswith("/queryPreviewImage.ajax"),
+        _with_session_message(_query_preview),
+    )
+    router.register_matcher(
+        lambda request: request.url.path.endswith("/showDocumentByDocIdList.ajax"),
+        _with_session_message(_show_document),
+    )
+    router.register(
+        "POST",
+        "/mock/identity/",
+        _identity_request,
+        prefix=True,
+    )
+    return router.transport()
+
+
+def _open_application_entry(request: httpx.Request) -> httpx.Response:
+    link_id = request.url.path.rsplit("/", 1)[-1]
     return httpx.Response(
-        200,
-        json={
-            "code": "0000",
-            "message": "处理成功",
-            "data": {
-                "internal_url": f"https://cjdk-jyrc.mock/application-entry/{link_id}",
-                "external_url": f"https://cjdk-jyrc.mock/application-entry/{link_id}?scope=external",
-            },
-        },
+        302,
+        headers=[
+            ("Location", f"/h5/application/session/bootstrap?linkId={link_id}"),
+            ("Set-Cookie", "link_entry=mock-link-entry; Path=/; HttpOnly"),
+        ],
     )
+
+
+def _with_session_message(
+    handler: Callable[[dict[str, object]], httpx.Response],
+) -> Callable[[httpx.Request], httpx.Response]:
+    def wrapped(request: httpx.Request) -> httpx.Response:
+        _require_session_cookie(request)
+        return handler(_request_message(request))
+
+    return wrapped
+
+
+def _identity_request(request: httpx.Request) -> httpx.Response:
+    _require_session_cookie(request)
+    return _identity_response(request.url.path, _request_message(request))
 
 
 def _establish_session() -> httpx.Response:
@@ -200,6 +186,46 @@ def _show_document(message: dict[str, object]) -> httpx.Response:
     )
 
 
+def _identity_response(path: str, message: dict[str, object]) -> httpx.Response:
+    responses: dict[str, dict[str, object]] = {
+        "/mock/identity/public-key": {
+            "pubKey": "MOCK-PUBLIC-KEY",
+            "cryptFlowNo": "MOCK-CRYPT-FLOW-001",
+        },
+        "/mock/identity/prepare-mobile": {"mobile": "MOCK-ENC-MOBILE"},
+        "/mock/identity/ali-sdk-params": {
+            "traceNumber": "MOCK-FACE-TRACE-001",
+            "license": "MOCK-FACE-LICENSE",
+        },
+        "/mock/identity/video-check": {
+            "verifyResultDtlMessage": "mock face verification passed",
+            "captchTraceid": "MOCK-CAPTCHA-TRACE-001",
+        },
+        "/mock/identity/sms-send": {
+            "resultMessage": "mock sms sent",
+            "passCodeSeq": "MOCK-PASS-CODE-001",
+        },
+        "/mock/identity/sms-check": {"smsMessageId": "MOCK-SMS-MESSAGE-001"},
+        "/mock/identity/card-verify": {
+            "resultMessage": "mock identity verification passed",
+            "verified": True,
+        },
+    }
+    response = responses.get(path)
+    if response is None:
+        return httpx.Response(404, json={"message": "mock identity endpoint not found"})
+    return httpx.Response(
+        200,
+        json={
+            "RSP_BODY": {
+                "request": message["REQ_BODY"]["request"],
+                "response": response,
+            },
+            "RSP_HEAD": {"PROCESS_STATUS_CODE": "N", "TRAN_SUCCESS": "1"},
+        },
+    )
+
+
 def _request_message(request: httpx.Request) -> dict[str, object]:
     form = parse_qs(request.content.decode("utf-8"))
     raw = form.get("REQ_MESSAGE", [None])[0]
@@ -214,3 +240,28 @@ def _require_session_cookie(request: httpx.Request) -> None:
     cookie = request.headers.get("Cookie", "")
     if "JSESSIONID=" not in cookie or "token_id=" not in cookie:
         raise AssertionError("application session cookies were not carried forward")
+
+
+def mock_submit_application(payload: Mapping[str, Any]) -> tuple[str, str, str]:
+    """Deterministic startApply simulation owned by this feature."""
+
+    name = _required_text(payload, "personName", "客户姓名")
+    identity_no = _required_text(payload, "certificateNo", "证件号码")
+    product = _required_text(payload, "product", "产品编号")
+    digest = _digest(product, identity_no)
+    return (
+        f"MOCK-APPLY-{digest[:16]}",
+        f"MOCK-ENC-{_digest(name)[:24]}",
+        f"MOCK-ENC-{_digest(identity_no)[:32]}",
+    )
+
+
+def _digest(*values: str) -> str:
+    return hashlib.sha256("\\x1f".join(values).encode()).hexdigest().upper()
+
+
+def _required_text(payload: Mapping[str, Any], key: str, label: str) -> str:
+    value = str(payload.get(key) or "").strip()
+    if not value:
+        raise RuntimeError(f"缺少{label}：{key}")
+    return value

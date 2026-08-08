@@ -1,33 +1,10 @@
-# 外系统集成边界
+# 公共集成基础层
 
-当前产品申请主链路由 Celery Task 组装：
+这里只保留跨功能稳定复用的基础设施：
 
-```text
-Job 冻结快照
-→ Task 创建 JobIntegrationObserver 与 CjdkJyrcRuntime
-→ execute_product_application Use Case（中立 Command / Outcome / 小型 Gateway Protocol）
-→ CjdkApplicationLinkGateway / CjdkExternalSessionGateway / CjdkAgreementGateway
-→ JavaApplicationLinkGateway / CjdkJyrcClient
-→ HttpClient
-```
+- `contracts.py`：HTTP、重试和 Observer 公共类型。
+- `http.py`：基于 httpx 的 HTTP Client、重试和响应限制。
+- `mock.py`：通用 `MockTransportRouter`、路由匹配、响应与请求解析辅助。
 
-`product_data/product_applications` 不导入 CJDK 响应模型；`integrations/cjdk_jyrc` 不导入产品
-Catalog、产品配置或 Job ORM。Task 是唯一允许同时引用业务、Integration 与 Job 基础设施的组装层。
-
-JavaGateway 基线保持为：冻结快照生成完整 Java 请求，写入 UTF-8 临时 `request.json`，文件路径是
-Java 主类唯一业务参数；cwd、classpath、输出编码、超时和 `ALKAID_RESULT=` 解析均由部署配置控制。
-
-通用 `HttpClient` 只处理传输、HTTP 状态、响应读取/解析、大小限制、重试和 Observer；CJDK 的
-`biz_state`/`rsp_code`/`rsp_msg` 在 `cjdk_jyrc/response.py` 中解释。CJDK POST 当前均为
-`RetryMode.NEVER`。
-
-`CjdkJyrcRuntime` 只管理共享 `CjdkJyrcClient` 的生命周期；三个能力 Gateway 共享同一个 Client、
-Cookie/Session 和 Observer，Gateway 与 Runtime 都不保存业务执行结果。
-
-Session 真实初始化接口尚未实现。现有代码只安全打开申请链接并按环境 `SessionRequirement` 判断
-`not_started`、`page_opened`、`partial`、`established`、`failed` 状态；未满足要求时禁止查询协议。
-真实 TokenId 接口资料确认后，只在 `CjdkExternalSessionGateway` 或专用 Session Client 中接入，
-Use Case 不感知其字段和路径。
-
-响应限制集中在 `responseLimits`：JSON/HTML 原始响应、重定向次数、模板/预览数量、Base64 字符、
-单文档解码大小和累计文档大小。真实 Java SDK 与内网协议接口仍需在对应网络环境验证。
+这里不得出现 CJDK、申请、协议、身份、人脸、短信等业务名称或业务响应。业务 Mock 与外部系统适配器
+由各功能 App 自己维护。只有出现至少两个真实消费者时，公共能力才进入此目录。

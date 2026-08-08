@@ -2,22 +2,25 @@ import json
 
 import httpx
 import pytest
+from django.test import override_settings
 from pydantic import BaseModel, Field
 
-from apps.integrations.cjdk_jyrc.response import validate_cjdk_business_response
 from apps.integrations.http import (
     ExternalServiceError,
     HttpClient,
     HttpClientConfig,
 )
-from apps.jobs.http import sanitize, sanitize_url
+from apps.jobs.http import JobHttpCallObserver, limit_body
+from apps.jobs.models import JobApiCall
+from apps.jobs.services import create_job
+from apps.product_applications.cjdk.runtime import validate_cjdk_business_response
 
 
 class ExpectedEnvelope(BaseModel):
     rsp_body: dict = Field(alias="RSP_BODY")
 
 
-def test_json_form_messages_keep_structure_but_mask_secrets() -> None:
+def test_http_body_keeps_secrets_and_base64_verbatim_within_limit() -> None:
     raw = json.dumps(
         {
             "REQ_BODY": {
@@ -25,30 +28,80 @@ def test_json_form_messages_keep_structure_but_mask_secrets() -> None:
                 "request": {
                     "personName": "测试用户",
                     "phone": "13800138000",
+                    "downFile": "JVBERi0xLjQK",
                 },
             }
         },
         ensure_ascii=False,
     )
 
-    result = sanitize(
+    result, truncated = limit_body(
         {
             "REQ_MESSAGE": raw,
             "biz_content": raw,
         }
     )
 
-    assert result["REQ_MESSAGE"]["REQ_BODY"]["request"]["personName"] == "测试用户"
-    assert result["REQ_MESSAGE"]["REQ_BODY"]["request"]["phone"] != "13800138000"
-    assert result["REQ_MESSAGE"]["REQ_BODY"]["myPrivateKey"] != "PRIVATE-KEY-VALUE"
+    assert truncated is False
+    assert result["REQ_MESSAGE"] == raw
+    assert "13800138000" in result["REQ_MESSAGE"]
+    assert "PRIVATE-KEY-VALUE" in result["REQ_MESSAGE"]
+    assert "JVBERi0xLjQK" in result["REQ_MESSAGE"]
 
 
-def test_url_keeps_path_and_masks_auth_value() -> None:
-    value = sanitize_url("http://example.test/index.html?auth=SECRET&mode=1#/page")
+@override_settings(JOB_MAX_HTTP_BODY_BYTES=40)
+def test_http_body_uses_one_raw_prefix_truncation_rule() -> None:
+    value = {"downFile": "A" * 100, "token": "SECRET"}
+    stored, truncated = limit_body(value)
 
-    assert "example.test/index.html" in value
-    assert "auth=SECRET" not in value
-    assert "mode=1" in value
+    assert truncated is True
+    assert stored["truncated"] is True
+    assert stored["originalBytes"] == len(json.dumps(value, ensure_ascii=False).encode("utf-8"))
+    assert stored["preview"].startswith('{"downFile": "')
+
+
+@pytest.mark.django_db
+def test_job_api_call_preserves_raw_url_headers_bodies_and_exception() -> None:
+    job = create_job(
+        kind="diagnostic",
+        name="原文审计",
+        product="test",
+        payload={},
+        trace_id="raw-diagnostic",
+        idempotency_key="raw-diagnostic",
+        timeout_seconds=60,
+    ).job
+    observer = JobHttpCallObserver(job, step="raw")
+    url = "https://service.test/path?token=TOKEN-RAW&phone=13800138000"
+    request_headers = {"Authorization": "Bearer SECRET", "Cookie": "SID=COOKIE-RAW"}
+    request_body = {
+        "privateKey": "PRIVATE-KEY-RAW",
+        "certificateNo": "330101199001011234",
+        "downFile": "JVBERi0xLjQK",
+    }
+    handle = observer.started(
+        method="POST",
+        path=url,
+        headers=request_headers,
+        request_body=request_body,
+    )
+    error = RuntimeError("验证码 123456；TOKEN-RAW；完整异常原文")
+    observer.finished(
+        handle,
+        status_code=500,
+        headers={"Set-Cookie": "SESSION=RESPONSE-COOKIE"},
+        response_body={"token": "RESPONSE-TOKEN", "downFile": "JVBERi0xLjQK"},
+        duration_ms=12,
+        error=error,
+    )
+
+    call = JobApiCall.objects.get(pk=handle)
+    assert call.url == url
+    assert call.request_headers == request_headers
+    assert call.request_body == request_body
+    assert call.response_headers == {"Set-Cookie": "SESSION=RESPONSE-COOKIE"}
+    assert call.response_body == {"token": "RESPONSE-TOKEN", "downFile": "JVBERi0xLjQK"}
+    assert call.error_message == str(error)
 
 
 def test_cjdk_business_failure_message_is_explicit() -> None:

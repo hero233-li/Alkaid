@@ -15,30 +15,30 @@ def _imports(path: Path) -> set[str]:
     return result
 
 
-def test_product_application_business_layer_does_not_import_cjdk_models() -> None:
-    root = ROOT / "apps/product_data/product_applications"
-    violations = [
-        str(path.relative_to(ROOT))
-        for path in root.glob("*.py")
-        if "apps.integrations.cjdk_jyrc.models" in _imports(path)
-    ]
-    assert violations == []
-
-
-def test_cjdk_integration_does_not_import_catalog_configs_or_jobs() -> None:
-    root = ROOT / "apps/integrations/cjdk_jyrc"
+def test_public_layers_are_recursively_free_of_feature_dependencies() -> None:
     forbidden = (
-        "apps.product_data.catalog",
-        "apps.product_data.configs",
-        "apps.jobs.models",
-        "apps.jobs.services",
+        "apps.product_applications",
+        "apps.jobs",
+        "apps.workbench",
     )
     violations: list[str] = []
-    for path in root.glob("*.py"):
-        imports = _imports(path)
-        if any(
-            any(name == prefix or name.startswith(prefix + ".") for prefix in forbidden)
-            for name in imports
-        ):
-            violations.append(str(path.relative_to(ROOT)))
+    for root in (ROOT / "apps/integrations", ROOT / "apps/product_data"):
+        for path in root.rglob("*.py"):
+            if any(
+                name == prefix or name.startswith(prefix + ".")
+                for name in _imports(path)
+                for prefix in forbidden
+            ):
+                violations.append(str(path.relative_to(ROOT)))
     assert violations == []
+
+
+def test_workflow_does_not_depend_on_cjdk_implementation() -> None:
+    imports = _imports(ROOT / "apps/product_applications/workflow.py")
+    assert not any(
+        name == "apps.product_applications.cjdk"
+        or name.startswith("apps.product_applications.cjdk.")
+        for name in imports
+    )
+    assert not (ROOT / "apps/product_applications/ports.py").exists()
+    assert not (ROOT / "apps/product_applications/cjdk/application.py").exists()

@@ -49,6 +49,6 @@ def _task_for_kind(kind: str) -> Any:
     if kind != "product_application":
         raise ValueError(f"不支持的任务类型：{kind}")
 
-    from apps.product_data.product_applications.tasks import execute_product_application
+    from apps.product_applications.tasks import execute_product_application
 
     return execute_product_application

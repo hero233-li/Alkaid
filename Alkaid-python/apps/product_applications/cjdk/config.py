@@ -17,17 +17,6 @@ CONFIG_DIR = Path(__file__).with_name("configs")
 LOCAL_ENVIRONMENT_CONFIG_PATH = CONFIG_DIR / "environments.local.json"
 
 
-class JavaGatewaySettings(BaseModel):
-    model_config = ConfigDict(frozen=True, extra="forbid")
-
-    sdk_dir: Path
-    java_executable: Path
-    jar: Path
-    main_class: str
-    output_encoding: str = "gbk"
-    timeout_seconds: float = Field(default=120, gt=0)
-
-
 class EnvironmentSettings(BaseModel):
     model_config = ConfigDict(frozen=True, extra="forbid", populate_by_name=True)
 
@@ -35,13 +24,31 @@ class EnvironmentSettings(BaseModel):
     session_url_template: str | None = Field(default=None, alias="sessionUrlTemplate")
     session_method: Literal["GET", "POST"] = Field(default="GET", alias="sessionMethod")
     verify_ssl: bool = Field(default=True, alias="verifySsl")
-    session: SessionRequirement = Field(default_factory=lambda: SessionRequirement())
-    url_policy: UrlPolicy | None = Field(default=None, alias="urlPolicy")
+    required_cookies: tuple[str, ...] = Field(default_factory=tuple, alias="requiredCookies")
+    required_headers: tuple[str, ...] = Field(default_factory=tuple, alias="requiredHeaders")
+    required_any_headers: tuple[str, ...] = Field(default_factory=tuple, alias="requiredAnyHeaders")
+    allowed_schemes: tuple[Literal["http", "https"], ...] = Field(
+        default_factory=tuple, alias="allowedSchemes"
+    )
+    allowed_hosts: tuple[str, ...] = Field(default_factory=tuple, alias="allowedHosts")
+    allowed_ports: tuple[int, ...] = Field(default_factory=tuple, alias="allowedPorts")
+    allow_cross_host_redirect: bool = Field(default=False, alias="allowCrossHostRedirect")
+    forward_session_headers_to_hosts: tuple[str, ...] = Field(
+        default_factory=tuple, alias="forwardSessionHeadersToHosts"
+    )
+    max_redirects: int = Field(default=10, alias="maxRedirects", ge=0, le=20)
 
     @model_validator(mode="after")
     def normalize_environment_settings(self) -> EnvironmentSettings:
-        if self.url_policy is None:
-            object.__setattr__(self, "url_policy", _default_url_policy(self.agreement_base_url))
+        if not self.allowed_hosts:
+            defaults = _default_url_policy(self.agreement_base_url)
+            for name in (
+                "allowed_schemes",
+                "allowed_hosts",
+                "allowed_ports",
+                "forward_session_headers_to_hosts",
+            ):
+                object.__setattr__(self, name, defaults[name])
         if self.session_url_template is not None:
             template = self.session_url_template.strip()
             if not template:
@@ -51,31 +58,27 @@ class EnvironmentSettings(BaseModel):
             object.__setattr__(self, "session_url_template", template)
         return self
 
+    @property
+    def session(self) -> EnvironmentSettings:
+        return self
 
-class SessionRequirement(BaseModel):
+    @property
+    def url_policy(self) -> EnvironmentSettings:
+        return self
+
+
+class CjdkJyrcSettings(BaseModel):
     model_config = ConfigDict(frozen=True, extra="forbid", populate_by_name=True)
 
-    required_cookies: tuple[str, ...] = Field(default_factory=tuple, alias="requiredCookies")
-    required_headers: tuple[str, ...] = Field(default_factory=tuple, alias="requiredHeaders")
-    required_any_headers: tuple[str, ...] = Field(default_factory=tuple, alias="requiredAnyHeaders")
-
-
-class UrlPolicy(BaseModel):
-    model_config = ConfigDict(frozen=True, extra="forbid", populate_by_name=True)
-
-    allowed_schemes: tuple[Literal["http", "https"], ...] = Field(alias="allowedSchemes")
-    allowed_hosts: tuple[str, ...] = Field(alias="allowedHosts", min_length=1)
-    allowed_ports: tuple[int, ...] = Field(alias="allowedPorts", min_length=1)
-    allow_cross_host_redirect: bool = Field(default=False, alias="allowCrossHostRedirect")
-    forward_session_headers_to_hosts: tuple[str, ...] = Field(
-        default_factory=tuple, alias="forwardSessionHeadersToHosts"
-    )
-    max_redirects: int = Field(default=10, alias="maxRedirects", ge=0, le=20)
-
-
-class ResponseLimits(BaseModel):
-    model_config = ConfigDict(frozen=True, extra="forbid", populate_by_name=True)
-
+    mode: Literal["mock", "real"]
+    application_link_url_mode: Literal["internal", "external"]
+    environments: dict[str, EnvironmentSettings]
+    sdk_dir: Path = Path(".")
+    java_executable: Path = Path("java")
+    jar: Path = Path("application-link.jar")
+    main_class: str = "mock.ApplicationLinkMain"
+    output_encoding: str = "gbk"
+    timeout_seconds: float = Field(default=120, gt=0)
     max_json_bytes: int = Field(default=5 * 1024 * 1024, alias="maxJsonBytes", gt=0)
     max_html_bytes: int = Field(default=2 * 1024 * 1024, alias="maxHtmlBytes", gt=0)
     max_redirects: int = Field(default=10, alias="maxRedirects", ge=0, le=20)
@@ -88,16 +91,6 @@ class ResponseLimits(BaseModel):
     max_total_document_bytes: int = Field(
         default=50 * 1024 * 1024, alias="maxTotalDocumentBytes", gt=0
     )
-
-
-class CjdkJyrcSettings(BaseModel):
-    model_config = ConfigDict(frozen=True, extra="forbid")
-
-    mode: Literal["mock", "real"]
-    application_link_url_mode: Literal["internal", "external"]
-    java_gateway: JavaGatewaySettings
-    environments: dict[str, EnvironmentSettings]
-    response_limits: ResponseLimits = Field(default_factory=ResponseLimits, alias="responseLimits")
 
     @model_validator(mode="after")
     def validate_real_environment_urls(self) -> CjdkJyrcSettings:
@@ -121,6 +114,123 @@ class CjdkJyrcSettings(BaseModel):
                 f"CJDK-JYRC 环境 {normalized!r} 未配置；已配置环境：{known}"
             ) from None
 
+    @property
+    def java_gateway(self) -> CjdkJyrcSettings:
+        return self
+
+    @property
+    def response_limits(self) -> CjdkJyrcSettings:
+        return self
+
+
+class PhotoEnvironmentSettings(BaseModel):
+    model_config = ConfigDict(populate_by_name=True, extra="ignore")
+
+    base_url: str = Field(alias="baseUrl")
+    delete_path: str = Field(default="/DelectCertiAction.json", alias="deletePath")
+    timeout_seconds: int = Field(default=60, alias="timeoutSeconds", ge=1)
+    verify_ssl: bool = Field(default=False, alias="verifySsl")
+    headers: dict[str, str] = Field(default_factory=dict)
+
+
+class DcppEnvironmentSettings(BaseModel):
+    model_config = ConfigDict(populate_by_name=True, extra="ignore")
+
+    url: str
+    zone: str
+    log_host_paths: tuple[str, ...] = Field(alias="logHostPaths")
+    headers: dict[str, str] = Field(default_factory=dict)
+    timeout_seconds: int = Field(default=10, alias="timeoutSeconds", ge=1)
+    max_attempts: int = Field(default=10, alias="maxAttempts", ge=1)
+    retry_interval_seconds: float = Field(default=1.0, alias="retryIntervalSeconds", ge=0)
+
+
+class IdentitySettings(BaseModel):
+    model_config = ConfigDict(populate_by_name=True, extra="ignore")
+
+    endpoints: dict[str, str]
+    video_templates: dict[str, str] = Field(alias="videoTemplates")
+    photo: dict[str, PhotoEnvironmentSettings]
+    sms_lookup: dict[str, DcppEnvironmentSettings] = Field(alias="smsLookup")
+    mock: bool = False
+
+    def endpoint(self, name: str) -> str:
+        value = str(self.endpoints.get(name) or "").strip()
+        if not value:
+            raise RuntimeError(f"身份认证接口未配置：{name}")
+        return value
+
+    def video_message_name(self, environment: str) -> str:
+        name = self.video_templates.get(environment.upper())
+        if not name:
+            raise RuntimeError(f"未配置 {environment} 的人脸活检原始报文模板")
+        return name
+
+    def photo_environment(self, environment: str) -> PhotoEnvironmentSettings:
+        try:
+            return self.photo[environment.upper()]
+        except KeyError:
+            raise RuntimeError(f"未配置 {environment} 的 Photo 环境") from None
+
+
+IDENTITY_CONFIG_PATH = CONFIG_DIR / "identity.local.json"
+
+
+@lru_cache(maxsize=2)
+def get_identity_settings(mode: str | None = None) -> IdentitySettings:
+    configured = os.getenv("CJDK_JYRC_IDENTITY_CONFIG", "").strip()
+    path = Path(configured) if configured else IDENTITY_CONFIG_PATH
+    if not path.exists():
+        if (mode or "").lower() == "mock":
+            return _mock_identity_settings()
+        raise RuntimeError(
+            f"缺少身份认证配置文件：{path}；"
+            "请复制 identity.local.example.json 为 identity.local.json"
+        )
+    raw = json.loads(path.read_text(encoding="utf-8"))
+    if not isinstance(raw, dict):
+        raise RuntimeError("identity.local.json 必须是 JSON 对象")
+    return IdentitySettings.model_validate(raw)
+
+
+def _mock_identity_settings() -> IdentitySettings:
+    environments = ("UAT1", "UAT2", "UATC")
+    return IdentitySettings.model_validate(
+        {
+            "mock": True,
+            "endpoints": {
+                "getPublicKey": "/mock/identity/public-key",
+                "getPrepareMobile": "/mock/identity/prepare-mobile",
+                "getAliSdkParams": "/mock/identity/ali-sdk-params",
+                "aliVideoCheck": "/mock/identity/video-check",
+                "smsCodeSend": "/mock/identity/sms-send",
+                "smsCodeCheck": "/mock/identity/sms-check",
+                "identityCardVerify": "/mock/identity/card-verify",
+            },
+            "videoTemplates": {
+                environment: (
+                    "identity_ali_video_check_uc_v1"
+                    if environment == "UATC"
+                    else "identity_ali_video_check_u12_v1"
+                )
+                for environment in environments
+            },
+            "photo": {
+                environment: {"baseUrl": "https://photo.mock"} for environment in environments
+            },
+            "smsLookup": {
+                environment: {
+                    "url": "https://sms-log.mock",
+                    "zone": "mock",
+                    "logHostPaths": ["/mock"],
+                    "maxAttempts": 1,
+                    "retryIntervalSeconds": 0,
+                }
+                for environment in environments
+            },
+        }
+    )
+
 
 @lru_cache(maxsize=1)
 def get_cjdk_jyrc_settings() -> CjdkJyrcSettings:
@@ -139,12 +249,13 @@ def get_cjdk_jyrc_settings() -> CjdkJyrcSettings:
         )
         gateway = _gateway_settings(local.get("javaGateway"))
         environments = _environment_settings(local.get("environments"), mode=mode)
+        limits = _response_limits(local.get("responseLimits"))
         return CjdkJyrcSettings(
             mode=mode,
             application_link_url_mode=url_mode,
-            java_gateway=gateway,
             environments=environments,
-            responseLimits=local.get("responseLimits", {}),
+            **gateway,
+            **limits,
         )
     except (TypeError, ValueError, ValidationError) as exc:
         raise ImproperlyConfigured(f"CJDK-JYRC 配置无效：{exc}") from exc
@@ -154,43 +265,10 @@ def external_system_mode() -> str:
     return get_cjdk_jyrc_settings().mode
 
 
-def application_link_url_mode() -> str:
-    return get_cjdk_jyrc_settings().application_link_url_mode
-
-
 def resolve_base_url(environment: str) -> str:
     if external_system_mode() == "mock":
         return "https://cjdk-jyrc.mock"
     return get_cjdk_jyrc_settings().environment(environment).agreement_base_url.rstrip("/")
-
-
-def is_configured_environment(environment: str) -> bool:
-    normalized = environment.strip().upper()
-    return bool(normalized and normalized in get_cjdk_jyrc_settings().environments)
-
-
-def java_sdk_dir() -> Path:
-    return get_cjdk_jyrc_settings().java_gateway.sdk_dir
-
-
-def java_executable() -> Path:
-    return get_cjdk_jyrc_settings().java_gateway.java_executable
-
-
-def java_jar() -> Path:
-    return get_cjdk_jyrc_settings().java_gateway.jar
-
-
-def java_main_class() -> str:
-    return get_cjdk_jyrc_settings().java_gateway.main_class
-
-
-def java_output_encoding() -> str:
-    return get_cjdk_jyrc_settings().java_gateway.output_encoding
-
-
-def java_timeout_seconds() -> float:
-    return get_cjdk_jyrc_settings().java_gateway.timeout_seconds
 
 
 def resolve_secret(reference: str) -> str:
@@ -221,29 +299,49 @@ def validate_cjdk_jyrc_readiness(environments: set[str] | None = None) -> None:
     configured = get_cjdk_jyrc_settings()
     if configured.mode != "real":
         return
+    missing: list[str] = []
     gateway = configured.java_gateway
     sdk_root = gateway.sdk_dir
     java_path = _resolve_runtime_path(gateway.java_executable, sdk_root)
     jar_path = _resolve_runtime_path(gateway.jar, sdk_root)
     if not sdk_root.is_dir():
-        raise ImproperlyConfigured(f"Java SDK 目录不存在：{sdk_root}")
+        missing.append(f"Java SDK 目录：{sdk_root}")
     if not java_path.is_file():
-        raise ImproperlyConfigured(f"Java 可执行文件不存在：{java_path}")
+        missing.append(f"Java 可执行文件：{java_path}")
     if not jar_path.is_file():
-        raise ImproperlyConfigured(f"申请链接 Jar 不存在：{jar_path}")
+        missing.append(f"申请链接 Jar：{jar_path}")
     if not gateway.main_class.strip():
-        raise ImproperlyConfigured("javaGateway.mainClass 未配置")
+        missing.append("javaGateway.mainClass")
     if gateway.timeout_seconds <= 0:
-        raise ImproperlyConfigured("javaGateway.timeoutSeconds 必须大于 0")
+        missing.append("有效的 javaGateway.timeoutSeconds")
     for environment in environments or set(configured.environments):
         value = configured.environment(environment).agreement_base_url.strip()
         if not value:
-            raise ImproperlyConfigured(f"环境 {environment} 缺少 agreementBaseUrl")
+            missing.append(f"环境 {environment} agreementBaseUrl")
+
+    # The supplied patch does not contain the real startApply contract. Keep real
+    # mode unavailable until both values are explicitly supplied; never guess it.
+    missing.extend(("startApply 接口路径", "startApply 原始报文模板"))
+    try:
+        identity = get_identity_settings("real")
+        for environment in environments or set(configured.environments):
+            normalized = environment.upper()
+            if normalized not in identity.video_templates:
+                missing.append(f"环境 {normalized} 人脸报文模板")
+            if normalized not in identity.photo:
+                missing.append(f"环境 {normalized} Photo 配置")
+            if normalized not in identity.sms_lookup:
+                missing.append(f"环境 {normalized} DCPP 短信查询配置")
+    except (OSError, RuntimeError, ValueError) as exc:
+        missing.append(str(exc))
+    if missing:
+        raise ImproperlyConfigured("CJDK 真实模式缺少：" + "；".join(missing))
 
 
 def clear_environment_config_cache() -> None:
     _load_local_environment_config.cache_clear()
     get_cjdk_jyrc_settings.cache_clear()
+    get_identity_settings.cache_clear()
 
 
 @receiver(setting_changed)
@@ -260,24 +358,12 @@ def scene() -> str:
     return str(_setting("CJDK_JYRC_SCENE", "SC00015"))
 
 
-def product_id() -> str:
-    return str(_setting("CJDK_JYRC_PRODUCT_ID", "CJDK-ZHHX"))
-
-
 def product_subdivision() -> str:
     return str(_setting("CJDK_JYRC_PRODUCT_SUBDIVISION", "partners"))
 
 
-def product_subdivision_encode() -> str:
-    return str(_setting("CJDK_JYRC_PRODUCT_SUBDIVISION_ENCODE", "202605077231204"))
-
-
 def business_no() -> str:
     return str(_setting("CJDK_JYRC_BUSINESS_NO", "00000000"))
-
-
-def default_project_id() -> str:
-    return str(_setting("CJDK_JYRC_DEFAULT_PROJECT_ID", ""))
 
 
 def default_id_type() -> str:
@@ -299,7 +385,7 @@ def default_template_numbers() -> tuple[str, ...]:
     return tuple(item.strip() for item in str(value).split(",") if item.strip())
 
 
-def _gateway_settings(raw: object) -> JavaGatewaySettings:
+def _gateway_settings(raw: object) -> dict[str, object]:
     local = _mapping(raw, "javaGateway")
     allowed = {
         "sdkDir",
@@ -312,50 +398,59 @@ def _gateway_settings(raw: object) -> JavaGatewaySettings:
     unknown = set(local) - allowed
     if unknown:
         raise ValueError("javaGateway 包含未知字段：" + ", ".join(sorted(unknown)))
-    return JavaGatewaySettings(
-        sdk_dir=Path(_local_or_setting(local, "sdkDir", "APPLICATION_LINK_JAVA_SDK_DIR", ".")),
-        java_executable=Path(
+    return {
+        "sdk_dir": Path(_local_or_setting(local, "sdkDir", "APPLICATION_LINK_JAVA_SDK_DIR", ".")),
+        "java_executable": Path(
             _local_or_setting(local, "javaExecutable", "APPLICATION_LINK_JAVA_EXECUTABLE", "java")
         ),
-        jar=Path(
+        "jar": Path(
             _local_or_setting(local, "jar", "APPLICATION_LINK_JAVA_JAR", "application-link.jar")
         ),
-        main_class=_local_or_setting(
-            local,
-            "mainClass",
-            "APPLICATION_LINK_JAVA_MAIN_CLASS",
-            "mock.ApplicationLinkMain",
+        "main_class": _local_or_setting(
+            local, "mainClass", "APPLICATION_LINK_JAVA_MAIN_CLASS", "mock.ApplicationLinkMain"
         ),
-        output_encoding=_local_or_setting(
-            local,
-            "outputEncoding",
-            "APPLICATION_LINK_JAVA_OUTPUT_ENCODING",
-            "gbk",
+        "output_encoding": _local_or_setting(
+            local, "outputEncoding", "APPLICATION_LINK_JAVA_OUTPUT_ENCODING", "gbk"
         ),
-        timeout_seconds=float(
+        "timeout_seconds": float(
             _local_or_setting(
-                local,
-                "timeoutSeconds",
-                "APPLICATION_LINK_JAVA_TIMEOUT_SECONDS",
-                "120",
+                local, "timeoutSeconds", "APPLICATION_LINK_JAVA_TIMEOUT_SECONDS", "120"
             )
         ),
-    )
+    }
 
 
-def _default_url_policy(base_url: str) -> UrlPolicy:
+def _response_limits(raw: object) -> dict[str, object]:
+    values = _mapping(raw, "responseLimits")
+    names = {
+        "maxJsonBytes": "max_json_bytes",
+        "maxHtmlBytes": "max_html_bytes",
+        "maxRedirects": "max_redirects",
+        "maxAgreementTemplates": "max_agreement_templates",
+        "maxPreviewDocuments": "max_preview_documents",
+        "maxBase64Characters": "max_base64_characters",
+        "maxDecodedDocumentBytes": "max_decoded_document_bytes",
+        "maxTotalDocumentBytes": "max_total_document_bytes",
+    }
+    unknown = set(values) - names.keys()
+    if unknown:
+        raise ValueError("responseLimits 包含未知字段：" + ", ".join(sorted(unknown)))
+    return {names[key]: value for key, value in values.items()}
+
+
+def _default_url_policy(base_url: str) -> dict[str, tuple[object, ...]]:
     from urllib.parse import urlsplit
 
     parsed = urlsplit(base_url)
     scheme = parsed.scheme or "https"
     host = parsed.hostname or "cjdk-jyrc.mock"
     port = parsed.port or (443 if scheme == "https" else 80)
-    return UrlPolicy(
-        allowedSchemes=[scheme],
-        allowedHosts=[host],
-        allowedPorts=[port],
-        forwardSessionHeadersToHosts=[host],
-    )
+    return {
+        "allowed_schemes": (scheme,),
+        "allowed_hosts": (host,),
+        "allowed_ports": (port,),
+        "forward_session_headers_to_hosts": (host,),
+    }
 
 
 def _environment_settings(raw: object, *, mode: str) -> dict[str, EnvironmentSettings]:
@@ -366,15 +461,9 @@ def _environment_settings(raw: object, *, mode: str) -> dict[str, EnvironmentSet
     result = {
         key: EnvironmentSettings(
             agreement_base_url=value.rstrip("/"),
-            session=(
-                SessionRequirement(
-                    requiredCookies=("JSESSIONID", "token_id"),
-                    requiredAnyHeaders=("X-Token", "X-FCOS-SESSIONID"),
-                )
-                if mode == "mock"
-                else SessionRequirement()
-            ),
-            urlPolicy=_default_url_policy(value),
+            requiredCookies=("JSESSIONID", "token_id") if mode == "mock" else (),
+            requiredAnyHeaders=("X-Token", "X-FCOS-SESSIONID") if mode == "mock" else (),
+            **_default_url_policy(value),
         )
         for key, value in configured.items()
     }
@@ -396,6 +485,9 @@ def _environment_settings(raw: object, *, mode: str) -> dict[str, EnvironmentSet
         if fallback is None and not fallback_url:
             raise ValueError(f"environments.{name}.agreementBaseUrl 不能为空")
         base_url = fallback_url or (fallback.agreement_base_url if fallback else "")
+        session = _mapping(values.get("session"), f"environments.{name}.session")
+        policy = _mapping(values.get("urlPolicy"), f"environments.{name}.urlPolicy")
+        defaults = _default_url_policy(base_url)
         result[name] = EnvironmentSettings(
             agreement_base_url=base_url,
             sessionUrlTemplate=values.get(
@@ -410,10 +502,35 @@ def _environment_settings(raw: object, *, mode: str) -> dict[str, EnvironmentSet
                 "verifySsl",
                 fallback.verify_ssl if fallback else True,
             ),
-            session=values.get("session", fallback.session if fallback else {}),
-            urlPolicy=values.get(
-                "urlPolicy", fallback.url_policy if fallback else _default_url_policy(base_url)
+            requiredCookies=session.get(
+                "requiredCookies", fallback.required_cookies if fallback else ()
             ),
+            requiredHeaders=session.get(
+                "requiredHeaders", fallback.required_headers if fallback else ()
+            ),
+            requiredAnyHeaders=session.get(
+                "requiredAnyHeaders", fallback.required_any_headers if fallback else ()
+            ),
+            allowedSchemes=policy.get(
+                "allowedSchemes",
+                fallback.allowed_schemes if fallback else defaults["allowed_schemes"],
+            ),
+            allowedHosts=policy.get(
+                "allowedHosts", fallback.allowed_hosts if fallback else defaults["allowed_hosts"]
+            ),
+            allowedPorts=policy.get(
+                "allowedPorts", fallback.allowed_ports if fallback else defaults["allowed_ports"]
+            ),
+            allowCrossHostRedirect=policy.get(
+                "allowCrossHostRedirect", fallback.allow_cross_host_redirect if fallback else False
+            ),
+            forwardSessionHeadersToHosts=policy.get(
+                "forwardSessionHeadersToHosts",
+                fallback.forward_session_headers_to_hosts
+                if fallback
+                else defaults["forward_session_headers_to_hosts"],
+            ),
+            maxRedirects=policy.get("maxRedirects", fallback.max_redirects if fallback else 10),
         )
     return result
 

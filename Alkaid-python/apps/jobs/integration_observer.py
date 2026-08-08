@@ -68,7 +68,7 @@ class JobIntegrationObserver:
         content: Any,
         level: str = "INFO",
     ) -> None:
-        message = f"{title}（敏感值已脱敏）：\n{format_log_value(content)}"
+        message = f"{title}（原文）：\n{format_log_value(content)}"
         add_job_log(
             self._job,
             level,

@@ -3,22 +3,20 @@ from copy import deepcopy
 
 import pytest
 
-import apps.product_data.application_link_plan as plan_module
+import apps.product_applications.cjdk.runtime as plan_module
 import apps.product_data.catalog as catalog_module
-from apps.integrations.cjdk_jyrc.request_builder import build_application_link_request
 from apps.jobs.services import create_job
-from apps.product_data.catalog import load_product_catalog
-from apps.product_data.product_applications.contracts import (
-    ApplicationLinksResult,
-    FrozenApplicationLinkRoute,
+from apps.product_applications.api import ProductApplicationSubmission, ProductConfigurationError
+from apps.product_applications.cjdk.runtime import (
+    build_application_link_request,
+    compile_application_link_plan,
 )
-from apps.product_data.product_applications.preparation import (
+from apps.product_applications.workflow import (
+    execute_product_application,
     freeze_product_execution_snapshot,
     resolve_product_snapshot,
 )
-from apps.product_data.product_applications.schemas import ProductApplicationSubmission
-from apps.product_data.product_applications.use_cases import execute_product_application
-from apps.product_data.product_applications.validation import ProductConfigurationError
+from apps.product_data.catalog import FrozenApplicationLinkRoute, load_product_catalog
 
 
 class SnapshotSecretResolver:
@@ -53,10 +51,14 @@ def _submission() -> ProductApplicationSubmission:
 def test_worker_uses_frozen_v1_plan_without_loading_current_catalog(monkeypatch) -> None:
     submission = _submission()
     original_submission = submission.model_copy(deep=True)
-    prepared = freeze_product_execution_snapshot(submission, load_product_catalog())
-    snapshot = prepared.snapshot
+    prepared = freeze_product_execution_snapshot(
+        submission,
+        load_product_catalog(),
+        plan_compiler=compile_application_link_plan,
+    )
+    prepared_submission, snapshot = prepared
     assert submission == original_submission
-    assert prepared.submission is not submission
+    assert prepared_submission is not submission
     serialized_snapshot = json.dumps(snapshot.model_dump(mode="json"), ensure_ascii=False)
     assert "PRIVATE-KEY" not in serialized_snapshot
     assert "PUBLIC-KEY" not in serialized_snapshot
@@ -97,16 +99,13 @@ def test_worker_uses_frozen_v1_plan_without_loading_current_catalog(monkeypatch)
         def __exit__(self, *args):
             return None
 
-        def generate_application_link(self, command):
+        def open_application(self, *, snapshot, **kwargs):
             request = build_application_link_request(
-                plan=FrozenApplicationLinkRoute.model_validate(command.plan),
-                normalized_payload=command.normalized_payload,
+                plan=FrozenApplicationLinkRoute.model_validate(snapshot.application_link_route),
+                normalized_payload=dict(snapshot.normalized_payload),
                 secret_resolver=SnapshotSecretResolver(),
             )
-            captured["request"] = request.external_request()
-            return ApplicationLinksResult(internal_url="https://in", external_url="https://out")
-
-        def initialize_session(self, application_url):
+            captured["request"] = request
             raise StopAfterApplicationLink()
 
     class StopAfterApplicationLink(RuntimeError):
@@ -115,9 +114,6 @@ def test_worker_uses_frozen_v1_plan_without_loading_current_catalog(monkeypatch)
     with pytest.raises(StopAfterApplicationLink):
         execute_product_application(
             runtime=FrozenPlanPort(),
-            application_links=FrozenPlanPort(),
-            external_session=FrozenPlanPort(),
-            agreements=FrozenPlanPort(),
             submission=ProductApplicationSubmission(
                 name=job.name,
                 product=snapshot.product_code,

@@ -122,14 +122,16 @@ GET  /api/jobs/{id}/calls/{callId}
 `apps/product_data/configs/products/*.json`。页面配置、后端校验、Job 快照和申请链接路由均由
 这一个 Catalog 派生。
 
-Celery 将普通过程日志写入 `JobLog`，将每次外部 HTTP 请求的脱敏请求、响应、错误和耗时写入
-`JobApiCall`。日志窗口通过 ASGI SSE 增量接收日志；断线后使用最后一个 `afterId` 续传。
+Celery 将普通过程日志写入 `JobLog`，将每次外部 HTTP 请求的原文 URL、Header、请求、响应、
+异常和耗时写入 `JobApiCall`。不再进行字段脱敏或省略 Base64；只使用
+`JOB_MAX_HTTP_BODY_BYTES` 统一保存原文前缀和总字节数。日志窗口通过 ASGI SSE 增量接收日志；
+断线后使用最后一个 `afterId` 续传。
 外部系统只依赖中立 `IntegrationObserver`；Celery Task 组装
 `JobIntegrationObserver`，把结构化请求、响应与诊断写入 `JobApiCall`/`JobLog`。Integration 不再
 持有 `Job` ORM，也不直接调用 Job 日志服务。
 
-产品申请、申请链接、业务准入和核实审批分别拥有自己的业务目录和 Integration。Mock 响应放在
-各自的 `mock_transport.py`，不会写进 View、Service 或 Adapter；本地 Mock 与真实外系统共用
+产品申请、申请链接、业务准入和核实审批分别拥有自己的同级功能 App。业务 Mock 响应放在
+各功能的 `mock.py`，公共 `MockTransportRouter` 位于 `apps/integrations/mock.py`；本地 Mock 与真实外系统共用
 同一套请求模型、HTTP Client 和响应校验。完整边界见 `apps/integrations/README.md` 和
 `apps/product_data/README.md`。
 
@@ -152,8 +154,8 @@ CJDK Session 目前只实现“打开申请页面、逐跳验证 URL、收集 Co
 允许的 scheme/host/port、跨 Host 跳转规则和 Session Header 转发白名单。
 
 接口工作台生产默认关闭（`WORKBENCH_ENABLED=false`），关闭时后端路由不注册。若显式启用，还需
-配置 `WORKBENCH_ALLOWED_HOSTS`；目标 IP、重定向和敏感头会被检查，但当前项目没有用户认证与租户
-隔离能力，因此不应在生产启用。
+配置 `WORKBENCH_ALLOWED_HOSTS`；目标 IP、重定向和协议级请求头会被检查。Cookie、Authorization
+等认证头会转发并保存在历史记录中；当前项目没有用户认证与租户隔离能力，因此不应在生产启用。
 
 后端产品执行配置与前端展示配置不再分开维护。每个产品文件自包含页面字段、申请方式、必填规则
 和产品功能路由；运行时通过 Pydantic 加载并派生所需视图。产品调用顺序直接由业务服务表达，
@@ -171,19 +173,17 @@ Catalog 在 Web/Worker 进程内缓存，修改 JSON 后需重启整组服务。
 
 ## 代码边界
 
-- `apps/integrations/http.py`：唯一通用 HTTP 传输层。
-- `apps/integrations/<system>/`：外部系统报文和 Adapter；原始 JSON 不能越过此边界。
+- `apps/integrations/`：只保留 `contracts.py`、`http.py` 和 `mock.py` 公共基础设施。
+- `apps/product_applications/cjdk/`：CJDK 申请、协议、身份和业务 Mock 的功能私有实现。
 - `apps/jobs/`：异步任务状态、日志、外部调用审计、重试、取消和 SSE。
 - `apps/product_data/catalog.py`：产品配置的唯一加载、校验和 Job 快照入口。
 
-页面业务按域拆分到 `apps/product_data/<feature>/`。`product_applications/` 负责产品申请，
-`application_links/` 负责申请链接生成；两者只保留自己的 Schema、HTTP 入口、任务和业务服务，
-并共享 `jobs` 基础设施。当前产品共用的调用顺序直接写在
-`product_applications/services.py`；只有出现真实差异时才增加独立业务函数。外部系统实现位于
-`apps/integrations/<system>/`，业务层不拼接原始报文，也不直接调用 HTTP。
+页面业务按同级功能 App 拆分。`apps/product_applications` 负责当前完整申请后端；后续业务使用
+`apps/business_access`、`apps/loan_status` 等新 App，并共享 `jobs` 与公共集成基础设施。
+`workflow.py` 只通过 `ProductApplicationPorts` 使用外部能力，`tasks.py` 是唯一运行时组合入口。
 
-业务模块禁止直接导入 `requests` 或 `httpx`。运行 `python scripts/check_architecture.py`
-检查这一约束。
+项目统一使用已安装的 `httpx`，不使用 `requests`。运行 `python scripts/check_architecture.py`
+递归检查公共层、产品目录和功能实现的依赖边界。
 
 ## 多版本并行
 

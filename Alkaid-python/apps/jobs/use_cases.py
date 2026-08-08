@@ -7,7 +7,7 @@ from django.conf import settings
 from django.db import transaction
 from django.utils import timezone
 
-from apps.jobs.models import Job, JobApiCall, JobLog, JobStatus
+from apps.jobs.models import TERMINAL_JOB_STATUSES, Job, JobApiCall, JobLog, JobStatus
 from apps.jobs.services import add_job_log, request_job_cancel, request_job_retry
 
 EnqueueJob = Callable[[Job], None]
@@ -35,6 +35,15 @@ def cancel_job(job_id: int, *, revoke: RevokeTask) -> Job:
             celery_task_id=job.celery_task_id,
         )
     return job
+
+
+@transaction.atomic
+def delete_all_jobs() -> dict[str, int]:
+    terminal_jobs = Job.objects.select_for_update().filter(status__in=TERMINAL_JOB_STATUSES)
+    deleted_jobs = terminal_jobs.count()
+    terminal_jobs.delete()
+    active_jobs = Job.objects.exclude(status__in=TERMINAL_JOB_STATUSES).count()
+    return {"deletedJobs": deleted_jobs, "activeJobs": active_jobs}
 
 
 def cleanup_expired_jobs(*, now: datetime | None = None) -> dict[str, int]:

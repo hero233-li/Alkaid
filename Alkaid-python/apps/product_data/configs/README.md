@@ -34,7 +34,7 @@ configs/
 不做字符串与布尔、数字之间的隐式转换；验证返回新 payload，不修改调用方对象。
 产品专属的外系统业务字段（例如 `order_no`、`cooperator_id`）直接保留在产品路由的
 `requestTemplate` 中；公共协议骨架和敏感字段路径由
-`apps/integrations/cjdk_jyrc/profiles/` 维护。产品 JSON 不允许保存 appId、私钥、公钥、Token、
+`apps/product_applications/cjdk/profiles/` 维护。产品 JSON 不允许保存 appId、私钥、公钥、Token、
 Cookie、证书或 Java SDK 路径。
 
 ## 运行方式
@@ -65,7 +65,7 @@ CJDK-JYRC 协议原始报文的结构。
 2. 为每个支持的环境和申请方式配置唯一 `applicationLinks` 路由，复用对应版本的
    Integration Profile。
 3. 如果调用顺序与现有产品相同，不需要新增 Handler、注册表或业务类。
-4. 只有调用顺序真正不同，才在 `product_applications/services.py` 新增一个明确业务函数；
+4. 只有调用顺序真正不同，才在 `apps/product_applications/workflow.py` 新增一个明确业务函数；
    不为只修改常量的产品建立 Handler 或注册表。
 5. 产品业务报文写入路由 `requestTemplate`；敏感值只通过 Profile 的 `secretBindings` 在执行时注入。
 6. 运行配置检查和后端测试。

@@ -3,6 +3,9 @@ import shutil
 
 import pytest
 
+from apps.product_applications.cjdk.runtime import (
+    validate_catalog_application_link_plans,
+)
 from apps.product_data.catalog import (
     PRODUCT_ROOT,
     REFERENCE_PATH,
@@ -27,7 +30,12 @@ def _edit_product(product_root, filename, edit):
 
 
 def _load(product_root, reference_path):
-    return load_product_catalog(product_root=product_root, reference_path=reference_path)
+    catalog = load_product_catalog(product_root=product_root, reference_path=reference_path)
+    try:
+        validate_catalog_application_link_plans(catalog)
+    except ValueError as exc:
+        raise ProductCatalogError(str(exc)) from exc
+    return catalog
 
 
 def test_application_link_route_requires_request_template(tmp_path) -> None:
@@ -117,7 +125,7 @@ def test_product_binding_cannot_overwrite_profile_secrets(tmp_path) -> None:
         _load(product_root, reference_path)
 
 
-def test_product_cooperation_project_is_required_and_excluded_from_ui_fields(
+def test_product_cooperation_project_is_optional_and_excluded_from_ui_fields(
     tmp_path,
 ) -> None:
     product_root, reference_path = _catalog_copy(tmp_path)
@@ -133,8 +141,11 @@ def test_product_cooperation_project_is_required_and_excluded_from_ui_fields(
         "product_b.json",
         lambda source: source.pop("cooperationProjectId"),
     )
-    with pytest.raises(ProductCatalogError, match="cooperationProjectId"):
-        _load(product_root, reference_path)
+    updated_catalog = _load(product_root, reference_path)
+    updated_product = next(
+        item for item in updated_catalog.to_ui_config().products if item.value == "product-b"
+    )
+    assert updated_product.cooperationProjectId is None
 
 
 def test_switch_field_must_declare_boolean_value_type(tmp_path) -> None:

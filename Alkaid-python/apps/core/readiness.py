@@ -5,8 +5,11 @@ from typing import Any
 
 from django.db import connection
 
-from apps.integrations.cjdk_jyrc.config import validate_cjdk_jyrc_readiness
-from apps.integrations.cjdk_jyrc.messages import (
+from apps.product_applications.cjdk.config import validate_cjdk_jyrc_readiness
+from apps.product_applications.cjdk.runtime import (
+    validate_catalog_application_link_plans,
+)
+from apps.product_applications.cjdk.runtime import (
     validate_message_catalog as validate_agreement_message_catalog,
 )
 from apps.product_data.catalog import load_product_catalog
@@ -28,6 +31,7 @@ def collect_readiness() -> ReadinessReport:
         checks["database"] = "ok"
 
         catalog = load_product_catalog()
+        validate_catalog_application_link_plans(catalog)
         checks["catalog"] = {
             "status": "ok",
             "version": catalog.reference.version,

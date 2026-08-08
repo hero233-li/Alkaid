@@ -27,6 +27,7 @@ INSTALLED_APPS = [
     "apps.jobs",
     "apps.portal",
     "apps.product_data",
+    "apps.product_applications",
     "apps.workbench",
 ]
 

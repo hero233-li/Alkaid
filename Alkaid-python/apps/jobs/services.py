@@ -31,6 +31,14 @@ NON_RETRYABLE_JOB_KINDS = {
 NON_CANCELLABLE_RUNNING_JOB_KINDS = NON_RETRYABLE_JOB_KINDS
 
 
+def _limit_raw_text(value: str) -> str:
+    encoded = value.encode("utf-8")
+    if len(encoded) <= settings.JOB_MAX_HTTP_BODY_BYTES:
+        return value
+    preview = encoded[: settings.JOB_MAX_HTTP_BODY_BYTES].decode("utf-8", errors="ignore")
+    return f"{preview}\n<truncated originalBytes={len(encoded)}>"
+
+
 def resolve_job_identifiers(
     idempotency_key: str | None,
     trace_id: str | None,
@@ -202,15 +210,16 @@ def mark_job_success(job_id: int, result: dict[str, Any]) -> Job:
 
 
 def mark_job_failed(job_id: int, error: str) -> Job:
+    stored_error = _limit_raw_text(error)
     return _finish_job(
         job_id,
         status=JobStatus.FAILED,
         stage="failed",
         progress=100,
         result={},
-        error_message=error[:4000],
+        error_message=stored_error,
         log_level="ERROR",
-        log_message=f"任务执行失败：{error[:1000]}",
+        log_message=f"任务执行失败：{stored_error}",
     )
 
 

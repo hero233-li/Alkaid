@@ -1,6 +1,6 @@
 import pytest
 
-from apps.jobs.models import ApiCallStatus, Job, JobApiCall, JobStatus
+from apps.jobs.models import ApiCallStatus, Job, JobApiCall, JobLog, JobStatus
 from apps.jobs.services import add_job_log, create_job
 
 
@@ -137,3 +137,27 @@ def test_job_list_rejects_invalid_filters(client, params, message) -> None:
 
     assert response.status_code == 400
     assert response.json()["message"] == message
+
+
+@pytest.mark.django_db
+def test_delete_all_jobs_removes_terminal_jobs_and_keeps_active_jobs(client) -> None:
+    completed = _job("delete-all-completed", name="已完成任务")
+    running = _job("delete-all-running", name="执行中任务")
+    Job.objects.filter(pk=completed.pk).update(status=JobStatus.SUCCESS)
+    Job.objects.filter(pk=running.pk).update(status=JobStatus.RUNNING)
+    log = add_job_log(completed, "INFO", "任务完成", step="completed")
+    call = JobApiCall.objects.create(
+        job=completed,
+        method="POST",
+        url="https://service.example/complete",
+        status=ApiCallStatus.SUCCESS,
+    )
+
+    response = client.delete("/api/jobs/")
+
+    assert response.status_code == 200
+    assert response.json()["data"] == {"deletedJobs": 1, "activeJobs": 1}
+    assert not Job.objects.filter(pk=completed.pk).exists()
+    assert not JobLog.objects.filter(pk=log.pk).exists()
+    assert not JobApiCall.objects.filter(pk=call.pk).exists()
+    assert Job.objects.filter(pk=running.pk).exists()

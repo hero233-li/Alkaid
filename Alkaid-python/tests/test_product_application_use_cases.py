@@ -1,19 +1,27 @@
 """Product application function Use Case tests."""
 
+import json
+
 import pytest
 from django.test import override_settings
 
-import apps.product_data.product_applications.tasks as task_module
-from apps.integrations.cjdk_jyrc import config
-from apps.integrations.cjdk_jyrc.runtime import CjdkJyrcRuntime
+import apps.product_applications.tasks as task_module
 from apps.jobs.integration_observer import JobIntegrationObserver
 from apps.jobs.models import JobStatus
 from apps.jobs.services import create_job
+from apps.product_applications.api import ProductApplicationSubmission, ProductConfigurationError
+from apps.product_applications.cjdk import config
+from apps.product_applications.cjdk.identity import DcppClient, PhotoClient
+from apps.product_applications.cjdk.runtime import (
+    CjdkClient,
+    ProductApplicationRuntime,
+    compile_application_link_plan,
+)
+from apps.product_applications.workflow import (
+    execute_product_application,
+    freeze_product_execution_snapshot,
+)
 from apps.product_data.catalog import load_product_catalog
-from apps.product_data.product_applications.preparation import freeze_product_execution_snapshot
-from apps.product_data.product_applications.schemas import ProductApplicationSubmission
-from apps.product_data.product_applications.use_cases import execute_product_application
-from apps.product_data.product_applications.validation import ProductConfigurationError
 
 
 def _payload() -> dict[str, object]:
@@ -41,7 +49,11 @@ def _snapshot(payload=None):
         product="product-b",
         payload=payload or _payload(),
     )
-    return freeze_product_execution_snapshot(submission, load_product_catalog()).snapshot
+    return freeze_product_execution_snapshot(
+        submission,
+        load_product_catalog(),
+        plan_compiler=compile_application_link_plan,
+    )[1]
 
 
 def _job(*, key: str, payload=None, snapshot=None):
@@ -68,22 +80,21 @@ def test_product_application_flow_opens_link_then_reads_agreement() -> None:
     submission = ProductApplicationSubmission(
         name=job.name, product=job.product, payload=dict(snapshot.normalized_payload)
     )
-    runtime = CjdkJyrcRuntime(
+    runtime = ProductApplicationRuntime(
         settings=config.get_cjdk_jyrc_settings(),
         observer=JobIntegrationObserver(job),
         trace_id=job.trace_id,
         environment=snapshot.environment,
     )
-    assert runtime.external_session._client is runtime.agreements._client
-    assert runtime._client._observer is runtime.application_links._java_gateway._observer
+    assert runtime._photo_client is None
+    assert runtime._dcpp_client is None
+    progress_stages: list[str] = []
     result = execute_product_application(
         runtime=runtime,
-        application_links=runtime.application_links,
-        external_session=runtime.external_session,
-        agreements=runtime.agreements,
         submission=submission,
         snapshot=snapshot,
         application_link_kind="internal",
+        progress=lambda **event: progress_stages.append(event["stage"]),
     )
 
     assert result["applicationLink"] == {
@@ -108,15 +119,37 @@ def test_product_application_flow_opens_link_then_reads_agreement() -> None:
         "X-Token",
     ]
     assert result["externalSession"]["finalUrlPresent"] is True
+    assert result["identityVerificationCompleted"] is True
 
     steps = list(job.api_calls.order_by("id").values_list("step", flat=True))
     assert steps[0] == "application_link.generate_link"
-    assert steps[-3:] == [
-        "agreement.query_templates",
-        "agreement.query_preview",
-        "agreement.read_document",
-    ]
+    assert steps[-1] == "identity.card_verify"
+    assert steps.count("agreement.query_templates") == 2
     assert "application_link.acquire_session" in steps
+    agreement_calls = job.api_calls.filter(step="agreement.query_templates").order_by("id")
+    scenes = [
+        json.loads(call.request_body["form"]["REQ_MESSAGE"])["REQ_BODY"]["request"]["scene"]
+        for call in agreement_calls
+    ]
+    assert scenes == ["SC00015", "SC00016"]
+    assert progress_stages == [
+        "validate",
+        "application_link",
+        "session",
+        "agreement_query",
+        "agreement_preview",
+        "agreement_read",
+        "application_submit",
+        "identity_public_key",
+        "identity_mobile",
+        "identity_agreement_query",
+        "identity_agreement_preview",
+        "identity_agreement_read",
+        "identity_photo_delete",
+        "identity_face_check",
+        "identity_sms_check",
+        "identity_verify",
+    ]
 
 
 @pytest.mark.django_db
@@ -144,9 +177,6 @@ def test_product_application_flow_validates_before_opening_adapter() -> None:
     with pytest.raises(ProductConfigurationError, match="personName"):
         execute_product_application(
             runtime=UnexpectedRuntime(),
-            application_links=object(),
-            external_session=object(),
-            agreements=object(),
             submission=ProductApplicationSubmission(
                 name=job.name, product=job.product, payload=frozen_payload
             ),
@@ -173,15 +203,51 @@ def test_product_application_task_delegates_to_use_case(monkeypatch) -> None:
     task_module.execute_product_application.apply(args=(job.id,), throw=True)
 
     job.refresh_from_db()
-    assert isinstance(captured["runtime"], CjdkJyrcRuntime)
-    runtime = captured["runtime"]
-    assert captured["application_links"] is runtime.application_links
-    assert captured["external_session"] is runtime.external_session
-    assert captured["agreements"] is runtime.agreements
+    assert isinstance(captured["runtime"], ProductApplicationRuntime)
     assert captured["application_link_kind"] == "internal"
     assert callable(captured["progress"])
     assert job.status == JobStatus.SUCCESS
     assert job.result == expected_result
+
+
+@pytest.mark.django_db
+@override_settings(EXTERNAL_SYSTEM_MODE="mock", APPLICATION_LINK_URL_MODE="internal")
+def test_mock_task_completes_identity_verification() -> None:
+    job = _job(key="mock-full-identity-task")
+
+    task_module.execute_product_application.apply(args=(job.id,), throw=True)
+
+    job.refresh_from_db()
+    assert job.status == JobStatus.SUCCESS
+    assert job.result["identityVerificationCompleted"] is True
+
+
+@pytest.mark.django_db
+@override_settings(EXTERNAL_SYSTEM_MODE="mock")
+def test_cjdk_photo_and_dcpp_clients_have_independent_lifecycles() -> None:
+    job = _job(key="client-isolation")
+    settings = config.get_cjdk_jyrc_settings()
+    cjdk = CjdkClient(
+        settings=settings,
+        observer=JobIntegrationObserver(job),
+        trace_id=job.trace_id,
+        environment="UAT1",
+    )
+    photo = PhotoClient(
+        config.PhotoEnvironmentSettings(baseUrl="https://photo.invalid", verifySsl=False)
+    )
+    dcpp = DcppClient({})
+
+    with cjdk, photo, dcpp:
+        assert cjdk._http_client is not None
+        clients = (cjdk._http_client._client, photo._client, dcpp._client)
+        assert all(client is not None for client in clients)
+        assert len({id(client) for client in clients}) == 3
+        assert len({id(client.cookies.jar) for client in clients if client is not None}) == 3
+
+    assert cjdk._http_client is None
+    assert photo._client is None
+    assert dcpp._client.is_closed
 
 
 @override_settings(

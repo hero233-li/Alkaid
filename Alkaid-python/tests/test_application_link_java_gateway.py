@@ -5,14 +5,15 @@ from types import SimpleNamespace
 
 import pytest
 
-from apps.integrations.cjdk_jyrc import config
-from apps.integrations.cjdk_jyrc.java_gateway import JavaApplicationLinkGateway
-from apps.integrations.cjdk_jyrc.profiles import load_integration_profile
-from apps.integrations.cjdk_jyrc.request_builder import (
-    ApplicationLinkRequestError,
+from apps.product_applications.cjdk import config
+from apps.product_applications.cjdk.runtime import (
+    ApplicationConfigurationError,
     build_application_link_request,
+    compile_application_link_plan,
+    execute_java,
+    load_integration_profile,
+    parse_java_result,
 )
-from apps.product_data.application_link_plan import compile_application_link_plan
 from apps.product_data.catalog import load_product_catalog
 
 
@@ -56,7 +57,7 @@ def test_product_payload_is_copied_bound_and_secret_injected() -> None:
         secret_resolver=TestSecretResolver(),
     )
 
-    external = request.external_request()
+    external = request
     assert external["env"] == "UAT1"
     assert external["product"] == "CJDK-ZHHX"
     assert external["category"] == "太阳码"
@@ -79,7 +80,7 @@ def test_product_payload_is_copied_bound_and_secret_injected() -> None:
 
 def test_missing_required_binding_value_is_rejected() -> None:
     _, plan = _cjdk_catalog_and_plan()
-    with pytest.raises(ApplicationLinkRequestError, match="cooperationProjectId"):
+    with pytest.raises(ApplicationConfigurationError, match="cooperationProjectId"):
         build_application_link_request(
             plan=plan,
             normalized_payload={"product": "CJDK-ZHHX", "environment": "UAT1"},
@@ -101,14 +102,12 @@ def test_java_gateway_preserves_request_file_contract(tmp_path, monkeypatch) -> 
     configured = config.CjdkJyrcSettings(
         mode="real",
         application_link_url_mode="internal",
-        java_gateway=config.JavaGatewaySettings(
-            sdk_dir=sdk_dir,
-            java_executable=java,
-            jar=Path("application-link.jar"),
-            main_class="com.example.ApplicationLinkMain",
-            output_encoding="gbk",
-            timeout_seconds=15,
-        ),
+        sdk_dir=sdk_dir,
+        java_executable=java,
+        jar=Path("application-link.jar"),
+        main_class="com.example.ApplicationLinkMain",
+        output_encoding="gbk",
+        timeout_seconds=15,
         environments={"UAT1": config.EnvironmentSettings(agreement_base_url="http://agreement")},
     )
     monkeypatch.setattr(config, "get_cjdk_jyrc_settings", lambda: configured)
@@ -127,10 +126,7 @@ def test_java_gateway_preserves_request_file_contract(tmp_path, monkeypatch) -> 
         )
 
     monkeypatch.setattr("subprocess.run", fake_run)
-    gateway = object.__new__(JavaApplicationLinkGateway)
-    gateway._write_diagnostic = lambda *args, **kwargs: None
-
-    result = gateway._execute_java({"env": "UAT1", "payload": {"中文": "值"}})
+    result = execute_java({"env": "UAT1", "payload": {"中文": "值"}})
 
     command = captured["command"]
     kwargs = captured["kwargs"]
@@ -146,7 +142,7 @@ def test_java_gateway_preserves_request_file_contract(tmp_path, monkeypatch) -> 
 
 
 def test_java_result_uses_last_alkaid_result_line() -> None:
-    result = JavaApplicationLinkGateway._parse_result(
+    result = parse_java_result(
         "SDK log\n"
         'ALKAID_RESULT={"internal_url":"old","external_url":"old"}\n'
         "more log\n"
@@ -157,4 +153,4 @@ def test_java_result_uses_last_alkaid_result_line() -> None:
 
 def test_java_result_marker_is_required() -> None:
     with pytest.raises(RuntimeError, match="ALKAID_RESULT"):
-        JavaApplicationLinkGateway._parse_result("SDK completed")
+        parse_java_result("SDK completed")

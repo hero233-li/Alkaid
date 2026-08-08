@@ -1,27 +1,146 @@
+from __future__ import annotations
+
 import hashlib
 import json
+from enum import Enum
 from functools import lru_cache
 from pathlib import Path
 from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
-from apps.product_data.product_applications.contracts import (
-    ApplicationLinkCategory,
-    FrozenApplicationLinkRoute,
-)
-from apps.product_data.product_applications.schemas import (
-    ProductApplicationConfig,
-    ProductDefinition,
-    ProductField,
-    ProductLocation,
-    ProductOption,
-)
-
 CONFIG_ROOT = Path(__file__).with_name("configs")
 PRODUCT_ROOT = CONFIG_ROOT / "products"
 REFERENCE_PATH = CONFIG_ROOT / "reference_data.json"
 ALL_METHODS = "*"
+
+
+class ProductOption(BaseModel):
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    label: str = Field(min_length=1, max_length=128)
+    value: str = Field(min_length=1, max_length=128)
+
+
+class ProductBranch(ProductOption):
+    outlets: tuple[ProductOption, ...]
+
+
+class ProductLocation(ProductOption):
+    branches: tuple[ProductBranch, ...]
+
+
+class ProductDefinition(ProductOption):
+    cooperationProjectId: str | None = Field(default=None, min_length=1, max_length=128)
+    environments: tuple[str, ...]
+    locations: tuple[ProductLocation, ...]
+    fieldSets: tuple[str, ...] = Field(min_length=1)
+    requiredFields: tuple[str, ...] = ()
+
+
+class ProductField(BaseModel):
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    name: str = Field(min_length=1, max_length=128)
+    label: str | None = None
+    control: Literal["input", "select", "switch"] = "input"
+    span: int = Field(default=8, ge=1, le=24)
+    required: bool = False
+    editable: bool = True
+    submit: bool = True
+    searchable: bool = False
+    placeholder: str | None = None
+    defaultValue: str | bool | None = None
+    options: tuple[ProductOption, ...] | None = None
+    checkedLabel: str | None = None
+    uncheckedLabel: str | None = None
+    switchWidth: int | None = Field(default=None, ge=1, le=500)
+    persistDraft: bool = False
+
+
+class ProductApplicationConfig(BaseModel):
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    id: str = Field(min_length=1, max_length=128)
+    version: int = Field(ge=1)
+    environments: tuple[ProductOption, ...] = Field(min_length=1)
+    products: tuple[ProductDefinition, ...] = Field(min_length=1)
+    fieldSets: dict[str, tuple[str, ...]] = Field(min_length=1)
+    fields: tuple[ProductField, ...] = Field(min_length=1)
+    cascadeResetMap: dict[str, tuple[str, ...]] = Field(default_factory=dict)
+
+    def field_names_for(self, product: ProductDefinition) -> set[str]:
+        return {
+            field_name
+            for field_set_name in product.fieldSets
+            for field_name in self.fieldSets[field_set_name]
+        }
+
+    @model_validator(mode="after")
+    def validate_references(self) -> ProductApplicationConfig:
+        environment_values = {item.value for item in self.environments}
+        product_values = [item.value for item in self.products]
+        if len(product_values) != len(set(product_values)):
+            raise ValueError("产品配置值不能重复")
+        field_names = [item.name for item in self.fields]
+        if len(field_names) != len(set(field_names)):
+            raise ValueError("字段配置名称不能重复")
+        known_fields = set(field_names)
+        for field_set_name, configured_fields in self.fieldSets.items():
+            if not configured_fields:
+                raise ValueError(f"字段组 {field_set_name} 不能为空")
+            unknown_fields = set(configured_fields) - known_fields
+            if unknown_fields:
+                raise ValueError(
+                    f"字段组 {field_set_name} 引用了未知字段：{', '.join(sorted(unknown_fields))}"
+                )
+        for product in self.products:
+            if set(product.environments) - environment_values:
+                raise ValueError(f"产品 {product.value} 引用了未知环境")
+            unknown_field_sets = set(product.fieldSets) - self.fieldSets.keys()
+            if unknown_field_sets:
+                raise ValueError(
+                    f"产品 {product.value} 引用了未知字段组："
+                    f"{', '.join(sorted(unknown_field_sets))}"
+                )
+            unavailable = set(product.requiredFields) - self.field_names_for(product)
+            if unavailable:
+                raise ValueError(
+                    f"产品 {product.value} 的必填字段未包含在字段组中："
+                    f"{', '.join(sorted(unavailable))}"
+                )
+        for source, targets in self.cascadeResetMap.items():
+            if source not in known_fields or set(targets) - known_fields:
+                raise ValueError("级联重置配置引用了未知字段")
+        return self
+
+
+class ApplicationLinkCategory(str, Enum):
+    SUN_CODE = "SUN_CODE"
+    DYNAMIC_LINK = "DYNAMIC_LINK"
+
+    @property
+    def display_name(self) -> str:
+        return {
+            ApplicationLinkCategory.SUN_CODE: "太阳码",
+            ApplicationLinkCategory.DYNAMIC_LINK: "动态链接",
+        }[self]
+
+
+class FrozenApplicationLinkRoute(BaseModel):
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    route_id: str = Field(min_length=1, max_length=255)
+    environment: str = Field(min_length=1, max_length=128)
+    application_methods: tuple[str, ...] = Field(min_length=1)
+    category_code: ApplicationLinkCategory
+    integration_profile_id: str = Field(min_length=1, max_length=255)
+    integration_profile_version: int = Field(ge=1)
+    integration_profile_checksum: str = Field(pattern=r"^sha256:[0-9a-f]{64}$")
+    required_fields: tuple[str, ...]
+    compiled_request_template: dict[str, Any]
+    payload_bindings: dict[str, str]
+    secret_bindings: dict[str, str]
 
 
 class ProductCatalogError(ValueError):
@@ -47,7 +166,7 @@ class CatalogField(ProductField):
     allowedValues: tuple[str | int | bool, ...] = ()
 
     @model_validator(mode="after")
-    def validate_constraints(self) -> "CatalogField":
+    def validate_constraints(self) -> CatalogField:
         import re
 
         if self.control == "switch" and self.valueType != "boolean":
@@ -131,7 +250,7 @@ class ApplicationLinkRoute(BaseModel):
     payload_bindings: dict[str, str] = Field(default_factory=dict, alias="payloadBindings")
 
     @model_validator(mode="after")
-    def normalize_and_validate(self) -> "ApplicationLinkRoute":
+    def normalize_and_validate(self) -> ApplicationLinkRoute:
         normalized_environment = self.environment.strip().upper()
         if not normalized_environment:
             raise ValueError("申请链接环境不能为空")
@@ -173,7 +292,7 @@ class ProductCatalogSource(BaseModel):
     features: CatalogFeatures = Field(default_factory=CatalogFeatures)
 
     @model_validator(mode="after")
-    def validate_local_references(self) -> "ProductCatalogSource":
+    def validate_local_references(self) -> ProductCatalogSource:
         method_codes = [method.code for method in self.applicationMethods]
         if len(method_codes) != len(set(method_codes)):
             raise ValueError("申请方式代码不能重复")
@@ -403,11 +522,6 @@ def _load_product_catalog(
                 )
         checksum = _checksum({"reference": reference_raw, "products": product_raw})
         catalog = ProductCatalog(reference=reference, products=products, checksum=checksum)
-        from apps.product_data.application_link_plan import (
-            validate_catalog_application_link_plans,
-        )
-
-        validate_catalog_application_link_plans(catalog)
         # Build once so cross-product UI definitions and reset references are validated too.
         catalog.to_ui_config()
         return catalog

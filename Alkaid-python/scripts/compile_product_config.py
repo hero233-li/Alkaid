@@ -12,9 +12,9 @@ import django  # noqa: E402
 
 django.setup()
 
-from apps.integrations.cjdk_jyrc.messages import validate_message_catalog  # noqa: E402
-from apps.product_data.application_link_plan import (  # noqa: E402
+from apps.product_applications.cjdk.runtime import (  # noqa: E402
     compile_application_link_plan,
+    validate_message_catalog,
 )
 from apps.product_data.catalog import load_product_catalog  # noqa: E402
 

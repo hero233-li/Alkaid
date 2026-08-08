@@ -7,7 +7,6 @@ from collections.abc import Callable, Mapping
 from datetime import datetime, timezone
 from email.utils import parsedate_to_datetime
 from typing import Any, Protocol
-from urllib.parse import urlsplit, urlunsplit
 
 import httpx
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
@@ -124,11 +123,11 @@ class HttpClient:
         request_headers = dict(self._client.headers)
         request_headers.update(headers or {})
         request_headers["X-Trace-ID"] = trace_id
-        safe_url = _without_query(url)
+        audit_url = str(self._client.base_url.join(url).copy_merge_params(params or {}))
         response_handle = (
             observer.started(
                 method=method,
-                path=safe_url,
+                path=audit_url,
                 headers=request_headers,
                 request_body={"query": dict(params or {})},
             )
@@ -155,7 +154,7 @@ class HttpClient:
                     duration_ms=round((time.monotonic() - started) * 1000),
                     error=exc,
                 )
-            self._log(method, safe_url, trace_id, started, None, 1)
+            self._log(method, audit_url, trace_id, started, None, 1)
             raise ExternalServiceError("external service transport error") from exc
         except httpx.HTTPStatusError as exc:
             if observer and response_handle is not None and response is not None:
@@ -169,7 +168,7 @@ class HttpClient:
                 )
             self._log(
                 method,
-                safe_url,
+                audit_url,
                 trace_id,
                 started,
                 response.status_code if response is not None else None,
@@ -180,7 +179,7 @@ class HttpClient:
                 status_code=response.status_code if response is not None else None,
             ) from exc
 
-        self._log(method, safe_url, trace_id, started, response.status_code, 1)
+        self._log(method, audit_url, trace_id, started, response.status_code, 1)
         if observer and response_handle is not None:
             observer.finished(
                 response_handle,
@@ -253,7 +252,7 @@ class HttpClient:
             if form_data is not None
             else {"query": dict(params or {}), "body": request_json}
         )
-        audit_url = _without_query(str(self._client.base_url.join(path)))
+        audit_url = str(self._client.base_url.join(path).copy_merge_params(params or {}))
         request_headers = dict(self._client.headers)
         request_headers.update(headers or {})
         request_headers["X-Trace-ID"] = trace_id
@@ -468,22 +467,18 @@ def _response_body(response: httpx.Response) -> Any:
 
 def _raw_response_summary(response: httpx.Response) -> dict[str, Any]:
     return {
-        "url": _without_query(str(response.url)),
+        "url": str(response.url),
         "contentType": response.headers.get("Content-Type"),
         "contentLength": len(response.content),
+        "body": response.text,
         "redirects": [
             {
                 "status": item.status_code,
-                "url": _without_query(str(item.url)),
+                "url": str(item.url),
             }
             for item in response.history
         ],
     }
-
-
-def _without_query(value: str) -> str:
-    parsed = urlsplit(value)
-    return urlunsplit((parsed.scheme, parsed.netloc, parsed.path, "", ""))
 
 
 def _serialize_form(form_data: Mapping[str, Any] | None) -> dict[str, str] | None:
