@@ -34,17 +34,29 @@ export default function VerificationSearchForm({
       >
         <Row gutter={16}>
           <Col xs={24} md={8}>
-            <Form.Item name="environment" label="环境" rules={[{ required: true, message: '请选择环境' }]}>
+            <Form.Item
+              name="environment"
+              label="环境"
+              rules={[{ required: true, message: '请选择环境' }]}
+            >
               <Select options={environmentOptions} placeholder="请选择环境" />
             </Form.Item>
           </Col>
           <Col xs={24} md={8}>
-            <Form.Item name="category" label="类别" rules={[{ required: true, message: '请选择类别' }]}>
+            <Form.Item
+              name="category"
+              label="类别"
+              rules={[{ required: true, message: '请选择类别' }]}
+            >
               <Select options={categoryOptions} placeholder="请选择类别" />
             </Form.Item>
           </Col>
           <Col xs={24} md={8}>
-            <Form.Item name="contractNo" label="合同号" rules={[{ required: true, message: '请输入合同号' }]}>
+            <Form.Item
+              name="contractNo"
+              label="合同号"
+              rules={[{ required: true, message: '请输入合同号' }]}
+            >
               <Input placeholder="请输入合同号，例如 HT20260710001" allowClear />
             </Form.Item>
           </Col>
@@ -59,7 +71,11 @@ export default function VerificationSearchForm({
             >
               搜索
             </Button>
-            <Button icon={<RotateCcw size={16} />} disabled={searching || configLoading} onClick={onReset}>
+            <Button
+              icon={<RotateCcw size={16} />}
+              disabled={searching || configLoading}
+              onClick={onReset}
+            >
               重置
             </Button>
           </Space>

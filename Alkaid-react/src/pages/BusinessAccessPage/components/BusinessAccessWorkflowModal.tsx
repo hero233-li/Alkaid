@@ -1,15 +1,14 @@
 import { Modal, Progress, Space, Tag, Typography } from 'antd';
-import {
-  businessAccessJobStatusLabels,
-  getBusinessAccessVisibleProgress,
-} from '../model/jobModel';
+import { businessAccessJobStatusLabels, getBusinessAccessVisibleProgress } from '../model/jobModel';
 import type { BusinessAccessWorkflowActivity } from '../types';
 
 interface BusinessAccessWorkflowModalProps {
   activity: BusinessAccessWorkflowActivity | null;
 }
 
-export default function BusinessAccessWorkflowModal({ activity }: BusinessAccessWorkflowModalProps) {
+export default function BusinessAccessWorkflowModal({
+  activity,
+}: BusinessAccessWorkflowModalProps) {
   const percent = activity ? getBusinessAccessVisibleProgress(activity) : 0;
 
   return (

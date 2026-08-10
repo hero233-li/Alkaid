@@ -7,13 +7,7 @@ import sys
 from config.celery import app
 
 REQUIRED_TASKS = {
-    "apps.product_data.application_data.tasks.execute_application_data",
-    "apps.product_data.application_links.tasks.execute_application_link",
-    "apps.product_data.business_access.tasks.execute_business_access",
-    "apps.product_data.card_status.tasks.execute_card_status",
-    "apps.product_data.loan_status.tasks.execute_loan_status",
-    "apps.product_data.tasks.execute_product_application",
-    "apps.product_data.verification_approval.tasks.execute_verification_approval",
+    "apps.workflow.product_applications.tasks.execute_product_application",
 }
 
 
@@ -27,8 +21,7 @@ def main() -> int:
     pings = inspector.ping() or {}
     if len(pings) < args.min_workers:
         print(
-            f"Expected at least {args.min_workers} workers, found {len(pings)}: "
-            f"{sorted(pings)}",
+            f"Expected at least {args.min_workers} workers, found {len(pings)}: {sorted(pings)}",
             file=sys.stderr,
         )
         return 1

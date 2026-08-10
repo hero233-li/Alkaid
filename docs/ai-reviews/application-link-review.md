@@ -48,7 +48,7 @@ apps/integrations/application_link/
 但它反向导入了：
 
 ```python
-from apps.product_data.catalog import load_product_catalog
+from apps.utils.product_Conf.catalog import load_product_catalog
 ```
 
 然后为了打印调试信息，又读取产品配置、地区配置和完整请求报文。

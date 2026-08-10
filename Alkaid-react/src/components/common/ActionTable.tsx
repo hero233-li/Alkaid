@@ -52,5 +52,11 @@ export default function ActionTable<TRecord extends object>({
     />
   );
 
-  return contained ? <Card {...cardProps} title={title}>{table}</Card> : table;
+  return contained ? (
+    <Card {...cardProps} title={title}>
+      {table}
+    </Card>
+  ) : (
+    table
+  );
 }

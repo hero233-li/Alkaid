@@ -36,6 +36,7 @@ export interface ProductLocationConfig extends ProductOption {
 }
 
 export interface ProductDefinitionConfig extends ProductOption {
+  cooperationProjectId?: string | null;
   environments: string[];
   locations: ProductLocationConfig[];
   fieldSets: string[];
@@ -63,6 +64,7 @@ export interface ProductApplicationResult {
   payload: Record<string, unknown>;
   logs: JobLog[];
   errorMessage?: string;
+  errorCode?: string;
   traceId: string;
   idempotencyKey: string;
   attemptCount: number;

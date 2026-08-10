@@ -1,7 +1,16 @@
 import { useEffect, useRef, useState } from 'react';
 import { message } from 'antd';
-import { getApplicationDataConfig, pollApplicationData, submitApplicationData } from '../api/applicationData';
-import type { ApplicationDataActivity, ApplicationDataConfig, ApplicationDataFormValues, ApplicationDataRecord } from '../types';
+import {
+  getApplicationDataConfig,
+  pollApplicationData,
+  submitApplicationData,
+} from '../api/applicationData';
+import type {
+  ApplicationDataActivity,
+  ApplicationDataConfig,
+  ApplicationDataFormValues,
+  ApplicationDataRecord,
+} from '../types';
 
 export function useApplicationDataGenerator() {
   const [config, setConfig] = useState<ApplicationDataConfig | null>(null);
@@ -11,8 +20,11 @@ export function useApplicationDataGenerator() {
   const controllerRef = useRef<AbortController | null>(null);
   const loadConfig = async () => {
     setConfigError(null);
-    try { setConfig(await getApplicationDataConfig()); }
-    catch (error) { setConfigError(error instanceof Error ? error.message : '配置加载失败'); }
+    try {
+      setConfig(await getApplicationDataConfig());
+    } catch (error) {
+      setConfigError(error instanceof Error ? error.message : '配置加载失败');
+    }
   };
   useEffect(() => {
     void loadConfig();
@@ -22,12 +34,29 @@ export function useApplicationDataGenerator() {
     controllerRef.current?.abort();
     const controller = new AbortController();
     controllerRef.current = controller;
-    setRecords([]); setActivity({ label: '正在生成客户及企业数据', status: 'submitting', progress: 0 });
+    setRecords([]);
+    setActivity({ label: '正在生成客户及企业数据', status: 'submitting', progress: 0 });
     try {
       const submitted = await submitApplicationData(values);
-      setActivity({ jobId: submitted.id, label: '正在生成客户及企业数据', status: submitted.status, progress: submitted.progress });
-      const job = await pollApplicationData(submitted.id, (value) => setActivity({ jobId: value.id, label: '正在生成客户及企业数据', status: value.status, progress: value.progress }), { signal: controller.signal });
-      setRecords((job.result.records as ApplicationDataRecord[]) ?? []); message.success('申请数据生成完成');
+      setActivity({
+        jobId: submitted.id,
+        label: '正在生成客户及企业数据',
+        status: submitted.status,
+        progress: submitted.progress,
+      });
+      const job = await pollApplicationData(
+        submitted.id,
+        (value) =>
+          setActivity({
+            jobId: value.id,
+            label: '正在生成客户及企业数据',
+            status: value.status,
+            progress: value.progress,
+          }),
+        { signal: controller.signal },
+      );
+      setRecords(job.result.records ?? []);
+      message.success('申请数据生成完成');
     } catch (error) {
       if (!isCancelled(error)) message.error(error instanceof Error ? error.message : '生成失败');
     } finally {
@@ -37,7 +66,15 @@ export function useApplicationDataGenerator() {
       }
     }
   };
-  return { config, configError, records, activity, busy: Boolean(activity), generate, reloadConfig: loadConfig };
+  return {
+    config,
+    configError,
+    records,
+    activity,
+    busy: Boolean(activity),
+    generate,
+    reloadConfig: loadConfig,
+  };
 }
 
 function isCancelled(error: unknown) {

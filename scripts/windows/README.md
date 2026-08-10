@@ -30,6 +30,10 @@ set ALKAID_RUNTIME_DIR=D:\Alkaid-runtime
 npm run dev
 ```
 
+建议直接在 PyCharm 的 PowerShell Terminal 中执行该命令。按一次 `Ctrl+C` 会停止前端、后端和
+Celery Worker，并返回当前 PowerShell 提示符，不会关闭 PyCharm 的 Terminal 标签。不要双击
+`dev-start.bat`；双击创建的临时 CMD 窗口会在脚本结束后按 Windows 默认行为关闭。
+
 启动会优先读取项目根目录 `.env.local`。检查当前实际生效的 MySQL 配置：
 
 ```bat
@@ -65,6 +69,26 @@ CELERY_QUEUE=alkaid-local
 ```bat
 npm run dev:split
 ```
+
+### 内网无 npm 时安装前端增量依赖
+
+如果 Windows 内网无法访问 npm registry，先把
+`Alkaid-windows-dependency-delta-20260803.zip` 解压到项目根目录并覆盖同名文件，再执行：
+
+```bat
+set NPM_OFFLINE=true
+npm run dev
+```
+
+如果使用 PowerShell：
+
+```powershell
+$env:NPM_OFFLINE = "true"
+npm run dev
+```
+
+启动脚本会先自动解压本次更新的前端依赖（包括 `mammoth` 和 `xlsx`），不会下载全部依赖。
+如果项目中未放置该 ZIP，脚本会提示缺少本地依赖包并退出。
 
 开发默认端口：
 
@@ -156,11 +180,8 @@ Alkaid-runtime\prod-start.bat
 ```
 
 启动前需要在任务计划或系统环境中提供 `DJANGO_SECRET_KEY`、`CELERY_BROKER_URL`、
-`MOCK_PRODUCT_BASE_URL`、`APPLICATION_LINK_BASE_URL`、`APPLICATION_LINK_API_TOKEN` 和
-`APPLICATION_LINK_FORM_SIGN`（内网协议要求签名时同时设置
-`APPLICATION_LINK_SIGN_REQUIRED=true`）、
-`BUSINESS_ACCESS_BASE_URL`、`BUSINESS_ACCESS_API_TOKEN`、`VERIFICATION_APPROVAL_BASE_URL`、
-`VERIFICATION_APPROVAL_API_TOKEN`、`MOCK_FIXED_SYSTEM_TOKEN`。生产固定使用
+`CJDK_JYRC_BASE_URLS`、三个 `CJDK_JYRC_APPLICATION_LINK_*` 密钥，以及对应的
+`APPLICATION_LINK_JAVA_*` Java SDK 配置。生产固定使用
 `config.settings.server`、真实外系统模式和异步 Celery；
 启动脚本会监管 Web、Worker、Beat 三个进程，不再在 Web 进程内同步执行任务。
 

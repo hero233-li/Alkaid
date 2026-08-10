@@ -9,6 +9,14 @@ Alkaid-python/.env.*
 !.env.local.example
 !Alkaid-python/.env.example
 !Alkaid-python/.env.server.example
+Alkaid-python/apps/integrations/cjdk_jyrc/configs/environments.local.json
+Alkaid-python/apps/integrations/cjdk_jyrc/configs/identity.local.json
+Alkaid-python/apps/product_applications/cjdk/configs/environments.local.json
+Alkaid-python/apps/product_applications/cjdk/configs/identity.local.json
+Alkaid-python/apps/external_systems/application/configs/environments.local.json
+Alkaid-python/apps/external_systems/application/configs/application.local.json
+Alkaid-python/apps/external_systems/application/configs/identity.local.json
+Alkaid-python/apps/config/application_Conf/**/*.local.json
 
 # Runtime and release output
 Alkaid-runtime/

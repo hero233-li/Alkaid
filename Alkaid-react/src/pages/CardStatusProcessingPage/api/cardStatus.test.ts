@@ -10,9 +10,9 @@ describe('card status API', () => {
     const post = vi.spyOn(apiClient, 'post').mockResolvedValue({
       data: { ok: true, data: { id: 1, status: 'pending', progress: 0 } },
     });
-    await submitCardSearch({ environment: '环境1', customerNo: 'C0001' });
+    await submitCardSearch({ environment: 'UAT1', customerNo: 'C0001' });
     await submitCardAction('6222 01', 'deposit', {
-      environment: '环境1',
+      environment: 'UAT1',
       customerNo: 'C0001',
       certificateNo: 'ID1',
       cardNo: '6222 01',
@@ -28,8 +28,9 @@ describe('card status API', () => {
     const get = vi.spyOn(apiClient, 'get');
     const controller = new AbortController();
     controller.abort();
-    await expect(pollCardJob(1, vi.fn(), { signal: controller.signal }))
-      .rejects.toMatchObject({ name: 'AbortError' });
+    await expect(pollCardJob(1, vi.fn(), { signal: controller.signal })).rejects.toMatchObject({
+      name: 'AbortError',
+    });
     expect(get).not.toHaveBeenCalled();
   });
 });

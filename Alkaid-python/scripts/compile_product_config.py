@@ -12,11 +12,19 @@ import django  # noqa: E402
 
 django.setup()
 
-from apps.integrations.mock_product.api import (  # noqa: E402
-    validate_product_endpoint_coverage,
+from apps.utils.application_links import (  # noqa: E402
+    compile_application_link_plan,
 )
-from apps.integrations.mock_product.messages import validate_message_catalog  # noqa: E402
-from apps.product_data.catalog import load_product_catalog  # noqa: E402
+from apps.utils.product_Conf.catalog import load_product_catalog  # noqa: E402
+from apps.workflow.product_applications.common.agreement import (  # noqa: E402
+    validate_agreement_messages,
+)
+from apps.workflow.product_applications.identity.gateway import (  # noqa: E402
+    validate_identity_messages,
+)
+from apps.workflow.product_applications.workflow_engine import (  # noqa: E402
+    validate_product_workflow,
+)
 
 
 def main() -> int:
@@ -28,16 +36,24 @@ def main() -> int:
     )
     parser.parse_args()
     catalog = load_product_catalog()
-    validate_product_endpoint_coverage(set(catalog.products))
-    message_summary = validate_message_catalog()
+    agreement_summary = validate_agreement_messages()
+    identity_summary = validate_identity_messages()
     for product in catalog.products.values():
-        for method in product.applicationMethods:
-            catalog.snapshot(product.code, method.code)
+        validate_product_workflow(product.workflow)
+        for environment in product.environments:
+            for method in product.applicationMethods:
+                compile_application_link_plan(
+                    catalog=catalog,
+                    product_code=product.code,
+                    environment=environment,
+                    method_code=method.code,
+                )
     print(
         "Product catalog is valid: "
         f"version={catalog.reference.version}, "
         f"products={len(catalog.products)}, "
-        f"raw_messages={message_summary['messages']}, "
+        f"agreement_messages={agreement_summary['messages']}, "
+        f"identity_messages={identity_summary['messages']}, "
         f"checksum={catalog.checksum}"
     )
     return 0

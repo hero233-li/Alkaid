@@ -4,9 +4,13 @@
   "version": "0.1.0",
   "type": "module",
   "scripts": {
-    "dev": "vite --host 127.0.0.1",
+    "dev": "vite --host 0.0.0.0",
     "build": "tsc -b && vite build",
+    "lint": "eslint src e2e playwright.config.ts --max-warnings=0",
+    "format": "prettier --write src e2e vite.config.ts vitest.config.ts playwright.config.ts",
+    "format:check": "prettier --check src e2e vite.config.ts vitest.config.ts playwright.config.ts",
     "test": "vitest run",
+    "test:e2e": "playwright test",
     "preview": "vite preview --host 0.0.0.0 --port 5174"
   },
   "dependencies": {
@@ -15,16 +19,26 @@
     "axios": "^1.7.9",
     "classnames": "^2.5.1",
     "lucide-react": "^0.468.0",
+    "mammoth": "^1.12.0",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
     "typescript": "^5.7.2",
-    "vite": "^6.0.5"
+    "vite": "^6.0.5",
+    "xlsx": "https://cdn.sheetjs.com/xlsx-0.20.3/xlsx-0.20.3.tgz"
   },
   "devDependencies": {
+    "@eslint/js": "^10.0.1",
+    "@playwright/test": "^1.61.1",
     "@testing-library/react": "^16.3.2",
     "@types/react": "^18.3.18",
     "@types/react-dom": "^18.3.5",
+    "eslint": "^10.7.0",
+    "eslint-plugin-react-hooks": "^7.1.1",
+    "eslint-plugin-react-refresh": "^0.5.3",
+    "globals": "^17.7.0",
     "jsdom": "^29.1.1",
+    "prettier": "^3.9.6",
+    "typescript-eslint": "^8.65.0",
     "vitest": "^4.1.10"
   }
 }

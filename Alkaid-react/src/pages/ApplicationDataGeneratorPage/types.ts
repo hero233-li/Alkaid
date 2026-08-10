@@ -1,4 +1,5 @@
 import type { Dayjs } from 'dayjs';
+import type { JobActivityStatus, JobSnapshot } from '../../types/jobs';
 
 export interface ApplicationDataFormValues {
   environment: string;
@@ -7,14 +8,14 @@ export interface ApplicationDataFormValues {
   birthDate: string;
   gender: '男' | '女';
   tellerNo: string;
-  companyType: '91' | '92';
+  companyType: '91' | '92' | '51';
   count: number;
 }
 
 export interface ApplicationDataConfig {
   environments: string[];
   genders: Array<'男' | '女'>;
-  companyTypes: Array<{ label: string; value: '91' | '92' }>;
+  companyTypes: Array<{ label: string; value: '91' | '92' | '51' }>;
   maxCount: number;
 }
 
@@ -33,7 +34,16 @@ export interface ApplicationDataRecord {
   organizationCode: string;
 }
 
-export interface ApplicationDataApiResponse<T> { ok: boolean; data: T; message?: string }
-export type ApplicationDataJobStatus = 'submitting' | 'pending' | 'running' | 'retrying' | 'success' | 'failed' | 'cancelled' | 'timed_out';
-export interface ApplicationDataJob { id: number; status: ApplicationDataJobStatus; progress: number; result: Record<string, unknown>; errorMessage?: string }
-export interface ApplicationDataActivity { jobId?: number; status: ApplicationDataJobStatus; progress: number; label: string }
+export interface ApplicationDataApiResponse<T> {
+  ok: boolean;
+  data: T;
+  message?: string;
+}
+export type ApplicationDataJobStatus = JobActivityStatus;
+export type ApplicationDataJob = JobSnapshot<{ records?: ApplicationDataRecord[] }>;
+export interface ApplicationDataActivity {
+  jobId?: number;
+  status: ApplicationDataJobStatus;
+  progress: number;
+  label: string;
+}

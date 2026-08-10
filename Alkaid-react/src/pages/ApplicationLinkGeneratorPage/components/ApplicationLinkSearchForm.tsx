@@ -72,7 +72,9 @@ export default function ApplicationLinkSearchForm({
               >
                 <Input.TextArea
                   autoSize={{ minRows: 6, maxRows: 16 }}
-                  placeholder={'{\n  "customerName": "张三",\n  "applicationArea": "成都",\n  "amount": 100000\n}'}
+                  placeholder={
+                    '{\n  "customerName": "张三",\n  "applicationArea": "成都",\n  "amount": 100000\n}'
+                  }
                 />
               </Form.Item>
             </Col>

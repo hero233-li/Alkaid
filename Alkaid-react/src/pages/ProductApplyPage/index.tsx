@@ -26,17 +26,9 @@ export default function ProductApplyPage({ pageInstanceKey }: ProductApplyPagePr
       <div className="page-surface product-application-page">
         <Card>
           {configQuery.error ? (
-            <Alert
-              type="error"
-              showIcon
-              message="产品申请配置加载失败"
-              description={configQuery.error}
-              action={<Button size="small" onClick={configQuery.retry}>重新加载</Button>}
-            />
+            <Alert type="error" showIcon message="产品申请配置加载失败" description={configQuery.error} action={<Button size="small" onClick={configQuery.retry}>重新加载</Button>} />
           ) : (
-            <div className="product-config-loading">
-              <Spin spinning={configQuery.loading} tip="正在加载产品配置..." />
-            </div>
+            <div className="product-config-loading"><Spin spinning={configQuery.loading} tip="正在加载产品配置..."><span aria-hidden="true" /></Spin></div>
           )}
         </Card>
       </div>
@@ -57,7 +49,7 @@ export default function ProductApplyPage({ pageInstanceKey }: ProductApplyPagePr
         <JobResultList
           results={jobs.results}
           onDetail={jobs.selectResult}
-          onRetry={(result) => void jobs.retry(result)}
+          onRetry={(result) => void jobs.recreate(result)}
           onCancel={(result) => void jobs.cancel(result)}
         />
       </div>

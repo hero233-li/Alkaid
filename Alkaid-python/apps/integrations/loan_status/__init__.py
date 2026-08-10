@@ -1,1 +1,0 @@
-"""Loan-status integration boundary."""

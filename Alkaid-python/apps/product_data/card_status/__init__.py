@@ -1,1 +1,0 @@
-"""Card-status feature."""

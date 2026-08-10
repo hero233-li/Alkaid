@@ -29,39 +29,6 @@ if not defined CELERY_BROKER_URL (
   echo CELERY_BROKER_URL is required for production.
   exit /b 1
 )
-if not defined MOCK_PRODUCT_BASE_URL (
-  echo MOCK_PRODUCT_BASE_URL is required for production.
-  exit /b 1
-)
-if not defined APPLICATION_LINK_BASE_URL (
-  echo APPLICATION_LINK_BASE_URL is required for production.
-  exit /b 1
-)
-if not defined APPLICATION_LINK_API_TOKEN (
-  echo APPLICATION_LINK_API_TOKEN is required for production.
-  exit /b 1
-)
-if not defined BUSINESS_ACCESS_BASE_URL (
-  echo BUSINESS_ACCESS_BASE_URL is required for production.
-  exit /b 1
-)
-if not defined BUSINESS_ACCESS_API_TOKEN (
-  echo BUSINESS_ACCESS_API_TOKEN is required for production.
-  exit /b 1
-)
-if not defined VERIFICATION_APPROVAL_BASE_URL (
-  echo VERIFICATION_APPROVAL_BASE_URL is required for production.
-  exit /b 1
-)
-if not defined VERIFICATION_APPROVAL_API_TOKEN (
-  echo VERIFICATION_APPROVAL_API_TOKEN is required for production.
-  exit /b 1
-)
-if not defined MOCK_FIXED_SYSTEM_TOKEN (
-  echo MOCK_FIXED_SYSTEM_TOKEN is required for production.
-  exit /b 1
-)
-
 set "CURRENT_FILE=%ALKAID_RUNTIME_DIR%\current-release.txt"
 if not exist "%CURRENT_FILE%" (
   echo Current release file does not exist:

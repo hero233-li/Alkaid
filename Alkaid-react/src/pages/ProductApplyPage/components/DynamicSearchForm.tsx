@@ -43,7 +43,9 @@ export default function DynamicSearchForm({
             >
               {submitting ? '提交中' : '执行'}
             </Button>
-            <Button icon={<RotateCcw size={16} />} onClick={onReset}>重置</Button>
+            <Button icon={<RotateCcw size={16} />} onClick={onReset}>
+              重置
+            </Button>
           </Space>
         </div>
       )}

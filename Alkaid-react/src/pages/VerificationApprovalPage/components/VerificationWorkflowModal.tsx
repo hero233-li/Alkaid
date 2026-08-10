@@ -30,7 +30,9 @@ export default function VerificationWorkflowModal({
         <Tag color="processing">处理中</Tag>
       </Space>
       <Progress percent={Math.max(5, progress)} status="active" strokeWidth={13} />
-      <Typography.Text type="secondary">任务已提交到 Celery，正在等待执行结果，请不要重复操作</Typography.Text>
+      <Typography.Text type="secondary">
+        任务已提交到 Celery，正在等待执行结果，请不要重复操作
+      </Typography.Text>
     </Modal>
   );
 }

@@ -14,12 +14,45 @@ export interface JobLogStreamResult {
   terminalStatusReceived: boolean;
 }
 
-export async function getJobDetail(id: number) {
-  const { data } = await apiClient.get<ApiResponse<JobDetail>>(
-    `/jobs/${id}`,
-  );
+export interface JobPage {
+  items: JobDetail[];
+  page: number;
+  pageSize: number;
+  total: number;
+  totalPages: number;
+}
+
+export async function getJobDetail(
+  id: number,
+  options: { includePayload?: boolean; logView?: 'all' | 'business' } = {},
+) {
+  const { data } = await apiClient.get<ApiResponse<JobDetail>>(`/jobs/${id}`, {
+    params:
+      options.includePayload || options.logView
+        ? { includePayload: options.includePayload || undefined, logView: options.logView }
+        : undefined,
+  });
   if (!data.ok) {
     throw new Error(data.message || '获取 Job 详情失败');
+  }
+  return data.data;
+}
+
+export async function deleteAllJobs() {
+  const { data } =
+    await apiClient.delete<ApiResponse<{ deletedJobs: number; activeJobs: number }>>('/jobs/');
+  if (!data.ok) {
+    throw new Error(data.message || '全部任务记录清除失败');
+  }
+  return data.data;
+}
+
+export async function listJobs(
+  params: { status?: string; query?: string; page?: number; pageSize?: number } = {},
+) {
+  const { data } = await apiClient.get<ApiResponse<JobPage>>('/jobs/', { params });
+  if (!data.ok) {
+    throw new Error(data.message || '获取任务列表失败');
   }
   return data.data;
 }
@@ -48,8 +81,13 @@ export async function streamJobLogs(
     onStatus: (status: JobStreamStatus) => void;
   },
   signal: AbortSignal,
+  options: { view?: 'all' | 'business' } = {},
 ) {
-  const response = await fetch(`/api/jobs/${id}/logs/stream?afterId=${afterId}`, {
+  const params = new URLSearchParams({ afterId: String(afterId) });
+  if (options.view) {
+    params.set('view', options.view);
+  }
+  const response = await fetch(`/api/jobs/${id}/logs/stream?${params.toString()}`, {
     headers: { Accept: 'text/event-stream' },
     signal,
   });
@@ -73,7 +111,11 @@ export async function streamJobLogs(
       const block = buffer.slice(0, boundary);
       buffer = buffer.slice(boundary + 2);
       const lines = block.split('\n');
-      const eventName = lines.find((line) => line.startsWith('event:'))?.slice(6).trim() || 'message';
+      const eventName =
+        lines
+          .find((line) => line.startsWith('event:'))
+          ?.slice(6)
+          .trim() || 'message';
       const dataText = lines
         .filter((line) => line.startsWith('data:'))
         .map((line) => line.slice(5).trim())

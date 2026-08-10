@@ -1,0 +1,38 @@
+{
+  "id": "product-application-example",
+  "version": 8,
+  "environments": [
+    {
+      "label": "UAT1",
+      "value": "UAT1"
+    },
+    {
+      "label": "UAT2",
+      "value": "UAT2"
+    },
+    {
+      "label": "UATC",
+      "value": "UATC"
+    }
+  ],
+  "cascadeResetMap": {
+    "environment": [
+      "product",
+      "location",
+      "branch",
+      "outlet"
+    ],
+    "product": [
+      "location",
+      "branch",
+      "outlet"
+    ],
+    "location": [
+      "branch",
+      "outlet"
+    ],
+    "branch": [
+      "outlet"
+    ]
+  }
+}

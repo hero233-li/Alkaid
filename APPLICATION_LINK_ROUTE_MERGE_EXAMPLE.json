@@ -1,0 +1,26 @@
+{
+  "environment": "UAT1",
+  "category": "太阳码",
+  "requiredFields": [],
+  "payload": {
+    "REQ_HEAD": {},
+    "REQ_BODY": {
+      "appId": "请保留当前产品真实配置",
+      "myPrivateKey": "请保留当前产品真实配置",
+      "apigwPublicKey": "请保留当前产品真实配置",
+      "request": {
+        "order_no": "请保留当前产品真实配置",
+        "cooperator_id": "请保留当前产品真实配置",
+        "cooperator_name": "请保留当前产品真实配置",
+        "loan_flow_stag": "1",
+        "selbl_prod_id": "",
+        "co_project_id": "",
+        "appl_chnl_cd": "5C"
+      }
+    }
+  },
+  "payloadBindings": {
+    "REQ_BODY.request.selbl_prod_id": "product",
+    "REQ_BODY.request.co_project_id": "cooperationProjectId"
+  }
+}

@@ -1,0 +1,56 @@
+{
+  "application": {
+    "session": {
+      "method": "POST",
+      "pathByEnvironment": {
+        "UAT1": "/h5main/microservice/startSceneLoanOpenBankApply.ajax?auth={auth}",
+        "UAT2": "/session/init?auth={auth}",
+        "UATC": "/session/init?auth={auth}"
+      },
+      "requiredCookies": ["token_id", "JSESSIONID", "X-FCOS-SESSIONID"],
+      "requiredHeaders": ["X-Sd", "X-Token"],
+      "requiredAnyHeaders": []
+    }
+  },
+  "agreement": {
+    "queryTemplates": {
+      "operationId": "cjdk_jyrc.query_agreement_templates",
+      "method": "POST",
+      "path": "/h5/microservice/queryAgreementTemplateInfoListEA.do",
+      "retryMode": "never"
+    },
+    "queryPreview": {
+      "operationId": "cjdk_jyrc.query_preview_image",
+      "method": "POST",
+      "path": "/h5/microservice/queryPreviewImage.ajax",
+      "retryMode": "never"
+    },
+    "readDocument": {
+      "operationId": "cjdk_jyrc.show_document_by_doc_id",
+      "method": "POST",
+      "path": "/h5/microservice/showDocumentByDocIdList.ajax",
+      "retryMode": "never"
+    }
+  },
+  "identity": {
+    "getPublicKey": {"method": "POST", "path": "/REPLACE_WITH_identityGetPubKey_PATH"},
+    "getPrepareMobile": {"method": "POST", "path": "/REPLACE_WITH_identityGetPrepareMobile_PATH"},
+    "getAliSdkParams": {"method": "POST", "path": "/REPLACE_WITH_identityAliSdkParams_PATH"},
+    "aliVideoCheck": {"method": "POST", "path": "/REPLACE_WITH_identityAliVideoCheck_PATH"},
+    "smsCodeSend": {"method": "POST", "path": "/REPLACE_WITH_identitySmsCodeSendH5_PATH"},
+    "smsCodeCheck": {"method": "POST", "path": "/REPLACE_WITH_identitySmsCodeCheckH5_PATH"},
+    "identityCardVerify": {"method": "POST", "path": "/REPLACE_WITH_identityCardVerify_PATH"}
+  },
+  "photo": {
+    "delete": {
+      "method": "POST",
+      "path": "/DelectCertiAction.json"
+    }
+  },
+  "smsLookup": {
+    "query": {
+      "method": "POST",
+      "path": "/REPLACE_WITH_DCPP_LOG_QUERY_PATH"
+    }
+  }
+}

@@ -1,0 +1,55 @@
+{
+  "query_agreement_templates_v1": {
+    "REQ_HEAD": {},
+    "REQ_BODY": {
+      "request": {
+        "x-channel": 13,
+        "scene": "SC00015",
+        "branchId": "",
+        "prodSubdvDmsn": "partners"
+      }
+    }
+  },
+  "query_preview_image_v1": {
+    "REQ_HEAD": {},
+    "REQ_BODY": {
+      "request": {
+        "x-channel": 13,
+        "authVariableList": [
+          {
+            "code": "custNme",
+            "value": ""
+          },
+          {
+            "code": "idNo",
+            "value": ""
+          },
+          {
+            "code": "idType",
+            "value": "0102"
+          },
+          {
+            "code": "orgCode",
+            "value": ""
+          }
+        ],
+        "businessNo": "00000000",
+        "fcosTemplateNoList": [
+          {
+            "fcosTemplateNo": "2209201448031"
+          }
+        ]
+      }
+    }
+  },
+  "show_document_by_doc_id_v1": {
+    "REQ_HEAD": {},
+    "REQ_BODY": {
+      "request": {
+        "x-channel": 13,
+        "docId": "",
+        "TransCode": ""
+      }
+    }
+  }
+}

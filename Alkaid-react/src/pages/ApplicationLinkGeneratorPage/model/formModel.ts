@@ -38,9 +38,9 @@ export function findProduct(config: ApplicationLinkConfig, productCode?: string)
 
 export function productsForEnvironment(config: ApplicationLinkConfig, environment?: string) {
   return environment
-    ? config.products.filter((item) => (
-      item.routes.some((route) => route.environment === environment)
-    ))
+    ? config.products.filter((item) =>
+        item.routes.some((route) => route.environment === environment),
+      )
     : [];
 }
 
@@ -50,19 +50,16 @@ export function categoriesForProduct(
 ) {
   return environment && product
     ? product.routes
-      .filter((route) => route.environment === environment)
-      .map((route) => route.category)
+        .filter((route) => route.environment === environment)
+        .map((route) => route.category)
     : [];
 }
 
-export function categoriesForEnvironment(
-  config: ApplicationLinkConfig,
-  environment?: string,
-) {
+export function categoriesForEnvironment(config: ApplicationLinkConfig, environment?: string) {
   const supportedCategories = new Set(
-    productsForEnvironment(config, environment).flatMap((product) => (
-      categoriesForProduct(product, environment)
-    )),
+    productsForEnvironment(config, environment).flatMap((product) =>
+      categoriesForProduct(product, environment),
+    ),
   );
   return categoryOrder.filter((category) => supportedCategories.has(category));
 }
@@ -72,15 +69,12 @@ export function productsForEnvironmentAndCategory(
   environment: string | undefined,
   category?: LinkCategory,
 ) {
-  return productsForEnvironment(config, environment).filter((product) => (
-    category ? categoriesForProduct(product, environment).includes(category) : true
-  ));
+  return productsForEnvironment(config, environment).filter((product) =>
+    category ? categoriesForProduct(product, environment).includes(category) : true,
+  );
 }
 
-function firstCategoryForEnvironment(
-  config: ApplicationLinkConfig,
-  environment?: string,
-) {
+function firstCategoryForEnvironment(config: ApplicationLinkConfig, environment?: string) {
   return categoriesForEnvironment(config, environment)[0];
 }
 
@@ -117,9 +111,9 @@ export function buildApplicationLinkFormModel(
   const products = productsForEnvironmentAndCategory(config, environment, category);
   const product = findProduct(config, values.product);
   const categories = categoriesForEnvironment(config, environment);
-  const route = product?.routes.find((item) => (
-    item.environment === environment && item.category === category
-  ));
+  const route = product?.routes.find(
+    (item) => item.environment === environment && item.category === category,
+  );
 
   return {
     environment,

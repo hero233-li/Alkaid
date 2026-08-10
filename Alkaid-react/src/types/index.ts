@@ -1,5 +1,6 @@
 export interface ApiResponse<T> {
   ok: boolean;
+  code?: string;
   message: string;
   data: T;
 }
@@ -64,4 +65,28 @@ export interface WorkbenchHistoryDetail extends WorkbenchHistoryItem {
   requestPayload: WorkbenchRequestPayload;
   responseHeaders: Record<string, string[]>;
   responseBody: string;
+}
+
+export interface WorkbenchPackageRequestItem {
+  id: number;
+  packageId: number;
+  position: number;
+  name: string;
+  method: string;
+  url: string;
+  responseStatus?: number;
+}
+
+export interface WorkbenchPackage {
+  id: number;
+  name: string;
+  sourceFilename: string;
+  requestCount: number;
+  createdAt: string;
+  requests: WorkbenchPackageRequestItem[];
+}
+
+export interface WorkbenchPackageRequestDetail extends WorkbenchPackageRequestItem {
+  requestPayload: WorkbenchRequestPayload;
+  response: WorkbenchResponsePayload;
 }

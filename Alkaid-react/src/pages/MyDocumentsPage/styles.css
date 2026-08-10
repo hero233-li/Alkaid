@@ -1,0 +1,365 @@
+.my-documents-page {
+  padding: 0;
+  overflow: clip;
+  background: #f1f5f9;
+}
+
+.my-documents-shell {
+  min-height: calc(100vh - 124px);
+  display: grid;
+  grid-template-columns: 238px minmax(0, 1fr);
+  overflow: clip;
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  box-shadow: 0 8px 28px rgba(15, 23, 42, 0.06);
+}
+
+.my-documents-sidebar {
+  padding: 22px 14px;
+  overflow: auto;
+  background: #f8fafc;
+  border-right: 1px solid #e2e8f0;
+}
+
+.my-documents-sidebar-title {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 0 12px 16px;
+  color: #0f172a;
+  font-size: 16px;
+  font-weight: 700;
+}
+
+.my-documents-sidebar-title svg {
+  color: #2563eb;
+}
+
+.my-documents-location {
+  width: 100%;
+  min-height: 40px;
+  display: grid;
+  grid-template-columns: 20px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 9px;
+  padding: 0 12px;
+  overflow: hidden;
+  color: #475569;
+  text-align: left;
+  background: transparent;
+  border: 0;
+  border-radius: 7px;
+  cursor: pointer;
+}
+
+.my-documents-location:hover {
+  color: #1d4ed8;
+  background: #eff6ff;
+}
+
+.my-documents-location.is-active {
+  color: #1d4ed8;
+  background: #dbeafe;
+  font-weight: 600;
+}
+
+.my-documents-location > span:nth-child(2) {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.my-documents-location-count {
+  min-width: 22px;
+  padding: 1px 7px;
+  text-align: center;
+  background: #ffffff;
+  border-radius: 999px;
+  font-size: 12px;
+}
+
+.my-documents-folder-label {
+  margin: 22px 12px 8px;
+  color: #94a3b8;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+}
+
+.my-documents-no-folder {
+  display: block;
+  padding: 8px 12px;
+  font-size: 12px;
+}
+
+.my-documents-content {
+  min-width: 0;
+  padding: 26px 34px 34px;
+  overflow-x: hidden;
+}
+
+.my-documents-heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 18px;
+}
+
+.my-documents-heading .ant-typography {
+  margin: 0 0 5px;
+}
+
+.my-documents-heading-actions {
+  display: flex;
+  gap: 10px;
+}
+
+.my-documents-breadcrumb {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  color: #64748b;
+  font-size: 13px;
+}
+
+.my-documents-summary {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 22px 0 16px;
+  padding: 12px 16px;
+  color: #334155;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  font-size: 13px;
+}
+
+.my-documents-summary > span {
+  padding-right: 10px;
+  border-right: 1px solid #cbd5e1;
+  font-weight: 600;
+}
+
+.my-documents-summary .ant-typography {
+  margin-left: auto;
+}
+
+.my-documents-toolbar {
+  width: min(540px, 100%);
+  display: grid;
+  grid-template-columns: minmax(220px, 1fr) 140px;
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.my-documents-list-head,
+.my-documents-row {
+  display: grid;
+  grid-template-columns: minmax(220px, 1fr) 92px minmax(130px, 0.7fr) 78px 174px 126px;
+  gap: 12px;
+  align-items: center;
+}
+
+.my-documents-list-head {
+  padding: 10px 14px;
+  color: #64748b;
+  border-bottom: 1px solid #e2e8f0;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.my-documents-list {
+  border-top: 1px solid #f1f5f9;
+}
+
+.my-documents-row {
+  min-height: 66px;
+  padding: 9px 14px;
+  border-bottom: 1px solid #eef2f7;
+  transition: background 0.16s ease;
+}
+
+.my-documents-row:hover {
+  background: #f8fafc;
+}
+
+.my-documents-name-button {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  padding: 0;
+  overflow: hidden;
+  color: #1f2937;
+  text-align: left;
+  background: transparent;
+  border: 0;
+  cursor: pointer;
+  font-weight: 600;
+}
+
+.my-documents-name-button > span:last-child {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.my-documents-name-button:hover {
+  color: #2563eb;
+}
+
+.my-documents-folder-icon,
+.my-documents-file-icon {
+  width: 38px;
+  height: 38px;
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 7px;
+}
+
+.my-documents-folder-icon {
+  color: #d97706;
+  background: #fef3c7;
+}
+
+.my-documents-file-icon {
+  color: #ffffff;
+  background: linear-gradient(145deg, #2563eb, #3b82f6);
+  box-shadow: 0 4px 12px rgba(37, 99, 235, 0.16);
+}
+
+.my-documents-file-icon.is-multidimensional-table {
+  background: linear-gradient(145deg, #0891b2, #14b8a6);
+  box-shadow: 0 4px 12px rgba(8, 145, 178, 0.16);
+}
+
+.my-documents-file-icon.is-word {
+  background: linear-gradient(145deg, #1d4ed8, #3b82f6);
+  box-shadow: 0 4px 12px rgba(29, 78, 216, 0.16);
+}
+
+.my-documents-file-icon.is-spreadsheet {
+  background: linear-gradient(145deg, #65a30d, #22c55e);
+  box-shadow: 0 4px 12px rgba(101, 163, 13, 0.16);
+}
+
+.my-documents-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 2px;
+}
+
+.my-documents-empty {
+  min-height: 350px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.my-documents-move-select {
+  width: 100%;
+}
+
+.my-documents-preview-meta {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.my-documents-preview-content {
+  min-height: 280px;
+  max-height: 56vh;
+  margin: 0;
+  padding: 18px;
+  overflow: auto;
+  color: #1e293b;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  font-family: 'JetBrains Mono', 'SFMono-Regular', Consolas, monospace;
+  font-size: 13px;
+  line-height: 1.65;
+}
+
+@media (max-width: 1360px) {
+  .my-documents-shell {
+    grid-template-columns: 205px minmax(0, 1fr);
+  }
+
+  .my-documents-content {
+    padding: 24px;
+  }
+
+  .my-documents-list-head,
+  .my-documents-row {
+    grid-template-columns: minmax(220px, 1fr) 86px minmax(120px, 0.7fr) 160px 82px;
+  }
+
+  .my-documents-list-head > :nth-child(4),
+  .my-documents-row > :nth-child(4) {
+    display: none;
+  }
+}
+
+@media (max-width: 760px) {
+  .my-documents-shell {
+    display: block;
+    overflow: visible;
+  }
+
+  .my-documents-sidebar {
+    max-height: 230px;
+    border-right: 0;
+    border-bottom: 1px solid #e2e8f0;
+  }
+
+  .my-documents-content {
+    padding: 20px 16px 26px;
+  }
+
+  .my-documents-heading {
+    display: block;
+  }
+
+  .my-documents-heading-actions {
+    margin-top: 16px;
+  }
+
+  .my-documents-summary {
+    align-items: flex-start;
+    flex-wrap: wrap;
+  }
+
+  .my-documents-summary .ant-typography {
+    width: 100%;
+    margin-left: 0;
+  }
+
+  .my-documents-toolbar {
+    grid-template-columns: 1fr;
+  }
+
+  .my-documents-list-head {
+    display: none;
+  }
+
+  .my-documents-row {
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 8px;
+    padding: 12px 4px;
+  }
+
+  .my-documents-row > :nth-child(2),
+  .my-documents-row > :nth-child(3),
+  .my-documents-row > :nth-child(4),
+  .my-documents-row > :nth-child(5) {
+    display: none;
+  }
+}

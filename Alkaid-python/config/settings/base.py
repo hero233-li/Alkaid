@@ -23,8 +23,12 @@ INSTALLED_APPS = [
     "django.contrib.sessions",
     "django.contrib.messages",
     "django.contrib.staticfiles",
-    "apps.jobs",
-    "apps.product_data",
+    "apps.workflow.Documents.apps.DocumentsConfig",
+    "apps.workflow.Jobs.apps.JobsConfig",
+    "apps.workflow.System_menu.apps.PortalConfig",
+    "apps.workflow.application_links.apps.ApplicationLinksConfig",
+    "apps.workflow.product_applications.apps.ProductApplicationsConfig",
+    "apps.workflow.Apifox.apps.WorkbenchConfig",
 ]
 
 MIDDLEWARE = [
@@ -100,37 +104,24 @@ JOB_MAX_HTTP_BODY_BYTES = int(os.getenv("JOB_MAX_HTTP_BODY_BYTES", "65536"))
 JOB_RECONCILE_BATCH_SIZE = int(os.getenv("JOB_RECONCILE_BATCH_SIZE", "500"))
 JOB_SSE_POLL_SECONDS = float(os.getenv("JOB_SSE_POLL_SECONDS", "1"))
 JOB_SSE_HEARTBEAT_SECONDS = float(os.getenv("JOB_SSE_HEARTBEAT_SECONDS", "15"))
+WORKBENCH_MAX_RESPONSE_CHARS = int(os.getenv("WORKBENCH_MAX_RESPONSE_CHARS", "1000000"))
+WORKBENCH_ENABLED = env_bool("WORKBENCH_ENABLED", False)
+WORKBENCH_ALLOWED_HOSTS = tuple(
+    item.strip().lower()
+    for item in os.getenv("WORKBENCH_ALLOWED_HOSTS", "").split(",")
+    if item.strip()
+)
+WORKBENCH_MAX_UPLOAD_BYTES = int(os.getenv("WORKBENCH_MAX_UPLOAD_BYTES", "10485760"))
+DATA_DOCUMENT_MAX_CONTENT_BYTES = int(os.getenv("DATA_DOCUMENT_MAX_CONTENT_BYTES", "134217728"))
+DATA_DOCUMENT_MAX_ASSET_BYTES = int(os.getenv("DATA_DOCUMENT_MAX_ASSET_BYTES", "33554432"))
+DATA_UPLOAD_MAX_MEMORY_SIZE = int(os.getenv("DJANGO_MAX_REQUEST_BYTES", "268435456"))
+# Larger multipart files are spooled to disk instead of retained completely in process memory.
+FILE_UPLOAD_MAX_MEMORY_SIZE = int(os.getenv("DJANGO_FILE_MEMORY_THRESHOLD_BYTES", "2621440"))
 PRODUCT_APPLICATION_TIMEOUT_SECONDS = int(os.getenv("PRODUCT_APPLICATION_TIMEOUT_SECONDS", "300"))
-APPLICATION_LINK_TIMEOUT_SECONDS = int(os.getenv("APPLICATION_LINK_TIMEOUT_SECONDS", "120"))
-BUSINESS_ACCESS_TIMEOUT_SECONDS = int(os.getenv("BUSINESS_ACCESS_TIMEOUT_SECONDS", "120"))
-VERIFICATION_APPROVAL_TIMEOUT_SECONDS = int(
-    os.getenv("VERIFICATION_APPROVAL_TIMEOUT_SECONDS", "120")
-)
-APPLICATION_DATA_TIMEOUT_SECONDS = int(os.getenv("APPLICATION_DATA_TIMEOUT_SECONDS", "300"))
-APPLICATION_DATA_MAX_RESULT_BYTES = int(
-    os.getenv("APPLICATION_DATA_MAX_RESULT_BYTES", "2097152")
-)
-CARD_STATUS_TIMEOUT_SECONDS = int(os.getenv("CARD_STATUS_TIMEOUT_SECONDS", "120"))
-LOAN_STATUS_TIMEOUT_SECONDS = int(os.getenv("LOAN_STATUS_TIMEOUT_SECONDS", "120"))
-MOCK_FIXED_SYSTEM_TOKEN = os.getenv("MOCK_FIXED_SYSTEM_TOKEN", "mock-fixed-token")
-MOCK_PRODUCT_BASE_URL = os.getenv("MOCK_PRODUCT_BASE_URL", "").rstrip("/")
-APPLICATION_LINK_BASE_URL = os.getenv("APPLICATION_LINK_BASE_URL", "").rstrip("/")
-APPLICATION_LINK_API_TOKEN = os.getenv("APPLICATION_LINK_API_TOKEN", "")
-APPLICATION_LINK_FORM_SIGN = os.getenv("APPLICATION_LINK_FORM_SIGN", "")
-APPLICATION_LINK_SIGN_REQUIRED = env_bool("APPLICATION_LINK_SIGN_REQUIRED")
-APPLICATION_LINK_PROTOCOL_CONFIRMED = env_bool("APPLICATION_LINK_PROTOCOL_CONFIRMED", False)
-APPLICATION_LINK_SIGNER = os.getenv("APPLICATION_LINK_SIGNER", "")
-APPLICATION_LINK_TIMESTAMP_FORMAT = os.getenv(
-    "APPLICATION_LINK_TIMESTAMP_FORMAT", "%Y%m%d%H%M%S"
-)
-BUSINESS_ACCESS_BASE_URL = os.getenv("BUSINESS_ACCESS_BASE_URL", "").rstrip("/")
-BUSINESS_ACCESS_API_TOKEN = os.getenv("BUSINESS_ACCESS_API_TOKEN", "")
-VERIFICATION_APPROVAL_BASE_URL = os.getenv("VERIFICATION_APPROVAL_BASE_URL", "").rstrip("/")
-VERIFICATION_APPROVAL_API_TOKEN = os.getenv("VERIFICATION_APPROVAL_API_TOKEN", "")
-# Kept at zero outside local development so production never sleeps in a view.
-VERIFICATION_APPROVAL_DEBUG_DELAY_SECONDS = float(
-    os.getenv("VERIFICATION_APPROVAL_DEBUG_DELAY_SECONDS", "0")
-)
+APPLICATION_LINK_TIMEOUT_SECONDS = int(os.getenv("APPLICATION_LINK_TIMEOUT_SECONDS", "180"))
+APPLICATION_LINK_URL_MODE = os.getenv("APPLICATION_LINK_URL_MODE", "internal").strip().lower()
+if APPLICATION_LINK_URL_MODE not in {"internal", "external"}:
+    raise ValueError("APPLICATION_LINK_URL_MODE must be internal or external")
 HTTP_TIMEOUT_SECONDS = float(os.getenv("HTTP_TIMEOUT_SECONDS", "10"))
 HTTP_CONNECT_TIMEOUT_SECONDS = float(os.getenv("HTTP_CONNECT_TIMEOUT_SECONDS", "5"))
 HTTP_WRITE_TIMEOUT_SECONDS = float(os.getenv("HTTP_WRITE_TIMEOUT_SECONDS", "10"))
@@ -150,12 +141,12 @@ CELERY_TASK_TRACK_STARTED = True
 CELERY_WORKER_PREFETCH_MULTIPLIER = 1
 CELERY_BROKER_CONNECTION_RETRY_ON_STARTUP = True
 CELERY_BEAT_SCHEDULE = {
-    "reconcile-expired-jobs-every-minute": {
-        "task": "apps.jobs.tasks.reconcile_expired_jobs",
+    "reconcile-expired-Jobs-every-minute": {
+        "task": "apps.workflow.Jobs.tasks.reconcile_expired_jobs",
         "schedule": 60.0,
     },
-    "cleanup-expired-jobs-hourly": {
-        "task": "apps.jobs.tasks.cleanup_expired_jobs",
+    "cleanup-expired-Jobs-hourly": {
+        "task": "apps.workflow.Jobs.tasks.cleanup_expired_jobs",
         "schedule": 3600.0,
     },
 }
