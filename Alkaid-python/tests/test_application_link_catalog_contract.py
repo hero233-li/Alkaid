@@ -112,17 +112,26 @@ def test_product_environment_method_must_match_exactly_one_route(tmp_path) -> No
         _load(product_root, reference_path)
 
 
-def test_product_binding_cannot_overwrite_profile_secrets(tmp_path) -> None:
+def test_product_request_template_may_define_gateway_credentials(tmp_path) -> None:
     product_root, reference_path = _catalog_copy(tmp_path)
+
+    credentials = {
+        "appId": "APP-ID",
+        "myPrivateKey": "PRIVATE-KEY",
+        "apigwPublicKey": "PUBLIC-KEY",
+    }
     _edit_product(
         product_root,
         "product_b.json",
-        lambda source: source["features"]["applicationLinks"][0]["payloadBindings"].update(
-            {"REQ_BODY": "payload"}
-        ),
+        lambda source: source["features"]["applicationLinks"][0]["requestTemplate"][
+            "REQ_BODY"
+        ].update(credentials),
     )
-    with pytest.raises(ProductCatalogError, match="不允许覆盖秘密字段"):
-        _load(product_root, reference_path)
+    catalog = _load(product_root, reference_path)
+    route = catalog.product("product-b").features.application_links[0]
+    assert {
+        key: route.request_template["REQ_BODY"][key] for key in credentials
+    } == credentials
 
 
 def test_product_cooperation_project_is_optional_and_excluded_from_ui_fields(

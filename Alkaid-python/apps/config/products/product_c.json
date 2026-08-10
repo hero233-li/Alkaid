@@ -219,7 +219,11 @@
         "integrationProfileVersion": 1,
         "requiredFields": ["cooperationProjectId"],
         "requestTemplate": {
-          "REQ_BODY": {"request": {
+          "REQ_BODY": {
+            "appId": "",
+            "myPrivateKey": "",
+            "apigwPublicKey": "",
+            "request": {
             "order_no": "XCXYXM_CJDK_JYRC",
             "cooperator_id": "XCXYXM",
             "cooperator_name": "小程序渠道码",
@@ -227,7 +231,8 @@
             "selbl_prod_id": "",
             "co_project_id": "",
             "appl_chnl_cd": "5C"
-          }}
+            }
+          }
         },
         "payloadBindings": {
           "REQ_BODY.request.selbl_prod_id": "product",
@@ -243,7 +248,11 @@
         "integrationProfileVersion": 1,
         "requiredFields": ["cooperationProjectId"],
         "requestTemplate": {
-          "REQ_BODY": {"request": {
+          "REQ_BODY": {
+            "appId": "",
+            "myPrivateKey": "",
+            "apigwPublicKey": "",
+            "request": {
             "order_no": "XCXYXM_CJDK_JYRC",
             "cooperator_id": "XCXYXM",
             "cooperator_name": "小程序渠道码",
@@ -251,7 +260,8 @@
             "selbl_prod_id": "",
             "co_project_id": "",
             "appl_chnl_cd": "5C"
-          }}
+            }
+          }
         },
         "payloadBindings": {
           "REQ_BODY.request.selbl_prod_id": "product",
@@ -267,7 +277,11 @@
         "integrationProfileVersion": 1,
         "requiredFields": ["cooperationProjectId"],
         "requestTemplate": {
-          "REQ_BODY": {"request": {
+          "REQ_BODY": {
+            "appId": "",
+            "myPrivateKey": "",
+            "apigwPublicKey": "",
+            "request": {
             "order_no": "XCXYXM_CJDK_JYRC",
             "cooperator_id": "XCXYXM",
             "cooperator_name": "小程序渠道码",
@@ -275,7 +289,8 @@
             "selbl_prod_id": "",
             "co_project_id": "",
             "appl_chnl_cd": "5C"
-          }}
+            }
+          }
         },
         "payloadBindings": {
           "REQ_BODY.request.selbl_prod_id": "product",

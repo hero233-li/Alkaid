@@ -9,10 +9,5 @@
       "apigwPublicKey": "",
       "request": {}
     }
-  },
-  "secretBindings": {
-    "REQ_BODY.appId": "cjdkJyrc.applicationLink.appId",
-    "REQ_BODY.myPrivateKey": "cjdkJyrc.applicationLink.privateKey",
-    "REQ_BODY.apigwPublicKey": "cjdkJyrc.applicationLink.publicKey"
   }
 }

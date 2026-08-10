@@ -69,11 +69,7 @@ def test_worker_uses_frozen_v1_plan_without_loading_current_catalog(monkeypatch)
         "identity.verify",
     ]
     assert '"workflow"' in serialized_snapshot
-    assert snapshot.application_link_route.secret_bindings == {
-        "REQ_BODY.appId": "cjdkJyrc.applicationLink.appId",
-        "REQ_BODY.myPrivateKey": "cjdkJyrc.applicationLink.privateKey",
-        "REQ_BODY.apigwPublicKey": "cjdkJyrc.applicationLink.publicKey",
-    }
+    assert snapshot.application_link_route.secret_bindings == {}
     original_order_no = snapshot.application_link_route.compiled_request_template["REQ_BODY"][
         "request"
     ]["order_no"]

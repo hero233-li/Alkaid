@@ -19,17 +19,6 @@ from apps.utils.java.java_gateway import parse_java_result
 from apps.utils.product_Conf.catalog import load_product_catalog
 
 
-class TestSecretResolver:
-    values = {
-        "cjdkJyrc.applicationLink.appId": "APP-ID",
-        "cjdkJyrc.applicationLink.privateKey": "PRIVATE-KEY",
-        "cjdkJyrc.applicationLink.publicKey": "PUBLIC-KEY",
-    }
-
-    def resolve(self, reference: str) -> str:
-        return self.values[reference]
-
-
 def _cjdk_catalog_and_plan():
     catalog = load_product_catalog()
     source = catalog.product("product-b")
@@ -41,10 +30,19 @@ def _cjdk_catalog_and_plan():
         environment="UAT1",
         method_code="normal",
     )
+    request_template = deepcopy(plan.compiled_request_template)
+    request_template["REQ_BODY"].update(
+        {
+            "appId": "APP-ID",
+            "myPrivateKey": "PRIVATE-KEY",
+            "apigwPublicKey": "PUBLIC-KEY",
+        }
+    )
+    plan = plan.model_copy(update={"compiled_request_template": request_template})
     return product, plan
 
 
-def test_product_payload_is_copied_bound_and_secret_injected() -> None:
+def test_product_payload_and_gateway_credentials_are_copied_and_bound() -> None:
     product, plan = _cjdk_catalog_and_plan()
     profile_before = deepcopy(load_integration_profile("cjdk-jyrc.application-link", 1).template)
     route_before = deepcopy(product.features.application_links[0].request_template)
@@ -56,7 +54,6 @@ def test_product_payload_is_copied_bound_and_secret_injected() -> None:
             "environment": "UAT1",
             "cooperationProjectId": "PROJECT-001",
         },
-        secret_resolver=TestSecretResolver(),
     )
 
     external = request
@@ -86,7 +83,6 @@ def test_missing_required_binding_value_is_rejected() -> None:
         build_application_link_request(
             plan=plan,
             normalized_payload={"product": "CJDK-ZHHX", "environment": "UAT1"},
-            secret_resolver=TestSecretResolver(),
         )
 
 
