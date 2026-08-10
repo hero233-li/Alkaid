@@ -4,17 +4,17 @@ from types import SimpleNamespace
 import pytest
 from pydantic import ValidationError
 
-from apps.product_applications.cjdk.config import (
+from apps.utils.http.config import (
     CjdkJyrcSettings,
     EnvironmentSettings,
 )
-from apps.product_applications.cjdk.runtime import (
+from apps.workflow.product_applications.cjdk.client import validate_cjdk_business_response
+from apps.workflow.product_applications.common.agreement import (
     CjdkEnvelope,
     CjdkProtocolError,
     query_agreement_preview,
     query_agreement_templates,
     read_agreement_documents,
-    validate_cjdk_business_response,
     validated_decoded_size,
 )
 

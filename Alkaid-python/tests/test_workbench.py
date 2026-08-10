@@ -7,9 +7,10 @@ import pytest
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.test import override_settings
 
-from apps.workbench.models import WorkbenchHistory, WorkbenchPackage
-from apps.workbench.schemas import WorkbenchRequest
-from apps.workbench.use_cases import execute_workbench_request
+from apps.workflow.Apifox.models import WorkbenchHistory, WorkbenchPackage
+from apps.workflow.Apifox.schemas import WorkbenchRequest
+from apps.workflow.Apifox.services import endpoint_key
+from apps.workflow.Apifox.use_cases import execute_workbench_request
 
 
 def request_payload(**overrides: object) -> dict[str, object]:
@@ -120,6 +121,7 @@ def test_workbench_encodes_urlencoded_form_fields_for_httpx() -> None:
 @pytest.mark.django_db
 def test_workbench_history_can_be_listed_renamed_and_deleted(client) -> None:
     item = WorkbenchHistory.objects.create(
+        endpoint_key=endpoint_key("GET", "https://example.com"),
         name="GET example",
         method="GET",
         url="https://example.com",
@@ -249,7 +251,7 @@ def test_workbench_rejects_redirect_to_forbidden_address() -> None:
 
 
 @pytest.mark.django_db
-def test_sensitive_headers_are_not_sent_or_persisted() -> None:
+def test_sensitive_headers_are_sent_and_persisted() -> None:
     captured: dict[str, str] = {}
 
     def handler(request: httpx.Request) -> httpx.Response:
@@ -270,8 +272,42 @@ def test_sensitive_headers_are_not_sent_or_persisted() -> None:
         transport=httpx.MockTransport(handler),
     )
     history = WorkbenchHistory.objects.get(pk=result.history_id)
-    persisted = {name.lower() for name in history.request_headers}
-    assert not persisted & {"authorization", "cookie", "x-token"}
-    assert "set-cookie" not in {name.lower() for name in history.response_headers}
-    assert "authorization" not in captured
-    assert "cookie" not in captured
+    persisted = {name.lower(): value for name, value in history.request_headers.items()}
+    assert persisted["authorization"] == "Bearer secret"
+    assert persisted["cookie"] == "token=secret"
+    assert persisted["x-token"] == "secret"
+    persisted_payload = {
+        name.lower(): value for name, value in history.request_payload["headers"].items()
+    }
+    assert persisted_payload["authorization"] == "Bearer secret"
+    assert persisted_payload["cookie"] == "token=secret"
+    assert persisted_payload["x-token"] == "secret"
+    assert history.response_headers["set-cookie"] == ["secret=1"]
+    assert captured["authorization"] == "Bearer secret"
+    assert captured["cookie"] == "token=secret"
+    assert captured["x-token"] == "secret"
+
+
+@pytest.mark.django_db
+def test_repeated_endpoint_execution_updates_one_history_record() -> None:
+    responses = iter(
+        [
+            httpx.Response(200, text="first"),
+            httpx.Response(201, text="second"),
+        ]
+    )
+    transport = httpx.MockTransport(lambda _request: next(responses))
+    submission = WorkbenchRequest.model_validate(request_payload())
+
+    first = execute_workbench_request(submission, transport=transport)
+    history = WorkbenchHistory.objects.get(pk=first.history_id)
+    history.name = "自定义接口名"
+    history.save(update_fields=["name"])
+    second = execute_workbench_request(submission, transport=transport)
+
+    assert second.history_id == first.history_id
+    assert WorkbenchHistory.objects.count() == 1
+    history.refresh_from_db()
+    assert history.name == "自定义接口名"
+    assert history.response_status == 201
+    assert history.response_body == "second"

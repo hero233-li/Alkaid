@@ -5,23 +5,25 @@ import json
 import pytest
 from django.test import override_settings
 
-import apps.product_applications.tasks as task_module
-from apps.jobs.integration_observer import JobIntegrationObserver
-from apps.jobs.models import JobStatus
-from apps.jobs.services import create_job
-from apps.product_applications.api import ProductApplicationSubmission, ProductConfigurationError
-from apps.product_applications.cjdk import config
-from apps.product_applications.cjdk.identity import DcppClient, PhotoClient
-from apps.product_applications.cjdk.runtime import (
-    CjdkClient,
-    ProductApplicationRuntime,
-    compile_application_link_plan,
+import apps.workflow.product_applications.tasks as task_module
+from apps.utils.application_links import compile_application_link_plan
+from apps.utils.http import config
+from apps.utils.product_Conf.catalog import load_product_catalog
+from apps.workflow.Jobs.integration_observer import JobIntegrationObserver
+from apps.workflow.Jobs.models import JobStatus
+from apps.workflow.Jobs.services import create_job
+from apps.workflow.product_applications.api import (
+    ProductApplicationSubmission,
+    ProductConfigurationError,
 )
-from apps.product_applications.workflow import (
+from apps.workflow.product_applications.cjdk.client import CjdkClient
+from apps.workflow.product_applications.cjdk.runtime import ProductApplicationRuntime
+from apps.workflow.product_applications.identity.dcpp import DcppClient
+from apps.workflow.product_applications.identity.photo import PhotoClient
+from apps.workflow.product_applications.workflow import (
     execute_product_application,
     freeze_product_execution_snapshot,
 )
-from apps.product_data.catalog import load_product_catalog
 
 
 def _payload() -> dict[str, object]:
@@ -86,8 +88,8 @@ def test_product_application_flow_opens_link_then_reads_agreement() -> None:
         trace_id=job.trace_id,
         environment=snapshot.environment,
     )
-    assert runtime._photo_client is None
-    assert runtime._dcpp_client is None
+    assert runtime.photo_client is None
+    assert runtime.dcpp_client is None
     progress_stages: list[str] = []
     result = execute_product_application(
         runtime=runtime,
@@ -104,7 +106,7 @@ def test_product_application_flow_opens_link_then_reads_agreement() -> None:
     }
     assert result["agreementReadCompleted"] is True
     assert result["agreementTemplates"][0]["fcosTemplateNo"] == "2209201448031"
-    assert result["agreementPreview"]["documents"][0]["docId"] == "MOCK-DOC-ID-001"
+    assert result["agreementPreview"]["Documents"][0]["docId"] == "MOCK-DOC-ID-001"
     assert result["agreementDocuments"][0]["fileName"] == "mock-agreement.pdf"
     assert result["agreementDocuments"][0]["contentBytes"] > 0
     assert result["externalSession"]["established"] is True
@@ -120,6 +122,13 @@ def test_product_application_flow_opens_link_then_reads_agreement() -> None:
     ]
     assert result["externalSession"]["finalUrlPresent"] is True
     assert result["identityVerificationCompleted"] is True
+    assert result["identityVerification"]["plainCustomerName"] == "测试用户"
+    assert result["identityVerification"]["plainIdentityNo"] == "330101199001011234"
+    assert result["identityVerification"]["plainMobile"] == "13800138000"
+    assert result["identityVerification"]["cardNo"] == "6222000000000000"
+    assert result["identityVerification"]["license"] == "MOCK-FACE-LICENSE"
+    assert result["identityVerification"]["smsCode"] == "123456"
+    assert result["identityVerification"]["verification"]["rawResponse"]["verified"] is True
 
     steps = list(job.api_calls.order_by("id").values_list("step", flat=True))
     assert steps[0] == "application_link.generate_link"
@@ -171,7 +180,7 @@ def test_product_application_flow_validates_before_opening_adapter() -> None:
     )
 
     class UnexpectedRuntime:
-        def __enter__(self):
+        def open(self):
             raise AssertionError("validation failure must not open an external runtime")
 
     with pytest.raises(ProductConfigurationError, match="personName"):
@@ -238,12 +247,18 @@ def test_cjdk_photo_and_dcpp_clients_have_independent_lifecycles() -> None:
     )
     dcpp = DcppClient({})
 
-    with cjdk, photo, dcpp:
+    cjdk.open()
+    photo.open()
+    try:
         assert cjdk._http_client is not None
         clients = (cjdk._http_client._client, photo._client, dcpp._client)
         assert all(client is not None for client in clients)
         assert len({id(client) for client in clients}) == 3
         assert len({id(client.cookies.jar) for client in clients if client is not None}) == 3
+    finally:
+        cjdk.close()
+        photo.close()
+        dcpp.close()
 
     assert cjdk._http_client is None
     assert photo._client is None
@@ -288,7 +303,7 @@ def test_local_environment_config_has_highest_priority(tmp_path, monkeypatch) ->
 
 
 def test_requiredness_is_not_stored_on_global_ui_field() -> None:
-    from apps.product_data.catalog import CatalogField
+    from apps.utils.product_Conf.catalog import CatalogField
 
     required_for_product = CatalogField(
         name="sharedField",

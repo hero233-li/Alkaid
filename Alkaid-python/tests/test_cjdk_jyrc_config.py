@@ -6,9 +6,9 @@ from types import SimpleNamespace
 import pytest
 from django.core.exceptions import ImproperlyConfigured
 
-from apps.product_applications import cjdk
-from apps.product_applications.cjdk import config
-from apps.product_applications.cjdk.runtime import execute_java
+from apps.utils.http import config
+from apps.utils.java.application_link import execute_java
+from apps.workflow.product_applications import cjdk
 
 
 def test_package_import_does_not_monkey_patch_config_functions() -> None:

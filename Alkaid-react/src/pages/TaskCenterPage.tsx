@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
-import { Button, Input, Select, Space, Table, Tag, Typography, message } from 'antd';
-import { RefreshCw, Search } from 'lucide-react';
-import { getJobDetail, listJobs } from '../api/jobs';
+import { Button, Input, Popconfirm, Select, Space, Table, Tag, Typography, message } from 'antd';
+import { RefreshCw, Search, Trash2 } from 'lucide-react';
+import { deleteAllJobs, getJobDetail, listJobs } from '../api/jobs';
 import type { JobDetail, JobStatus } from '../types/jobs';
 import TaskCenterJobDetail from './TaskCenterJobDetail';
 
@@ -68,6 +68,7 @@ export default function TaskCenterPage() {
   const [detailOpen, setDetailOpen] = useState(false);
   const [detailLoading, setDetailLoading] = useState(false);
   const [selectedJob, setSelectedJob] = useState<JobDetail | null>(null);
+  const [clearingAll, setClearingAll] = useState(false);
 
   const loadJobs = useCallback(async (filters: JobFilters, page: number) => {
     setLoading(true);
@@ -114,6 +115,22 @@ export default function TaskCenterPage() {
     }
   };
 
+  const clearAllJobs = async () => {
+    setClearingAll(true);
+    try {
+      const result = await deleteAllJobs();
+      setDetailOpen(false);
+      setSelectedJob(null);
+      const activeMessage = result.activeJobs > 0 ? `，保留 ${result.activeJobs} 个执行中任务` : '';
+      message.success(`已清除 ${result.deletedJobs} 条任务记录${activeMessage}`);
+      await loadJobs(appliedFilters, 1);
+    } catch (error) {
+      message.error(error instanceof Error ? error.message : '全部清除失败');
+    } finally {
+      setClearingAll(false);
+    }
+  };
+
   return (
     <div className="page-surface task-center-page">
       <div className="page-title-row">
@@ -121,13 +138,27 @@ export default function TaskCenterPage() {
           <Typography.Title level={3}>任务中心</Typography.Title>
           <Typography.Text type="secondary">查询最近任务、执行状态和失败原因</Typography.Text>
         </div>
-        <Button
-          icon={<RefreshCw size={16} />}
-          loading={loading}
-          onClick={() => void loadJobs(appliedFilters, currentPage)}
-        >
-          刷新
-        </Button>
+        <Space>
+          <Popconfirm
+            title="确认清除全部已结束任务？"
+            description="所有已结束任务的日志、接口调用和本地记录都将被永久删除；执行中任务会保留。"
+            okText="全部清除"
+            cancelText="取消"
+            okButtonProps={{ danger: true }}
+            onConfirm={clearAllJobs}
+          >
+            <Button danger icon={<Trash2 size={16} />} loading={clearingAll}>
+              全部清除
+            </Button>
+          </Popconfirm>
+          <Button
+            icon={<RefreshCw size={16} />}
+            loading={loading}
+            onClick={() => void loadJobs(appliedFilters, currentPage)}
+          >
+            刷新
+          </Button>
+        </Space>
       </div>
 
       <Space className="task-center-filters" wrap>

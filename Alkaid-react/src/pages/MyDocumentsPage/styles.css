@@ -157,7 +157,7 @@
 .my-documents-list-head,
 .my-documents-row {
   display: grid;
-  grid-template-columns: minmax(220px, 1fr) 92px minmax(130px, 0.7fr) 78px 174px 86px;
+  grid-template-columns: minmax(220px, 1fr) 92px minmax(130px, 0.7fr) 78px 174px 126px;
   gap: 12px;
   align-items: center;
 }

@@ -1,8 +1,17 @@
 import { useMemo, useState } from 'react';
-import { Button, Checkbox, Input, Modal, Rate, Select, Tooltip, Typography } from 'antd';
+import {
+  Button,
+  Checkbox,
+  Input,
+  InputNumber,
+  Modal,
+  Rate,
+  Select,
+  Tooltip,
+  Typography,
+} from 'antd';
 import {
   ArrowLeft,
-  ArrowUpDown,
   Barcode,
   CalendarDays,
   CircleDot,
@@ -10,7 +19,6 @@ import {
   CreditCard,
   Database,
   DollarSign,
-  Filter,
   Hash,
   Link,
   ListChecks,
@@ -36,10 +44,12 @@ import {
   type MultidimensionalFieldType,
   type MultidimensionalTableData,
   type MultidimensionalTableView,
-  type MultidimensionalViewFilter,
 } from './model';
 
 const DEFAULT_FILE_NAME = '未命名多维表格';
+const DEFAULT_FIELD_WIDTH = 180;
+const MIN_FIELD_WIDTH = 100;
+const MAX_FIELD_WIDTH = 480;
 
 const FIELD_TYPE_OPTIONS: Array<{ label: string; value: MultidimensionalFieldType }> = [
   { label: '文本', value: 'text' },
@@ -132,48 +142,17 @@ export default function MultidimensionalTableDesigner({
   const [editingFieldId, setEditingFieldId] = useState<string | null>(null);
   const [fieldName, setFieldName] = useState('');
   const [fieldType, setFieldType] = useState<MultidimensionalFieldType>('text');
+  const [fieldWidth, setFieldWidth] = useState(DEFAULT_FIELD_WIDTH);
   const [fieldOptions, setFieldOptions] = useState('未开始, 进行中, 已完成');
-  const [filterDialogOpen, setFilterDialogOpen] = useState(false);
-  const [filterFieldId, setFilterFieldId] = useState('');
-  const [filterOperator, setFilterOperator] =
-    useState<MultidimensionalViewFilter['operator']>('contains');
-  const [filterValue, setFilterValue] = useState('');
-  const [sortDialogOpen, setSortDialogOpen] = useState(false);
-  const [sortFieldId, setSortFieldId] = useState('');
-  const [sortDirection, setSortDirection] = useState<'ascending' | 'descending'>('ascending');
   const activeView = views.find((view) => view.id === activeViewId) || views[0];
   const query = activeView?.query || '';
 
   const visibleRecords = useMemo(() => {
     const keyword = query.trim().toLocaleLowerCase();
-    const result = records
+    return records
       .map((record, index) => ({ record, index }))
-      .filter(({ record }) => {
-        if (keyword && !record.join(' ').toLocaleLowerCase().includes(keyword)) return false;
-        return (activeView?.filters || []).every((filter) => {
-          const fieldIndex = fields.findIndex((field) => field.id === filter.fieldId);
-          const value = record[fieldIndex] || '';
-          if (filter.operator === 'notEmpty') return Boolean(value.trim());
-          if (filter.operator === 'equals') return value === filter.value;
-          return value.toLocaleLowerCase().includes(filter.value.toLocaleLowerCase());
-        });
-      });
-    if (!activeView?.sort) return result;
-    const fieldIndex = fields.findIndex((field) => field.id === activeView.sort?.fieldId);
-    const field = fields[fieldIndex];
-    if (fieldIndex < 0) return result;
-    const numericField = ['number', 'percentage', 'currency', 'progress', 'rating'].includes(
-      field.type,
-    );
-    return [...result].sort((left, right) => {
-      const leftValue = left.record[fieldIndex] || '';
-      const rightValue = right.record[fieldIndex] || '';
-      const comparison = numericField
-        ? (Number(leftValue) || 0) - (Number(rightValue) || 0)
-        : leftValue.localeCompare(rightValue, 'zh-CN', { numeric: true });
-      return activeView.sort?.direction === 'descending' ? -comparison : comparison;
-    });
-  }, [activeView, fields, query, records]);
+      .filter(({ record }) => !keyword || record.join(' ').toLocaleLowerCase().includes(keyword));
+  }, [query, records]);
 
   const updateCell = (rowIndex: number, columnIndex: number, value: string) => {
     setRecords((current) =>
@@ -201,6 +180,7 @@ export default function MultidimensionalTableDesigner({
     setEditingFieldId(null);
     setFieldName('');
     setFieldType('text');
+    setFieldWidth(DEFAULT_FIELD_WIDTH);
     setFieldOptions('未开始, 进行中, 已完成');
     setFieldDialogOpen(true);
   };
@@ -209,6 +189,7 @@ export default function MultidimensionalTableDesigner({
     setEditingFieldId(field.id);
     setFieldName(field.name);
     setFieldType(field.type);
+    setFieldWidth(field.width || DEFAULT_FIELD_WIDTH);
     setFieldOptions(field.options?.join(', ') || '未开始, 进行中, 已完成');
     setFieldDialogOpen(true);
   };
@@ -218,6 +199,7 @@ export default function MultidimensionalTableDesigner({
       id: editingFieldId || createFieldId(),
       name: fieldName.trim() || '未命名字段',
       type: fieldType,
+      width: Math.min(MAX_FIELD_WIDTH, Math.max(MIN_FIELD_WIDTH, fieldWidth)),
       options:
         fieldType === 'select' || fieldType === 'multiSelect'
           ? fieldOptions
@@ -313,51 +295,27 @@ export default function MultidimensionalTableDesigner({
     );
   };
 
-  const openFilterDialog = () => {
-    const fieldId = filterFieldId || fields[0]?.id || '';
-    const existing = activeView?.filters.find((filter) => filter.fieldId === fieldId);
-    setFilterFieldId(fieldId);
-    setFilterOperator(existing?.operator || 'contains');
-    setFilterValue(existing?.value || '');
-    setFilterDialogOpen(true);
+  const resizeField = (field: MultidimensionalField, startX: number, clientX: number) => {
+    const nextWidth = Math.min(
+      MAX_FIELD_WIDTH,
+      Math.max(MIN_FIELD_WIDTH, (field.width || DEFAULT_FIELD_WIDTH) + clientX - startX),
+    );
+    setFields((current) =>
+      current.map((item) => (item.id === field.id ? { ...item, width: nextWidth } : item)),
+    );
   };
 
-  const applyFilter = () => {
-    if (!filterFieldId) return;
-    const nextFilter: MultidimensionalViewFilter = {
-      fieldId: filterFieldId,
-      operator: filterOperator,
-      value: filterOperator === 'notEmpty' ? '' : filterValue,
+  const startFieldResize = (field: MultidimensionalField, event: React.PointerEvent) => {
+    event.preventDefault();
+    event.stopPropagation();
+    const startX = event.clientX;
+    const handleMove = (moveEvent: PointerEvent) => resizeField(field, startX, moveEvent.clientX);
+    const handleUp = () => {
+      window.removeEventListener('pointermove', handleMove);
+      window.removeEventListener('pointerup', handleUp);
     };
-    updateActiveView({
-      filters: [
-        ...(activeView?.filters || []).filter((filter) => filter.fieldId !== filterFieldId),
-        nextFilter,
-      ],
-    });
-    setFilterDialogOpen(false);
-  };
-
-  const clearFilters = () => {
-    updateActiveView({ filters: [] });
-    setFilterDialogOpen(false);
-  };
-
-  const openSortDialog = () => {
-    setSortFieldId(activeView?.sort?.fieldId || fields[0]?.id || '');
-    setSortDirection(activeView?.sort?.direction || 'ascending');
-    setSortDialogOpen(true);
-  };
-
-  const applySort = () => {
-    if (!sortFieldId) return;
-    updateActiveView({ sort: { fieldId: sortFieldId, direction: sortDirection } });
-    setSortDialogOpen(false);
-  };
-
-  const clearSort = () => {
-    updateActiveView({ sort: undefined });
-    setSortDialogOpen(false);
+    window.addEventListener('pointermove', handleMove);
+    window.addEventListener('pointerup', handleUp);
   };
 
   const requestSave = () => {
@@ -624,20 +582,6 @@ export default function MultidimensionalTableDesigner({
               字段管理
             </Button>
             <Button
-              type={activeView?.filters.length ? 'primary' : 'text'}
-              icon={<Filter size={17} />}
-              onClick={openFilterDialog}
-            >
-              筛选{activeView?.filters.length ? ` (${activeView.filters.length})` : ''}
-            </Button>
-            <Button
-              type={activeView?.sort ? 'primary' : 'text'}
-              icon={<ArrowUpDown size={17} />}
-              onClick={openSortDialog}
-            >
-              排序
-            </Button>
-            <Button
               type={activeView?.wrapText ? 'primary' : 'text'}
               icon={<WrapText size={17} />}
               onClick={() => updateActiveView({ wrapText: !activeView?.wrapText })}
@@ -671,7 +615,9 @@ export default function MultidimensionalTableDesigner({
               role="grid"
               aria-label="多维表格设计器"
               style={{
-                gridTemplateColumns: `48px repeat(${fields.length}, minmax(160px, 1fr)) 46px`,
+                gridTemplateColumns: `48px ${fields
+                  .map((field) => `${field.width || DEFAULT_FIELD_WIDTH}px`)
+                  .join(' ')} 46px`,
               }}
             >
               <div className="multidimensional-header-cell is-checkbox">
@@ -694,6 +640,13 @@ export default function MultidimensionalTableDesigner({
                 >
                   <FieldTypeIcon type={field.type} />
                   <span>{field.name}</span>
+                  <span
+                    className="multidimensional-column-resizer"
+                    role="separator"
+                    aria-label={`调整 ${field.name} 列宽`}
+                    onClick={(event) => event.stopPropagation()}
+                    onPointerDown={(event) => startFieldResize(field, event)}
+                  />
                 </button>
               ))}
               <button
@@ -743,106 +696,6 @@ export default function MultidimensionalTableDesigner({
       </div>
 
       <Modal
-        title={`筛选视图“${activeView?.name || ''}”`}
-        open={filterDialogOpen}
-        okText="应用筛选"
-        cancelText="取消"
-        onOk={applyFilter}
-        onCancel={() => setFilterDialogOpen(false)}
-        footer={(_, { OkBtn, CancelBtn }) => (
-          <>
-            <Button danger disabled={!activeView?.filters.length} onClick={clearFilters}>
-              清除全部筛选
-            </Button>
-            <CancelBtn />
-            <OkBtn />
-          </>
-        )}
-      >
-        <div className="multidimensional-view-form">
-          <label>
-            <span>字段</span>
-            <Select
-              aria-label="筛选字段"
-              value={filterFieldId}
-              options={fields.map((field) => ({ label: field.name, value: field.id }))}
-              onChange={(fieldId) => {
-                const existing = activeView?.filters.find((filter) => filter.fieldId === fieldId);
-                setFilterFieldId(fieldId);
-                setFilterOperator(existing?.operator || 'contains');
-                setFilterValue(existing?.value || '');
-              }}
-            />
-          </label>
-          <label>
-            <span>条件</span>
-            <Select
-              aria-label="筛选条件"
-              value={filterOperator}
-              options={[
-                { label: '包含', value: 'contains' },
-                { label: '等于', value: 'equals' },
-                { label: '不为空', value: 'notEmpty' },
-              ]}
-              onChange={setFilterOperator}
-            />
-          </label>
-          {filterOperator !== 'notEmpty' && (
-            <label>
-              <span>筛选值</span>
-              <Input
-                value={filterValue}
-                aria-label="筛选值"
-                onChange={(event) => setFilterValue(event.target.value)}
-              />
-            </label>
-          )}
-        </div>
-      </Modal>
-
-      <Modal
-        title={`排序视图“${activeView?.name || ''}”`}
-        open={sortDialogOpen}
-        okText="应用排序"
-        cancelText="取消"
-        onOk={applySort}
-        onCancel={() => setSortDialogOpen(false)}
-        footer={(_, { OkBtn, CancelBtn }) => (
-          <>
-            <Button danger disabled={!activeView?.sort} onClick={clearSort}>
-              清除排序
-            </Button>
-            <CancelBtn />
-            <OkBtn />
-          </>
-        )}
-      >
-        <div className="multidimensional-view-form">
-          <label>
-            <span>排序字段</span>
-            <Select
-              aria-label="排序字段"
-              value={sortFieldId}
-              options={fields.map((field) => ({ label: field.name, value: field.id }))}
-              onChange={setSortFieldId}
-            />
-          </label>
-          <label>
-            <span>排序方式</span>
-            <Select
-              aria-label="排序方式"
-              value={sortDirection}
-              options={[
-                { label: '升序', value: 'ascending' },
-                { label: '降序', value: 'descending' },
-              ]}
-              onChange={setSortDirection}
-            />
-          </label>
-        </div>
-      </Modal>
-
-      <Modal
         title={editingFieldId ? '字段设置' : '添加字段'}
         open={fieldDialogOpen}
         okText={editingFieldId ? '保存' : '添加'}
@@ -880,6 +733,17 @@ export default function MultidimensionalTableDesigner({
               value={fieldType}
               options={FIELD_TYPE_OPTIONS}
               onChange={setFieldType}
+            />
+          </label>
+          <label>
+            <span>列宽（像素）</span>
+            <InputNumber
+              min={MIN_FIELD_WIDTH}
+              max={MAX_FIELD_WIDTH}
+              step={10}
+              value={fieldWidth}
+              aria-label="字段列宽"
+              onChange={(value) => setFieldWidth(value || DEFAULT_FIELD_WIDTH)}
             />
           </label>
           {(fieldType === 'select' || fieldType === 'multiSelect') && (

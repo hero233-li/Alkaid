@@ -1,6 +1,14 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { apiClient } from './client';
-import { getDocumentWorkspace, getStoredDocument, saveDocumentWorkspace } from './documents';
+import {
+  deleteStoredFolder,
+  getDocumentWorkspace,
+  getStoredDocument,
+  renameStoredFolder,
+  saveDocumentWorkspace,
+  setStoredDocumentLocked,
+  touchStoredDocument,
+} from './documents';
 
 const workspace = {
   documents: [
@@ -49,6 +57,55 @@ describe('document persistence api', () => {
 
     await expect(getStoredDocument('document-1')).resolves.toEqual(workspace.documents[0]);
     expect(get).toHaveBeenCalledWith('/documents/document-1', { useResponseDelay: false });
+  });
+
+  it('renames and deletes folders through the folder detail endpoint', async () => {
+    const folder = {
+      id: 'folder/1',
+      name: '归档资料',
+      parentId: null,
+      createdAt: '2026-08-02T10:00:00.000Z',
+    };
+    const patch = vi.spyOn(apiClient, 'patch').mockResolvedValue({
+      data: { ok: true, message: '', data: folder },
+    });
+    const remove = vi.spyOn(apiClient, 'delete').mockResolvedValue({
+      data: { ok: true, message: '', data: null },
+    });
+
+    await expect(renameStoredFolder(folder.id, folder.name)).resolves.toEqual(folder);
+    await expect(deleteStoredFolder(folder.id)).resolves.toBeNull();
+    expect(patch).toHaveBeenCalledWith(
+      '/documents/folders/folder%2F1',
+      { name: '归档资料' },
+      { useResponseDelay: false },
+    );
+    expect(remove).toHaveBeenCalledWith('/documents/folders/folder%2F1', {
+      useResponseDelay: false,
+    });
+  });
+
+  it('locks files and updates their last-opened timestamp with metadata patches', async () => {
+    const lockedDocument = { ...workspace.documents[0], locked: true };
+    const patch = vi.spyOn(apiClient, 'patch').mockResolvedValue({
+      data: { ok: true, message: '', data: lockedDocument },
+    });
+
+    await expect(setStoredDocumentLocked('document-1', true)).resolves.toEqual(lockedDocument);
+    await touchStoredDocument('document-1', '2026-08-03T10:00:00.000Z');
+
+    expect(patch).toHaveBeenNthCalledWith(
+      1,
+      '/documents/document-1',
+      { locked: true },
+      { useResponseDelay: false },
+    );
+    expect(patch).toHaveBeenNthCalledWith(
+      2,
+      '/documents/document-1',
+      { lastOpenedAt: '2026-08-03T10:00:00.000Z' },
+      { useResponseDelay: false },
+    );
   });
 
   it('serializes workspace writes so an older response cannot overwrite a newer save', async () => {

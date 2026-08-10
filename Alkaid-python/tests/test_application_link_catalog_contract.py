@@ -3,10 +3,10 @@ import shutil
 
 import pytest
 
-from apps.product_applications.cjdk.runtime import (
+from apps.utils.application_links import (
     validate_catalog_application_link_plans,
 )
-from apps.product_data.catalog import (
+from apps.utils.product_Conf.catalog import (
     PRODUCT_ROOT,
     REFERENCE_PATH,
     ProductCatalogError,

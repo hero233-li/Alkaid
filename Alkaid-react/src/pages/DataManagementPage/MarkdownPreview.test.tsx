@@ -29,3 +29,18 @@ describe('online spreadsheet preview', () => {
     expect(html).not.toContain('<table');
   });
 });
+
+describe('document image preview', () => {
+  it('renders uploaded document assets in Markdown and online Word', () => {
+    const assetUrl = '/api/documents/assets/12345678-1234-1234-1234-123456789abc';
+    const markdown = renderToStaticMarkup(
+      <MarkdownPreview content={`![示例图片](${assetUrl})`} kind="document" />,
+    );
+    const word = renderToStaticMarkup(
+      <MarkdownPreview content={`<p><img src="${assetUrl}" alt="示例图片"></p>`} kind="word" />,
+    );
+
+    expect(markdown).toContain(`src="${assetUrl}"`);
+    expect(word).toContain(`src="${assetUrl}"`);
+  });
+});

@@ -94,6 +94,11 @@ export default function MarkdownPreview({ content, kind = 'document' }: Markdown
       <article className="markdown-rendered-preview" aria-label="多维表格渲染预览">
         {title && <h1>{title}</h1>}
         <table className="multidimensional-preview-table">
+          <colgroup>
+            {data.fields.map((field) => (
+              <col key={field.id} style={{ width: field.width || 180 }} />
+            ))}
+          </colgroup>
           <thead>
             <tr>
               {data.fields.map((field) => (

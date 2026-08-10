@@ -16,11 +16,11 @@ function flattenKeys(items: MenuItemShape[] = []): Array<string | number> {
 describe('getVisibleMenuItems', () => {
   it('removes hidden leaves while keeping protected settings available', () => {
     const keys = flattenKeys(
-      getVisibleMenuItems(['product-application', 'workbench']) as MenuItemShape[],
+      getVisibleMenuItems(['product-application', 'Apifox']) as MenuItemShape[],
     );
 
     expect(keys).not.toContain('product-application');
-    expect(keys).not.toContain('workbench');
+    expect(keys).not.toContain('Apifox');
     expect(keys).toContain('settings');
     expect(keys).toContain('home');
     expect(keys).not.toContain('release-management');
@@ -34,7 +34,7 @@ describe('getVisibleMenuItems', () => {
 
     expect(keys).not.toContain('workflow-learning');
     expect(keys).not.toContain('card-status-processing');
-    expect(keys).toContain('jobs');
+    expect(keys).toContain('Jobs');
     expect(keys).toContain('settings');
   });
 });

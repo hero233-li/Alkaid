@@ -5,14 +5,13 @@ from typing import Any
 
 from django.db import connection
 
-from apps.product_applications.cjdk.config import validate_cjdk_jyrc_readiness
-from apps.product_applications.cjdk.runtime import (
+from apps.utils.application_links import (
     validate_catalog_application_link_plans,
 )
-from apps.product_applications.cjdk.runtime import (
-    validate_message_catalog as validate_agreement_message_catalog,
-)
-from apps.product_data.catalog import load_product_catalog
+from apps.utils.http.config import validate_cjdk_jyrc_readiness
+from apps.utils.product_Conf.catalog import load_product_catalog
+from apps.workflow.product_applications.common.agreement import validate_agreement_messages
+from apps.workflow.product_applications.identity.gateway import validate_identity_messages
 
 
 @dataclass(frozen=True)
@@ -39,7 +38,11 @@ def collect_readiness() -> ReadinessReport:
         }
         checks["agreementMessages"] = {
             "status": "ok",
-            **validate_agreement_message_catalog(),
+            **validate_agreement_messages(),
+        }
+        checks["identityMessages"] = {
+            "status": "ok",
+            **validate_identity_messages(),
         }
         environments = {
             environment

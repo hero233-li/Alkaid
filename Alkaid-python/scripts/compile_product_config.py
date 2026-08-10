@@ -12,11 +12,19 @@ import django  # noqa: E402
 
 django.setup()
 
-from apps.product_applications.cjdk.runtime import (  # noqa: E402
+from apps.utils.application_links import (  # noqa: E402
     compile_application_link_plan,
-    validate_message_catalog,
 )
-from apps.product_data.catalog import load_product_catalog  # noqa: E402
+from apps.utils.product_Conf.catalog import load_product_catalog  # noqa: E402
+from apps.workflow.product_applications.common.agreement import (  # noqa: E402
+    validate_agreement_messages,
+)
+from apps.workflow.product_applications.identity.gateway import (  # noqa: E402
+    validate_identity_messages,
+)
+from apps.workflow.product_applications.workflow_engine import (  # noqa: E402
+    validate_product_workflow,
+)
 
 
 def main() -> int:
@@ -28,8 +36,10 @@ def main() -> int:
     )
     parser.parse_args()
     catalog = load_product_catalog()
-    message_summary = validate_message_catalog()
+    agreement_summary = validate_agreement_messages()
+    identity_summary = validate_identity_messages()
     for product in catalog.products.values():
+        validate_product_workflow(product.workflow)
         for environment in product.environments:
             for method in product.applicationMethods:
                 compile_application_link_plan(
@@ -42,7 +52,8 @@ def main() -> int:
         "Product catalog is valid: "
         f"version={catalog.reference.version}, "
         f"products={len(catalog.products)}, "
-        f"agreement_messages={message_summary['messages']}, "
+        f"agreement_messages={agreement_summary['messages']}, "
+        f"identity_messages={identity_summary['messages']}, "
         f"checksum={catalog.checksum}"
     )
     return 0

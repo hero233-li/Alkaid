@@ -20,9 +20,9 @@ React Page / Hook
 
 目录职责：
 
-- `apps/product_data/product_applications/`：Schema、View、Task、Use Case 和校验 Service。
-- `apps/integrations/cjdk_jyrc/`：请求/响应模型、Adapter、Mock transport 和真实协议。
-- `apps/jobs/`：Job 状态、幂等、重试、取消、超时、审计、SSE 和共享 TaskRunner。
+- `apps/workflow/product_applications/`：Schema、View、Task、流程模块和校验 Service。
+- `apps/utils/http/`、`apps/utils/java/`：通用 HTTP Client、协议契约和 Java Gateway。
+- `apps/workflow/Jobs/`：Job 状态、幂等、重试、取消、超时、审计、SSE 和共享 TaskRunner。
 - `Alkaid-react/src/utils/jobPolling.ts`：150 秒前端轮询截止、AbortSignal 和终态处理。
 
 产品申请保持固定调用顺序：
@@ -69,11 +69,13 @@ Jobs App 的迁移链完整顺序为：
 → 0003_job_status_deadline_index
 → 0004_mocktoolstate
 → 0005_delete_mocktoolstate
+→ 0006_reconcile_legacy_job_error_code
 ```
 
 - `0003` 为 `Job(status, deadline_at)` 增加超时收敛索引。
 - `0004` 是历史迁移，曾新增 `MockToolState`。
 - `0005` 删除已经没有运行时消费者的 `MockToolState` 表；部署前应按常规流程备份数据库。
+- `0006` 统一历史 Job 的错误码。
 - 已移除的 `workflows` App 不会自动 DROP 历史表。需要清理时由 DBA 在备份后单独执行，发布
   Migration 不做破坏性删除。
 

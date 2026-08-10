@@ -2,7 +2,7 @@ import json
 
 import pytest
 
-from apps.portal.models import PortalPreference, ReleaseNote
+from apps.workflow.System_menu.models import PortalPreference, ReleaseNote
 
 
 @pytest.mark.django_db
@@ -34,14 +34,14 @@ def test_release_management_crud(client) -> None:
 def test_portal_menu_preferences_are_persisted_and_deduplicated(client) -> None:
     saved = client.put(
         "/api/portal/home-shortcuts",
-        data=json.dumps({"menuKeys": ["product-application", "product-application", "workbench"]}),
+        data=json.dumps({"menuKeys": ["product-application", "product-application", "Apifox"]}),
         content_type="application/json",
     )
     assert saved.status_code == 200
-    assert saved.json()["data"] == ["product-application", "workbench"]
+    assert saved.json()["data"] == ["product-application", "Apifox"]
     assert client.get("/api/portal/home-shortcuts").json()["data"] == [
         "product-application",
-        "workbench",
+        "Apifox",
     ]
 
 
@@ -49,12 +49,12 @@ def test_portal_menu_preferences_are_persisted_and_deduplicated(client) -> None:
 def test_hidden_menus_cannot_hide_home_or_system_settings(client) -> None:
     response = client.put(
         "/api/portal/hidden-menus",
-        data=json.dumps({"menuKeys": ["home", "settings", "workbench"]}),
+        data=json.dumps({"menuKeys": ["home", "settings", "Apifox"]}),
         content_type="application/json",
     )
     assert response.status_code == 200
-    assert response.json()["data"] == ["workbench"]
-    assert PortalPreference.objects.get(key="hidden_menus").value == ["workbench"]
+    assert response.json()["data"] == ["Apifox"]
+    assert PortalPreference.objects.get(key="hidden_menus").value == ["Apifox"]
 
 
 @pytest.mark.django_db

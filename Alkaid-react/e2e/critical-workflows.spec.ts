@@ -98,7 +98,7 @@ async function readJson(route: Route) {
 test('产品申请提交后展示 Job 结果', async ({ page }) => {
   await mockProductConfig(page);
   let submittedPayload: Record<string, unknown> | undefined;
-  await page.route('**/api/jobs/101', (route) =>
+  await page.route('**/api/Jobs/101', (route) =>
     route.fulfill({
       json: ok({
         id: 101,
@@ -116,7 +116,7 @@ test('产品申请提交后展示 Job 结果', async ({ page }) => {
       }),
     }),
   );
-  await page.route('**/api/jobs/101/logs/stream*', (route) =>
+  await page.route('**/api/Jobs/101/logs/stream*', (route) =>
     route.fulfill({
       contentType: 'text/event-stream',
       body: 'event: status\ndata: {"status":"success","progress":100}\n\n',
@@ -214,7 +214,7 @@ test('核实审批操作复用查询返回的完整上下文', async ({ page }) 
       await route.fulfill({ json: ok(jobSubmission(204)) });
     },
   );
-  await page.route('**/api/jobs/*', (route) => {
+  await page.route('**/api/Jobs/*', (route) => {
     const id = Number(new URL(route.request().url()).pathname.split('/').pop());
     return route.fulfill({ json: ok(details.get(id)) });
   });
@@ -276,7 +276,7 @@ test('重复点击同一菜单时复用标签并保留表单缓存', async ({ pa
 });
 
 test('刷新时等待菜单配置完成后一次性显示最终菜单', async ({ page }) => {
-  await page.route('**/api/portal/hidden-menus', async (route) => {
+  await page.route('**/api/System_menu/hidden-menus', async (route) => {
     await new Promise((resolve) => setTimeout(resolve, 350));
     await route.fulfill({ json: ok(['card-status-processing']) });
   });

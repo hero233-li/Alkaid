@@ -32,7 +32,7 @@ make migrate
 make run
 ```
 
-数据中心的文档、在线表格、多维表格及文件夹通过 `apps.documents` 持久化到 MySQL。
+数据中心的文档、在线表格、多维表格及文件夹通过 `apps.workflow.Documents` 持久化到 MySQL。
 部署新版本后必须执行 `make migrate`，以创建文档、文件夹和图片资源表。列表接口只返回
 元数据，正文由文件详情接口按需读取；创建、修改、移动和删除均使用单文件接口，不再重建
 整个 workspace。编辑器图片通过 `/api/documents/assets` 单独上传，正文仅保留图片 URL，避免
@@ -118,8 +118,8 @@ GET  /api/jobs/{id}/logs/stream?afterId=0
 GET  /api/jobs/{id}/calls/{callId}
 ```
 
-产品配置统一位于 `apps/product_data/configs/reference_data.json` 和
-`apps/product_data/configs/products/*.json`。页面配置、后端校验、Job 快照和申请链接路由均由
+产品配置统一位于 `apps/config/products/reference_data.json` 和
+`apps/config/products/*.json`。页面配置、后端校验、Job 快照和申请链接路由均由
 这一个 Catalog 派生。
 
 Celery 将普通过程日志写入 `JobLog`，将每次外部 HTTP 请求的原文 URL、Header、请求、响应、
@@ -131,9 +131,9 @@ Celery 将普通过程日志写入 `JobLog`，将每次外部 HTTP 请求的原�
 持有 `Job` ORM，也不直接调用 Job 日志服务。
 
 产品申请、申请链接、业务准入和核实审批分别拥有自己的同级功能 App。业务 Mock 响应放在
-各功能的 `mock.py`，公共 `MockTransportRouter` 位于 `apps/integrations/mock.py`；本地 Mock 与真实外系统共用
-同一套请求模型、HTTP Client 和响应校验。完整边界见 `apps/integrations/README.md` 和
-`apps/product_data/README.md`。
+各功能的 `mock.py`，公共 `MockTransportRouter` 位于 `apps/mock/mock.py`；本地 Mock 与真实外系统共用
+同一套请求模型、HTTP Client 和响应校验。通用 HTTP、Java 网关和产品目录分别位于
+`apps/utils/http`、`apps/utils/java` 和 `apps/utils/product_Conf`。
 
 产品申请 payload 必须提交明确的客户类型枚举 `customerType`：`farmer`、`legal_person` 或
 `shareholder`。`legal_person` 和 `shareholder` 必须同时提交非空 `companyName`；`farmer`
@@ -173,14 +173,16 @@ Catalog 在 Web/Worker 进程内缓存，修改 JSON 后需重启整组服务。
 
 ## 代码边界
 
-- `apps/integrations/`：只保留 `contracts.py`、`http.py` 和 `mock.py` 公共基础设施。
-- `apps/product_applications/cjdk/`：CJDK 申请、协议、身份和业务 Mock 的功能私有实现。
-- `apps/jobs/`：异步任务状态、日志、外部调用审计、重试、取消和 SSE。
-- `apps/product_data/catalog.py`：产品配置的唯一加载、校验和 Job 快照入口。
+- `apps/utils/http/`：统一 HTTP 协议、观察协议和客户端实现。
+- `apps/utils/java/`：统一 Java Gateway 实现。
+- `apps/mock/`：公共 HTTP Mock 基础设施。
+- `apps/workflow/product_applications/cjdk/`：CJDK 申请、协议、身份和业务 Mock 的功能私有实现。
+- `apps/workflow/Jobs/`：异步任务状态、日志、外部调用审计、重试、取消和 SSE。
+- `apps/utils/product_Conf/catalog.py`：产品配置的唯一加载、校验和 Job 快照入口。
 
-页面业务按同级功能 App 拆分。`apps/product_applications` 负责当前完整申请后端；后续业务使用
-`apps/business_access`、`apps/loan_status` 等新 App，并共享 `jobs` 与公共集成基础设施。
-`workflow.py` 只通过 `ProductApplicationPorts` 使用外部能力，`tasks.py` 是唯一运行时组合入口。
+页面业务统一放在 `apps/workflow/` 下按功能 App 拆分。`product_applications` 负责当前完整申请后端；后续业务使用
+`apps/workflow/business_access`、`apps/workflow/loan_status` 等新 App，并共享 `Jobs` 与公共集成基础设施。
+`workflow.py` 只编排业务流程，外部能力由运行时实现提供，`tasks.py` 是唯一运行时组合入口。
 
 项目统一使用已安装的 `httpx`，不使用 `requests`。运行 `python scripts/check_architecture.py`
 递归检查公共层、产品目录和功能实现的依赖边界。

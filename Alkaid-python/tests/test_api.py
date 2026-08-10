@@ -3,8 +3,8 @@ import json
 import pytest
 from django.test import override_settings
 
-from apps.jobs.models import Job, JobStatus
-from apps.product_applications.tasks import execute_product_application
+from apps.workflow.Jobs.models import Job, JobStatus
+from apps.workflow.product_applications.tasks import execute_product_application
 
 
 def _product_b_submission() -> dict[str, object]:
@@ -38,7 +38,7 @@ def test_readiness_checks_database_catalog_and_messages(client) -> None:
     assert response.status_code == 200
     assert body["status"] == "ready"
     assert body["checks"]["catalog"]["products"] == 3
-    assert body["checks"]["agreementMessages"]["messages"] == 12
+    assert body["checks"]["agreementMessages"]["messages"] == 3
 
 
 def test_capabilities_match_current_backend_routes(client) -> None:
@@ -49,9 +49,9 @@ def test_capabilities_match_current_backend_routes(client) -> None:
     assert features["product-application"]["enabled"] is True
     assert features["business-access-query"]["enabled"] is True
     assert features["application-link-generator"]["enabled"] is True
-    assert features["jobs"]["enabled"] is True
+    assert features["Jobs"]["enabled"] is True
     assert features["settings"]["enabled"] is True
-    assert features["workbench"]["enabled"] is True
+    assert features["Apifox"]["enabled"] is True
     assert features["workflow"]["enabled"] is True
     assert features["high-frequency-transaction"]["enabled"] is True
 

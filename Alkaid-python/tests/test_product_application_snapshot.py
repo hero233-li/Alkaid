@@ -3,20 +3,21 @@ from copy import deepcopy
 
 import pytest
 
-import apps.product_applications.cjdk.runtime as plan_module
-import apps.product_data.catalog as catalog_module
-from apps.jobs.services import create_job
-from apps.product_applications.api import ProductApplicationSubmission, ProductConfigurationError
-from apps.product_applications.cjdk.runtime import (
-    build_application_link_request,
-    compile_application_link_plan,
+import apps.utils.application_links.plans as plan_module
+import apps.utils.product_Conf.catalog as catalog_module
+from apps.utils.application_links import compile_application_link_plan
+from apps.utils.java.application_link import build_application_link_request
+from apps.utils.product_Conf.catalog import FrozenApplicationLinkRoute, load_product_catalog
+from apps.workflow.Jobs.services import create_job
+from apps.workflow.product_applications.api import (
+    ProductApplicationSubmission,
+    ProductConfigurationError,
 )
-from apps.product_applications.workflow import (
+from apps.workflow.product_applications.workflow import (
     execute_product_application,
     freeze_product_execution_snapshot,
     resolve_product_snapshot,
 )
-from apps.product_data.catalog import FrozenApplicationLinkRoute, load_product_catalog
 
 
 class SnapshotSecretResolver:
@@ -63,6 +64,11 @@ def test_worker_uses_frozen_v1_plan_without_loading_current_catalog(monkeypatch)
     assert "PRIVATE-KEY" not in serialized_snapshot
     assert "PUBLIC-KEY" not in serialized_snapshot
     assert "APP-ID" not in serialized_snapshot
+    assert [step.module for step in snapshot.workflow] == [
+        "application.apply",
+        "identity.verify",
+    ]
+    assert '"workflow"' in serialized_snapshot
     assert snapshot.application_link_route.secret_bindings == {
         "REQ_BODY.appId": "cjdkJyrc.applicationLink.appId",
         "REQ_BODY.myPrivateKey": "cjdkJyrc.applicationLink.privateKey",
@@ -93,13 +99,20 @@ def test_worker_uses_frozen_v1_plan_without_loading_current_catalog(monkeypatch)
     monkeypatch.setattr(plan_module, "load_integration_profile", forbidden_catalog_load)
 
     class FrozenPlanPort:
-        def __enter__(self):
-            return self
+        settings = None
+        observer = None
+        trace_id = "test"
 
-        def __exit__(self, *args):
+        def __init__(self):
+            self.client = self
+
+        def open(self):
             return None
 
-        def open_application(self, *, snapshot, **kwargs):
+        def close(self):
+            return None
+
+        def execute_application(self, *, snapshot, **kwargs):
             request = build_application_link_request(
                 plan=FrozenApplicationLinkRoute.model_validate(snapshot.application_link_route),
                 normalized_payload=dict(snapshot.normalized_payload),
@@ -110,6 +123,11 @@ def test_worker_uses_frozen_v1_plan_without_loading_current_catalog(monkeypatch)
 
     class StopAfterApplicationLink(RuntimeError):
         pass
+
+    monkeypatch.setattr(
+        "apps.workflow.product_applications.modules.application.execute_application",
+        lambda client, **kwargs: client.execute_application(**kwargs),
+    )
 
     with pytest.raises(StopAfterApplicationLink):
         execute_product_application(

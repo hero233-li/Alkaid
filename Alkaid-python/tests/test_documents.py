@@ -6,8 +6,8 @@ from pathlib import Path
 import pytest
 from django.core.files.uploadedfile import SimpleUploadedFile
 
-from apps.documents.models import DocumentFolder, StoredDocument
-from apps.documents.word_import import (
+from apps.workflow.Documents.models import DocumentFolder, StoredDocument
+from apps.workflow.Documents.word_import import (
     WordImportError,
     _conversion_backend,
     _office_binary,
@@ -97,6 +97,81 @@ def test_document_can_be_read_updated_and_deleted(client) -> None:
     deleted = client.delete("/api/documents/document-1")
     assert deleted.status_code == 200
     assert not StoredDocument.objects.exists()
+
+
+@pytest.mark.django_db
+def test_folder_can_be_renamed_and_deleted(client) -> None:
+    client.put(
+        "/api/documents/workspace",
+        data=json.dumps(workspace_payload()),
+        content_type="application/json",
+    )
+
+    renamed = client.patch(
+        "/api/documents/folders/folder-root",
+        data=json.dumps({"name": "归档资料"}),
+        content_type="application/json",
+    )
+    assert renamed.status_code == 200
+    assert renamed.json()["data"]["name"] == "归档资料"
+
+    deleted = client.delete("/api/documents/folders/folder-root")
+    assert deleted.status_code == 200
+    assert not DocumentFolder.objects.exists()
+    assert StoredDocument.objects.get(pk="document-1").folder_id is None
+
+
+@pytest.mark.django_db
+def test_locked_document_is_read_only_until_unlocked(client) -> None:
+    payload = workspace_payload()
+    client.put(
+        "/api/documents/workspace",
+        data=json.dumps(payload),
+        content_type="application/json",
+    )
+
+    locked = client.patch(
+        "/api/documents/document-1",
+        data=json.dumps({"locked": True}),
+        content_type="application/json",
+    )
+    assert locked.status_code == 200
+    assert locked.json()["data"]["locked"] is True
+    assert client.get("/api/documents/document-1").status_code == 200
+
+    updated = client.put(
+        "/api/documents/document-1",
+        data=json.dumps(payload["documents"][0] | {"content": "不能修改"}),
+        content_type="application/json",
+    )
+    assert updated.status_code == 409
+    assert updated.json()["code"] == "document_locked"
+    assert client.delete("/api/documents/document-1").status_code == 409
+    assert client.delete("/api/documents/folders/folder-root").status_code == 409
+    assert (
+        client.put(
+            "/api/documents/workspace",
+            data=json.dumps(payload),
+            content_type="application/json",
+        ).status_code
+        == 409
+    )
+
+    touched = client.patch(
+        "/api/documents/document-1",
+        data=json.dumps({"lastOpenedAt": "2026-08-03T10:00:00+08:00"}),
+        content_type="application/json",
+    )
+    assert touched.status_code == 200
+
+    unlocked = client.patch(
+        "/api/documents/document-1",
+        data=json.dumps({"locked": False}),
+        content_type="application/json",
+    )
+    assert unlocked.status_code == 200
+    assert unlocked.json()["data"]["locked"] is False
+    assert client.delete("/api/documents/document-1").status_code == 200
 
 
 @pytest.mark.django_db
@@ -227,7 +302,7 @@ def test_inline_base64_image_is_externalized_before_persistence(client) -> None:
 @pytest.mark.django_db
 def test_legacy_doc_import_returns_editable_html(client, monkeypatch) -> None:
     monkeypatch.setattr(
-        "apps.documents.views.convert_legacy_word_to_html",
+        "apps.workflow.Documents.views.convert_legacy_word_to_html",
         lambda uploaded_file: f"<h1>{uploaded_file.name}</h1><p>转换后的正文</p>",
     )
 
@@ -243,7 +318,7 @@ def test_legacy_doc_import_returns_editable_html(client, monkeypatch) -> None:
 
 def test_online_word_exports_a_real_docx_response(client, monkeypatch) -> None:
     monkeypatch.setattr(
-        "apps.documents.views.convert_html_to_docx",
+        "apps.workflow.Documents.views.convert_html_to_docx",
         lambda html: b"PK\x03\x04docx-content" if "可编辑正文" in html else b"",
     )
 
@@ -273,11 +348,11 @@ def test_windows_word_backend_uses_powershell_when_libreoffice_is_missing(
     monkeypatch,
 ) -> None:
     monkeypatch.setattr(
-        "apps.documents.word_import._office_binary",
+        "apps.workflow.Documents.word_import._office_binary",
         lambda: (_ for _ in ()).throw(WordImportError("missing")),
     )
     monkeypatch.setattr(
-        "apps.documents.word_import._word_powershell_binary",
+        "apps.workflow.Documents.word_import._word_powershell_binary",
         lambda: r"C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe",
     )
 
@@ -295,7 +370,7 @@ def test_word_backend_uses_filtered_html_save_format(monkeypatch, tmp_path: Path
         captured["kwargs"] = kwargs
         return subprocess.CompletedProcess(command, 0, b"", b"")
 
-    monkeypatch.setattr("apps.documents.word_import.subprocess.run", fake_run)
+    monkeypatch.setattr("apps.workflow.Documents.word_import.subprocess.run", fake_run)
     input_path = tmp_path / "input.doc"
     output_path = tmp_path / "input.html"
 
@@ -332,7 +407,7 @@ def test_textutil_fallback_opens_a_real_legacy_doc(monkeypatch, tmp_path: Path) 
         capture_output=True,
     )
     monkeypatch.setattr(
-        "apps.documents.word_import._office_binary",
+        "apps.workflow.Documents.word_import._office_binary",
         lambda: (_ for _ in ()).throw(WordImportError("missing")),
     )
     upload = SimpleUploadedFile("legacy.doc", doc_path.read_bytes())

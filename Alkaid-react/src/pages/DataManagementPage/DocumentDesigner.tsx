@@ -96,11 +96,13 @@ export default function DocumentDesigner({
   const wordInputRef = useRef<HTMLInputElement>(null);
   const savedRangeRef = useRef<Range | null>(null);
   useEffect(() => {
+    const nextHtml = isWord
+      ? sanitizeWordHtml(initialContent)
+      : markdownToRichTextHtml(initialContent);
     if (editorRef.current) {
-      editorRef.current.innerHTML = isWord
-        ? sanitizeWordHtml(initialContent)
-        : markdownToRichTextHtml(initialContent);
+      editorRef.current.innerHTML = nextHtml;
     }
+    setEditorHtml(nextHtml);
   }, [initialContent, isWord]);
   const outline = useMemo(() => {
     const root = new DOMParser().parseFromString(editorHtml, 'text/html');

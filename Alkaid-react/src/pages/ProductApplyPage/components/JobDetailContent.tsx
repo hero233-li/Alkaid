@@ -1,4 +1,3 @@
-import { Fragment } from 'react';
 import { Alert, Card, Space, Steps, Tag } from 'antd';
 import type { ProductApplicationResult } from '../model/types';
 import { formatDate, statusMeta, terminalStatuses } from '../model/jobModel';
@@ -42,41 +41,25 @@ export default function JobDetailContent({ result }: JobDetailContentProps) {
       <Card title="提交参数" size="small">
         <pre className="product-result-code">{JSON.stringify(result.payload, null, 2)}</pre>
       </Card>
-      <Card title="后端运行日志" size="small">
+      <Card title="申请进度日志" size="small">
         <div className="product-backend-logs">
-          {result.logs.map((log, index) => {
-            const previousLog = result.logs[index - 1];
-            const startsNewAttempt =
-              Boolean(log.attempt || log.taskId) &&
-              (!previousLog ||
-                previousLog.attempt !== log.attempt ||
-                previousLog.taskId !== log.taskId);
-            return (
-              <Fragment key={log.id || `${log.createdAt}-${index}`}>
-                {startsNewAttempt && (
-                  <div className="product-backend-log-batch">
-                    {log.attempt && <Tag color="purple">第 {log.attempt} 次执行</Tag>}
-                    {log.taskId && <span title={log.taskId}>Celery Task：{log.taskId}</span>}
-                  </div>
-                )}
-                <div className="product-backend-log-line">
-                  <div className="product-backend-log-meta">
-                    <span className="product-backend-log-time">{formatDate(log.createdAt)}</span>
-                    <Tag
-                      color={
-                        log.level === 'ERROR' ? 'error' : log.level === 'WARN' ? 'warning' : 'blue'
-                      }
-                    >
-                      {log.level}
-                    </Tag>
-                  </div>
-                  <div className="product-backend-log-message">{log.message}</div>
-                </div>
-              </Fragment>
-            );
-          })}
+          {result.logs.map((log, index) => (
+            <div className="product-backend-log-line" key={log.id || `${log.createdAt}-${index}`}>
+              <div className="product-backend-log-meta">
+                <span className="product-backend-log-time">{formatDate(log.createdAt)}</span>
+                <Tag
+                  color={
+                    log.level === 'ERROR' ? 'error' : log.level === 'WARN' ? 'warning' : 'blue'
+                  }
+                >
+                  {log.level}
+                </Tag>
+              </div>
+              <div className="product-backend-log-message">{log.message}</div>
+            </div>
+          ))}
           {!result.logs.length && (
-            <span className="product-backend-log-empty">暂无后端运行日志</span>
+            <span className="product-backend-log-empty">暂无申请进度日志</span>
           )}
         </div>
       </Card>

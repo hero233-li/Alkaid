@@ -4,6 +4,7 @@ import {
   MARKDOWN_WORKSPACE_STORAGE_KEY,
   clearMarkdownEditRequest,
   consumeMarkdownEditRequest,
+  createDefaultMultidimensionalTableData,
   createMarkdownDocument,
   createMarkdownContentDocument,
   createMarkdownFolder,
@@ -149,6 +150,16 @@ describe('data management markdown model', () => {
     expect(document.content).toBe(content);
   });
 
+  it('persists an independently resized multidimensional field width', () => {
+    const data = createDefaultMultidimensionalTableData();
+    data.fields[0].width = 286;
+
+    const restored = parseMultidimensionalTable(serializeMultidimensionalTable('列宽测试', data));
+
+    expect(restored.fields[0].width).toBe(286);
+    expect(restored.fields[1].width).toBeUndefined();
+  });
+
   it('upgrades legacy multidimensional tables to one linked table view', () => {
     const legacyFields = encodeURIComponent(
       JSON.stringify([
@@ -286,7 +297,7 @@ describe('data management markdown model', () => {
     expect(empty.content).toBe('# 空白文档\n\n');
   });
 
-  it('persists recent documents and replaces a reopened file with the same name', () => {
+  it('persists recent Documents and replaces a reopened file with the same name', () => {
     const first = createMarkdownDocument('设计说明', new Date('2026-08-01T08:00:00.000Z'));
     const reopened = {
       ...createMarkdownDocument('设计说明', new Date('2026-08-02T08:00:00.000Z')),
@@ -317,7 +328,7 @@ describe('data management markdown model', () => {
     expect(workspace.folders).toEqual([]);
   });
 
-  it('creates nested folders and moves documents into them', () => {
+  it('creates nested folders and moves Documents into them', () => {
     const projectFolder = createMarkdownFolder(
       '项目资料',
       null,

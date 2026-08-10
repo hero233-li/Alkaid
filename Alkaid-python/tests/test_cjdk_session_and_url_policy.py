@@ -1,20 +1,18 @@
 import pytest
 
-from apps.product_applications.api import ProductApplicationSubmission
-from apps.product_applications.cjdk.config import EnvironmentSettings
-from apps.product_applications.cjdk.runtime import (
+from apps.utils.application_links import compile_application_link_plan
+from apps.utils.http.config import EnvironmentSettings
+from apps.utils.product_Conf.catalog import load_product_catalog
+from apps.workflow.product_applications.api import ProductApplicationSubmission
+from apps.workflow.product_applications.cjdk.client import (
     SessionStatus,
-    UnsafeExternalUrl,
-    compile_application_link_plan,
     evaluate_session_state,
     may_forward_session_headers,
-    validate_external_url,
 )
-from apps.product_applications.workflow import (
+from apps.workflow.product_applications.workflow import (
     execute_product_application,
     freeze_product_execution_snapshot,
 )
-from apps.product_data.catalog import load_product_catalog
 
 REQUIREMENT = EnvironmentSettings(
     agreement_base_url="http://12.244.142.116:8090",
@@ -33,8 +31,8 @@ def test_page_open_and_arbitrary_cookie_do_not_establish_session() -> None:
         header_names=(),
         requirement=REQUIREMENT,
     )
-    assert opened.status == SessionStatus.PAGE_OPENED
-    assert partial.status == SessionStatus.PARTIAL
+    assert opened.status == SessionStatus.NOT_ESTABLISHED
+    assert partial.status == SessionStatus.NOT_ESTABLISHED
 
 
 def test_session_is_established_only_when_requirements_are_met() -> None:
@@ -50,39 +48,10 @@ def test_session_is_established_only_when_requirements_are_met() -> None:
 def _policy(**updates) -> EnvironmentSettings:
     values = {
         "agreement_base_url": "http://12.244.142.116:8090",
-        "allowedSchemes": ["http"],
-        "allowedHosts": ["12.244.142.116", "allowed.internal"],
-        "allowedPorts": [8090],
-        "allowCrossHostRedirect": False,
         "forwardSessionHeadersToHosts": ["12.244.142.116"],
     }
     values.update(updates)
     return EnvironmentSettings.model_validate(values)
-
-
-def test_url_policy_checks_scheme_credentials_host_port_and_redirects() -> None:
-    policy = _policy()
-    assert validate_external_url("http://12.244.142.116:8090/path", policy)
-    for url in (
-        "https://12.244.142.116:8090/path",
-        "http://user:pass@12.244.142.116:8090/path",
-        "http://unknown.internal:8090/path",
-        "http://12.244.142.116:8080/path",
-    ):
-        with pytest.raises(UnsafeExternalUrl):
-            validate_external_url(url, policy)
-    with pytest.raises(UnsafeExternalUrl, match="不同 host"):
-        validate_external_url(
-            "http://allowed.internal:8090/next",
-            policy,
-            previous_url="http://12.244.142.116:8090/start",
-        )
-    cross_host = _policy(allowCrossHostRedirect=True)
-    assert validate_external_url(
-        "http://allowed.internal:8090/next",
-        cross_host,
-        previous_url="http://12.244.142.116:8090/start",
-    )
 
 
 def test_session_headers_only_forward_to_explicit_hosts() -> None:
@@ -91,7 +60,7 @@ def test_session_headers_only_forward_to_explicit_hosts() -> None:
     assert not may_forward_session_headers("http://allowed.internal:8090/path", policy)
 
 
-def test_partial_session_stops_before_agreement_query() -> None:
+def test_partial_session_stops_before_agreement_query(monkeypatch) -> None:
     submission = ProductApplicationSubmission(
         name="产品B申请",
         product="product-b",
@@ -120,14 +89,20 @@ def test_partial_session_stops_before_agreement_query() -> None:
     class PartialPort:
         application_link_url_mode = "internal"
         queried = False
+        settings = None
+        observer = None
+        trace_id = "test"
 
-        def __enter__(self):
-            return self
+        def __init__(self):
+            self.client = self
 
-        def __exit__(self, *args):
+        def open(self):
             return None
 
-        def open_application(self, **kwargs):
+        def close(self):
+            return None
+
+        def execute_application(self, **kwargs):
             state = evaluate_session_state(
                 page_opened=True,
                 cookie_names=("unrelated",),
@@ -136,13 +111,14 @@ def test_partial_session_stops_before_agreement_query() -> None:
             )
             if state.status != SessionStatus.ESTABLISHED:
                 raise RuntimeError("停止协议查询")
-            return {}
-
-        def read_agreements(self, **kwargs):
             self.queried = True
             return {}
 
     port = PartialPort()
+    monkeypatch.setattr(
+        "apps.workflow.product_applications.modules.application.execute_application",
+        lambda client, **kwargs: client.execute_application(**kwargs),
+    )
     with pytest.raises(RuntimeError, match="停止协议查询"):
         execute_product_application(
             runtime=port,

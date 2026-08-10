@@ -7,7 +7,8 @@ import {
   FilePlus2,
   FileText,
   FolderOpen,
-  Pencil,
+  Lock,
+  LockOpen,
   RefreshCw,
   Search,
   Sheet,
@@ -21,6 +22,8 @@ import {
   getDocumentWorkspace,
   getStoredDocument,
   saveDocumentWorkspace,
+  setStoredDocumentLocked,
+  touchStoredDocument,
   updateStoredDocument,
 } from '../../api/documents';
 import {
@@ -56,9 +59,9 @@ import {
   normalizeWordFileName,
 } from './model';
 import DocumentDesigner from './DocumentDesigner';
+import DocumentPreviewModal from './DocumentPreviewModal';
 import MultidimensionalTableDesigner from './MultidimensionalTableDesigner';
 import SpreadsheetDesigner from './SpreadsheetDesigner';
-import MarkdownPreview from './MarkdownPreview';
 import { importSpreadsheetXlsx } from './spreadsheetXlsx';
 import { sanitizeWordHtml } from './wordDocument';
 import './styles.css';
@@ -157,6 +160,11 @@ export default function DataManagementPage() {
       void getStoredDocument(initialEditingDocument.id)
         .then((document) => {
           setEditingDocument(document);
+          if (document.locked) {
+            setPreviewDocument(document);
+            messageApi.warning('文件已锁定，当前以只读方式打开');
+            return;
+          }
           setDocumentDesignerOpen(document.kind === 'document');
           setWordDesignerOpen(document.kind === 'word');
           setMultidimensionalDesignerOpen(document.kind === 'multidimensional-table');
@@ -200,6 +208,13 @@ export default function DataManagementPage() {
       setEditingDocument(requestedDocument);
       setPreviewDocument(null);
       setCreationViewOpen(false);
+      if (requestedDocument.locked) {
+        setPreviewDocument(requestedDocument);
+        setEditingDocument(null);
+        clearMarkdownEditRequest(requestedDocumentId);
+        messageApi.warning('文件已锁定，当前以只读方式打开');
+        return;
+      }
       setDocumentDesignerOpen(requestedDocument.kind === 'document');
       setWordDesignerOpen(requestedDocument.kind === 'word');
       setMultidimensionalDesignerOpen(requestedDocument.kind === 'multidimensional-table');
@@ -303,8 +318,31 @@ export default function DataManagementPage() {
     }
     const refreshedDocument = { ...storedDocument, lastOpenedAt: new Date().toISOString() };
     const nextDocuments = upsertRecentMarkdownDocument(documents, refreshedDocument);
-    persistDocuments(nextDocuments);
+    const metadataOnly = nextDocuments.map((item) => ({ ...item, content: '' }));
+    setDocuments(metadataOnly);
+    saveMarkdownWorkspace({ ...loadMarkdownWorkspace(), documents: metadataOnly });
+    void touchStoredDocument(refreshedDocument.id, refreshedDocument.lastOpenedAt).catch(() =>
+      messageApi.warning('文件已打开，但最近打开时间更新失败'),
+    );
     setPreviewDocument(refreshedDocument);
+  };
+
+  const toggleDocumentLock = async (document: MarkdownDocumentRecord) => {
+    const locked = !document.locked;
+    try {
+      const updated = await setStoredDocumentLocked(document.id, locked);
+      const nextDocuments = documents.map((item) =>
+        item.id === document.id ? { ...item, locked: updated.locked } : item,
+      );
+      setDocuments(nextDocuments);
+      saveMarkdownWorkspace({ ...loadMarkdownWorkspace(), documents: nextDocuments });
+      setPreviewDocument((current) =>
+        current?.id === document.id ? { ...current, locked: updated.locked } : current,
+      );
+      messageApi.success(locked ? `已锁定 ${document.name}` : `已解锁 ${document.name}`);
+    } catch (error) {
+      messageApi.error(error instanceof Error ? error.message : locked ? '锁定失败' : '解锁失败');
+    }
   };
 
   const selectDocumentKind = (kind: MarkdownDocumentKind) => {
@@ -454,6 +492,10 @@ export default function DataManagementPage() {
 
   const editPreviewDocument = () => {
     if (!previewDocument) return;
+    if (previewDocument.locked) {
+      messageApi.warning('文件已锁定，请先解锁');
+      return;
+    }
     setEditingDocument(previewDocument);
     setImportedSpreadsheet(null);
     setImportedSpreadsheetName(undefined);
@@ -806,6 +848,16 @@ export default function DataManagementPage() {
                               {formatDateTime(document.updatedAt)}
                             </Typography.Text>
                             <span className="data-management-file-actions">
+                              <Tooltip title={document.locked ? '解锁文件' : '锁定文件'}>
+                                <Button
+                                  type="text"
+                                  aria-label={`${document.locked ? '解锁' : '锁定'} ${document.name}`}
+                                  icon={
+                                    document.locked ? <Lock size={17} /> : <LockOpen size={17} />
+                                  }
+                                  onClick={() => void toggleDocumentLock(document)}
+                                />
+                              </Tooltip>
                               <Tooltip title="下载文件">
                                 <Button
                                   type="text"
@@ -824,6 +876,7 @@ export default function DataManagementPage() {
                                 <Button
                                   type="text"
                                   danger
+                                  disabled={document.locked}
                                   aria-label={`删除 ${document.name}`}
                                   icon={<Trash2 size={17} />}
                                   onClick={() => removeDocument(document)}
@@ -924,65 +977,17 @@ export default function DataManagementPage() {
         </div>
       </Modal>
 
-      <Modal
-        className={`data-management-document-preview-modal ${previewDocument?.kind === 'word' ? 'is-word' : ''}`}
-        title={previewDocument?.name}
-        open={Boolean(previewDocument)}
-        width="min(1000px, calc(100vw - 48px))"
-        footer={[
-          <Button key="close" onClick={() => setPreviewDocument(null)}>
-            关闭
-          </Button>,
-          <Button
-            key="download"
-            onClick={() =>
-              previewDocument &&
-              void downloadDocument(previewDocument).catch((error) =>
-                messageApi.error(error instanceof Error ? error.message : '文件导出失败'),
-              )
-            }
-          >
-            下载文件
-          </Button>,
-          <Button
-            key="edit"
-            type="primary"
-            icon={<Pencil size={16} />}
-            onClick={editPreviewDocument}
-          >
-            编辑
-          </Button>,
-        ]}
-        onCancel={() => setPreviewDocument(null)}
-      >
-        <div className="data-management-preview-meta">
-          <Tag
-            color={
-              previewDocument?.kind === 'multidimensional-table'
-                ? 'cyan'
-                : previewDocument?.kind === 'spreadsheet'
-                  ? 'lime'
-                  : 'blue'
-            }
-          >
-            {previewDocument ? getMarkdownDocumentKindLabel(previewDocument.kind) : ''}
-          </Tag>
-          <Tag>
-            {previewDocument?.kind === 'spreadsheet'
-              ? 'JSON 工作簿'
-              : previewDocument?.kind === 'word'
-                ? 'Word 富文本'
-                : 'Markdown'}
-          </Tag>
-          <Typography.Text type="secondary">
-            {previewDocument ? formatFileSize(previewDocument.size) : ''}
-          </Typography.Text>
-        </div>
-        <MarkdownPreview
-          content={previewDocument?.content || ''}
-          kind={previewDocument?.kind || 'document'}
-        />
-      </Modal>
+      <DocumentPreviewModal
+        document={previewDocument}
+        onClose={() => setPreviewDocument(null)}
+        onDownload={(document) =>
+          void downloadDocument(document).catch((error) =>
+            messageApi.error(error instanceof Error ? error.message : '文件导出失败'),
+          )
+        }
+        onEdit={editPreviewDocument}
+        onToggleLock={(document) => void toggleDocumentLock(document)}
+      />
 
       <Modal
         className="data-management-office-preview-modal"

@@ -5,16 +5,18 @@ from types import SimpleNamespace
 
 import pytest
 
-from apps.product_applications.cjdk import config
-from apps.product_applications.cjdk.runtime import (
+from apps.utils.application_links import (
     ApplicationConfigurationError,
-    build_application_link_request,
     compile_application_link_plan,
-    execute_java,
     load_integration_profile,
-    parse_java_result,
 )
-from apps.product_data.catalog import load_product_catalog
+from apps.utils.http import config
+from apps.utils.java.application_link import (
+    build_application_link_request,
+    execute_java,
+)
+from apps.utils.java.java_gateway import parse_java_result
+from apps.utils.product_Conf.catalog import load_product_catalog
 
 
 class TestSecretResolver:

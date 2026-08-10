@@ -31,6 +31,7 @@ export function mergeJobDetail(
     stage: detail.stage,
     progress: detail.progress,
     payload: detail.payload ?? result.payload,
+    logs: detail.logs ?? result.logs,
     errorMessage: detail.errorMessage,
     errorCode: detail.errorCode,
     traceId: detail.traceId,

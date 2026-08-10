@@ -82,6 +82,24 @@ export async function moveStoredDocument(documentId: string, folderId: string | 
   return unwrap(data, '移动文件失败');
 }
 
+export async function setStoredDocumentLocked(documentId: string, locked: boolean) {
+  const { data } = await apiClient.patch<ApiResponse<MarkdownDocumentRecord>>(
+    `/documents/${encodeURIComponent(documentId)}`,
+    { locked },
+    { useResponseDelay: false },
+  );
+  return unwrap(data, locked ? '锁定文件失败' : '解锁文件失败');
+}
+
+export async function touchStoredDocument(documentId: string, lastOpenedAt: string) {
+  const { data } = await apiClient.patch<ApiResponse<MarkdownDocumentRecord>>(
+    `/documents/${encodeURIComponent(documentId)}`,
+    { lastOpenedAt },
+    { useResponseDelay: false },
+  );
+  return unwrap(data, '更新文件打开时间失败');
+}
+
 export async function createStoredFolder(folder: MarkdownWorkspace['folders'][number]) {
   const { data } = await apiClient.post<ApiResponse<MarkdownWorkspace['folders'][number]>>(
     '/documents/folders',
@@ -89,6 +107,23 @@ export async function createStoredFolder(folder: MarkdownWorkspace['folders'][nu
     { useResponseDelay: false },
   );
   return unwrap(data, '创建文件夹失败');
+}
+
+export async function renameStoredFolder(folderId: string, name: string) {
+  const { data } = await apiClient.patch<ApiResponse<MarkdownWorkspace['folders'][number]>>(
+    `/documents/folders/${encodeURIComponent(folderId)}`,
+    { name },
+    { useResponseDelay: false },
+  );
+  return unwrap(data, '重命名文件夹失败');
+}
+
+export async function deleteStoredFolder(folderId: string) {
+  const { data } = await apiClient.delete<ApiResponse<null>>(
+    `/documents/folders/${encodeURIComponent(folderId)}`,
+    { useResponseDelay: false },
+  );
+  return unwrap(data, '删除文件夹失败');
 }
 
 export async function uploadDocumentImage(file: File, documentId?: string) {

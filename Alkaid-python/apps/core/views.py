@@ -8,7 +8,7 @@ from django.views.decorators.http import require_GET
 
 from apps.core.readiness import collect_readiness
 from apps.core.responses import api_response
-from apps.product_applications.cjdk.config import get_cjdk_jyrc_settings
+from apps.utils.http.config import get_cjdk_jyrc_settings
 
 logger = logging.getLogger(__name__)
 
@@ -55,11 +55,11 @@ def capabilities(request):
         "high-frequency-transaction": True,
         "workflow-learning": True,
         "workflow": True,
-        "jobs": True,
+        "Jobs": True,
         "batch": True,
         "schedule": True,
         "data": True,
-        "workbench": settings.WORKBENCH_ENABLED,
+        "Apifox": settings.WORKBENCH_ENABLED,
         "settings": True,
     }
     return api_response(

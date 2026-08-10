@@ -1,0 +1,22 @@
+{
+  "environment": "UAT1",
+  "services": {
+    "application": {
+      "baseUrl": "http://uat1-host:8090",
+      "verifySsl": false,
+      "urlPolicy": {
+        "forwardSessionHeadersToHosts": ["uat1-host"],
+        "maxRedirects": 10
+      }
+    },
+    "photo": {
+      "baseUrl": "http://photo-uat1-host:9080/NPOC_TEST_PHOTO",
+      "verifySsl": false
+    },
+    "smsLookup": {
+      "baseUrl": "https://dcpp-uat1-host",
+      "zone": "REPLACE_WITH_UAT1_ZONE",
+      "logHostPaths": ["/logs/uat/MSCS/MSCS-MICS"]
+    }
+  }
+}

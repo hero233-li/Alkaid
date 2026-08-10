@@ -23,12 +23,12 @@ INSTALLED_APPS = [
     "django.contrib.sessions",
     "django.contrib.messages",
     "django.contrib.staticfiles",
-    "apps.documents",
-    "apps.jobs",
-    "apps.portal",
-    "apps.product_data",
-    "apps.product_applications",
-    "apps.workbench",
+    "apps.workflow.Documents.apps.DocumentsConfig",
+    "apps.workflow.Jobs.apps.JobsConfig",
+    "apps.workflow.System_menu.apps.PortalConfig",
+    "apps.workflow.application_links.apps.ApplicationLinksConfig",
+    "apps.workflow.product_applications.apps.ProductApplicationsConfig",
+    "apps.workflow.Apifox.apps.WorkbenchConfig",
 ]
 
 MIDDLEWARE = [
@@ -118,6 +118,7 @@ DATA_UPLOAD_MAX_MEMORY_SIZE = int(os.getenv("DJANGO_MAX_REQUEST_BYTES", "2684354
 # Larger multipart files are spooled to disk instead of retained completely in process memory.
 FILE_UPLOAD_MAX_MEMORY_SIZE = int(os.getenv("DJANGO_FILE_MEMORY_THRESHOLD_BYTES", "2621440"))
 PRODUCT_APPLICATION_TIMEOUT_SECONDS = int(os.getenv("PRODUCT_APPLICATION_TIMEOUT_SECONDS", "300"))
+APPLICATION_LINK_TIMEOUT_SECONDS = int(os.getenv("APPLICATION_LINK_TIMEOUT_SECONDS", "180"))
 APPLICATION_LINK_URL_MODE = os.getenv("APPLICATION_LINK_URL_MODE", "internal").strip().lower()
 if APPLICATION_LINK_URL_MODE not in {"internal", "external"}:
     raise ValueError("APPLICATION_LINK_URL_MODE must be internal or external")
@@ -140,12 +141,12 @@ CELERY_TASK_TRACK_STARTED = True
 CELERY_WORKER_PREFETCH_MULTIPLIER = 1
 CELERY_BROKER_CONNECTION_RETRY_ON_STARTUP = True
 CELERY_BEAT_SCHEDULE = {
-    "reconcile-expired-jobs-every-minute": {
-        "task": "apps.jobs.tasks.reconcile_expired_jobs",
+    "reconcile-expired-Jobs-every-minute": {
+        "task": "apps.workflow.Jobs.tasks.reconcile_expired_jobs",
         "schedule": 60.0,
     },
-    "cleanup-expired-jobs-hourly": {
-        "task": "apps.jobs.tasks.cleanup_expired_jobs",
+    "cleanup-expired-Jobs-hourly": {
+        "task": "apps.workflow.Jobs.tasks.cleanup_expired_jobs",
         "schedule": 3600.0,
     },
 }

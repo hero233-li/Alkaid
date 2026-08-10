@@ -688,6 +688,14 @@ body {
   justify-content: center;
 }
 
+.product-config-loading > .ant-spin-nested-loading {
+  width: 100%;
+}
+
+.product-config-loading .ant-spin-text {
+  white-space: nowrap;
+}
+
 .product-application-page .ant-form-item {
   margin-bottom: 10px;
 }

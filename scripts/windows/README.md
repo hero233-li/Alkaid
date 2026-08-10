@@ -70,6 +70,26 @@ CELERY_QUEUE=alkaid-local
 npm run dev:split
 ```
 
+### 内网无 npm 时安装前端增量依赖
+
+如果 Windows 内网无法访问 npm registry，先把
+`Alkaid-windows-dependency-delta-20260803.zip` 解压到项目根目录并覆盖同名文件，再执行：
+
+```bat
+set NPM_OFFLINE=true
+npm run dev
+```
+
+如果使用 PowerShell：
+
+```powershell
+$env:NPM_OFFLINE = "true"
+npm run dev
+```
+
+启动脚本会先自动解压本次更新的前端依赖（包括 `mammoth` 和 `xlsx`），不会下载全部依赖。
+如果项目中未放置该 ZIP，脚本会提示缺少本地依赖包并退出。
+
 开发默认端口：
 
 - 前端：`http://127.0.0.1:5174`

@@ -210,6 +210,11 @@ pending / retrying → running → success | failed | cancelled | timed_out
 原始 `payload`；任务中心需要显示请求信息时使用 `includePayload=true` 显式读取。列表、重试和取消
 响应仍不返回 payload。Job 不存在时返回 `404`。
 
+### `DELETE /api/jobs/`
+
+清除全部已结束任务，并级联删除其运行日志和内部接口调用记录。非终态任务不会删除；响应返回
+`deletedJobs`（已删除任务数）和 `activeJobs`（保留的非终态任务数）。
+
 ### `GET /api/jobs/{jobId}/payload`
 
 返回 `{id, payload}`。只允许已认证且 `is_staff=true` 的用户访问；未认证或普通用户返回 `403`，

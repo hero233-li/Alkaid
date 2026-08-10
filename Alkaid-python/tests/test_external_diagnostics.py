@@ -5,15 +5,16 @@ import pytest
 from django.test import override_settings
 from pydantic import BaseModel, Field
 
-from apps.integrations.http import (
+from apps.utils.http.client import (
     ExternalServiceError,
     HttpClient,
     HttpClientConfig,
 )
-from apps.jobs.http import JobHttpCallObserver, limit_body
-from apps.jobs.models import JobApiCall
-from apps.jobs.services import create_job
-from apps.product_applications.cjdk.runtime import validate_cjdk_business_response
+from apps.workflow.Jobs.http import limit_body
+from apps.workflow.Jobs.integration_observer import JobIntegrationObserver
+from apps.workflow.Jobs.models import JobApiCall
+from apps.workflow.Jobs.services import create_job
+from apps.workflow.product_applications.cjdk.client import validate_cjdk_business_response
 
 
 class ExpectedEnvelope(BaseModel):
@@ -71,7 +72,7 @@ def test_job_api_call_preserves_raw_url_headers_bodies_and_exception() -> None:
         idempotency_key="raw-diagnostic",
         timeout_seconds=60,
     ).job
-    observer = JobHttpCallObserver(job, step="raw")
+    observer = JobIntegrationObserver(job)
     url = "https://service.test/path?token=TOKEN-RAW&phone=13800138000"
     request_headers = {"Authorization": "Bearer SECRET", "Cookie": "SID=COOKIE-RAW"}
     request_body = {
@@ -79,18 +80,19 @@ def test_job_api_call_preserves_raw_url_headers_bodies_and_exception() -> None:
         "certificateNo": "330101199001011234",
         "downFile": "JVBERi0xLjQK",
     }
-    handle = observer.started(
+    handle = observer.request_started(
+        step="raw",
         method="POST",
-        path=url,
+        url=url,
         headers=request_headers,
-        request_body=request_body,
+        body=request_body,
     )
     error = RuntimeError("验证码 123456；TOKEN-RAW；完整异常原文")
-    observer.finished(
+    observer.request_finished(
         handle,
         status_code=500,
         headers={"Set-Cookie": "SESSION=RESPONSE-COOKIE"},
-        response_body={"token": "RESPONSE-TOKEN", "downFile": "JVBERi0xLjQK"},
+        body={"token": "RESPONSE-TOKEN", "downFile": "JVBERi0xLjQK"},
         duration_ms=12,
         error=error,
     )

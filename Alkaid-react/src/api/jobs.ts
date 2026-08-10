@@ -22,12 +22,27 @@ export interface JobPage {
   totalPages: number;
 }
 
-export async function getJobDetail(id: number, options: { includePayload?: boolean } = {}) {
+export async function getJobDetail(
+  id: number,
+  options: { includePayload?: boolean; logView?: 'all' | 'business' } = {},
+) {
   const { data } = await apiClient.get<ApiResponse<JobDetail>>(`/jobs/${id}`, {
-    params: options.includePayload ? { includePayload: true } : undefined,
+    params:
+      options.includePayload || options.logView
+        ? { includePayload: options.includePayload || undefined, logView: options.logView }
+        : undefined,
   });
   if (!data.ok) {
     throw new Error(data.message || '获取 Job 详情失败');
+  }
+  return data.data;
+}
+
+export async function deleteAllJobs() {
+  const { data } =
+    await apiClient.delete<ApiResponse<{ deletedJobs: number; activeJobs: number }>>('/jobs/');
+  if (!data.ok) {
+    throw new Error(data.message || '全部任务记录清除失败');
   }
   return data.data;
 }
@@ -66,8 +81,13 @@ export async function streamJobLogs(
     onStatus: (status: JobStreamStatus) => void;
   },
   signal: AbortSignal,
+  options: { view?: 'all' | 'business' } = {},
 ) {
-  const response = await fetch(`/api/jobs/${id}/logs/stream?afterId=${afterId}`, {
+  const params = new URLSearchParams({ afterId: String(afterId) });
+  if (options.view) {
+    params.set('view', options.view);
+  }
+  const response = await fetch(`/api/jobs/${id}/logs/stream?${params.toString()}`, {
     headers: { Accept: 'text/event-stream' },
     signal,
   });

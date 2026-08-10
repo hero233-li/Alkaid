@@ -1,10 +1,11 @@
 import asyncio
 
-from apps.jobs.sse import JobLogSSEApplication
+from apps.workflow.Jobs.sse import JobLogSSEApplication
 
 
 def test_sse_closes_after_terminal_snapshot(monkeypatch) -> None:
-    async def load_snapshot(job_id: int, after_id: int):
+    async def load_snapshot(job_id: int, after_id: int, log_view: str = "all"):
+        assert log_view == "business"
         return {"status": "success", "progress": 100, "logs": [], "has_more": False}
 
     async def django_application(scope, receive, send) -> None:
@@ -25,14 +26,14 @@ def test_sse_closes_after_terminal_snapshot(monkeypatch) -> None:
                 "type": "http",
                 "method": "GET",
                 "path": "/api/jobs/1/logs/stream",
-                "query_string": b"afterId=0",
+                "query_string": b"afterId=0&view=business",
             },
             receive,
             send,
         )
         return sent
 
-    monkeypatch.setattr("apps.jobs.sse._load_snapshot", load_snapshot)
+    monkeypatch.setattr("apps.workflow.Jobs.sse._load_snapshot", load_snapshot)
     sent = asyncio.run(run())
 
     assert sent[0]["status"] == 200

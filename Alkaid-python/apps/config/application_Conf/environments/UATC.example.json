@@ -1,0 +1,22 @@
+{
+  "environment": "UATC",
+  "services": {
+    "application": {
+      "baseUrl": "http://uatc-host:8090",
+      "verifySsl": true,
+      "urlPolicy": {
+        "forwardSessionHeadersToHosts": ["uatc-host"],
+        "maxRedirects": 10
+      }
+    },
+    "photo": {
+      "baseUrl": "http://photo-uatc-host:9080/NPOC_TEST_PHOTO",
+      "verifySsl": false
+    },
+    "smsLookup": {
+      "baseUrl": "https://dcpp-uatc-host",
+      "zone": "REPLACE_WITH_UATC_ZONE",
+      "logHostPaths": ["/logs/uatc/MSCS/MSCS-MICS"]
+    }
+  }
+}

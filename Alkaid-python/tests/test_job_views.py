@@ -1,7 +1,7 @@
 import pytest
 
-from apps.jobs.models import ApiCallStatus, Job, JobApiCall, JobLog, JobStatus
-from apps.jobs.services import add_job_log, create_job
+from apps.workflow.Jobs.models import ApiCallStatus, Job, JobApiCall, JobLog, JobStatus
+from apps.workflow.Jobs.services import add_business_log, add_job_log, create_job
 
 
 def _job(key: str, *, name: str, product: str = "product-b") -> Job:
@@ -121,6 +121,54 @@ def test_job_detail_contains_logs_and_complete_internal_calls(client) -> None:
     payload_response = client.get(f"/api/jobs/{job.id}", {"includePayload": "true"})
     assert payload_response.status_code == 200
     assert payload_response.json()["data"]["payload"] == {"secret": "not-listed"}
+
+
+@pytest.mark.django_db
+def test_product_detail_log_view_only_returns_custom_business_logs(client) -> None:
+    job = _job("business-log-view", name="产品申请详情")
+    add_job_log(
+        job,
+        "INFO",
+        "请求外部接口：POST /agreement/query",
+        step="agreement.query",
+        metadata={"event": "integration_diagnostic"},
+    )
+    business_log = add_business_log(
+        job,
+        "申请协议准备完成",
+        step="agreement_read",
+        progress=90,
+    )
+    JobApiCall.objects.create(
+        job=job,
+        method="POST",
+        url="https://service.example/agreement/query",
+        status=ApiCallStatus.SUCCESS,
+    )
+
+    task_center = client.get(f"/api/jobs/{job.id}").json()["data"]
+    application_detail = client.get(f"/api/jobs/{job.id}", {"logView": "business"}).json()["data"]
+
+    assert len(task_center["logs"]) == 3
+    assert task_center["apiCalls"]
+    assert application_detail["logs"] == [
+        {
+            "id": business_log.id,
+            "jobId": job.id,
+            "taskId": None,
+            "attempt": 1,
+            "level": "INFO",
+            "step": "agreement_read",
+            "message": "申请协议准备完成",
+            "metadata": {
+                "audience": "application_detail",
+                "event": "business_progress",
+                "progress": 90,
+            },
+            "createdAt": business_log.created_at.isoformat(),
+        }
+    ]
+    assert "apiCalls" not in application_detail
 
 
 @pytest.mark.django_db

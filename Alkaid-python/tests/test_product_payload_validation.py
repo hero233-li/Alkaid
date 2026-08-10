@@ -2,14 +2,14 @@ from copy import deepcopy
 
 import pytest
 
-from apps.product_applications.api import (
+from apps.utils.application_links import compile_application_link_plan
+from apps.utils.product_Conf.catalog import CatalogField, load_product_catalog
+from apps.workflow.product_applications.api import (
     ProductApplicationSubmission,
     ProductConfigurationError,
-    validate_and_normalize_payload,
 )
-from apps.product_applications.cjdk.runtime import compile_application_link_plan
-from apps.product_applications.workflow import freeze_product_execution_snapshot
-from apps.product_data.catalog import CatalogField, load_product_catalog
+from apps.workflow.product_applications.validation import validate_and_normalize_payload
+from apps.workflow.product_applications.workflow import freeze_product_execution_snapshot
 
 
 def _product_with(field: CatalogField):

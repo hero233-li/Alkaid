@@ -1,6 +1,6 @@
 import httpx
 
-from apps.integrations.mock import MockTransportRouter
+from apps.mock.mock import MockTransportRouter
 
 
 def test_public_mock_router_supports_independent_feature_scenarios() -> None:

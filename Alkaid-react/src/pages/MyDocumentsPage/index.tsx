@@ -12,18 +12,24 @@ import {
   FolderPlus,
   HardDrive,
   Home,
+  Lock,
+  LockOpen,
   MoveRight,
   Pencil,
   Search,
   Sheet,
+  Trash2,
 } from 'lucide-react';
 import {
   createStoredFolder,
+  deleteStoredFolder,
   exportWordDocument,
   getDocumentWorkspace,
   getStoredDocument,
   moveStoredDocument,
+  renameStoredFolder,
   saveDocumentWorkspace,
+  setStoredDocumentLocked,
 } from '../../api/documents';
 import {
   MARKDOWN_WORKSPACE_CHANGED_EVENT,
@@ -43,7 +49,7 @@ import {
   type MarkdownWorkspace,
   type MarkdownDocumentKind,
 } from '../DataManagementPage/model';
-import MarkdownPreview from '../DataManagementPage/MarkdownPreview';
+import DocumentPreviewModal from '../DataManagementPage/DocumentPreviewModal';
 import './styles.css';
 
 type DocumentLocation = 'all' | 'root' | string;
@@ -89,6 +95,21 @@ function flattenFolderOptions(folders: MarkdownFolderRecord[]) {
       value: folder.id,
     }))
     .sort((left, right) => left.label.localeCompare(right.label, 'zh-CN'));
+}
+
+function getFolderIdsForDeletion(folderId: string, folders: MarkdownFolderRecord[]) {
+  const folderIds = new Set([folderId]);
+  let foundChild = true;
+  while (foundChild) {
+    foundChild = false;
+    folders.forEach((folder) => {
+      if (folder.parentId && folderIds.has(folder.parentId) && !folderIds.has(folder.id)) {
+        folderIds.add(folder.id);
+        foundChild = true;
+      }
+    });
+  }
+  return folderIds;
 }
 
 async function downloadDocument(document: MarkdownDocumentRecord) {
@@ -155,11 +176,16 @@ export default function MyDocumentsPage({ onCreateDocument }: MyDocumentsPagePro
   const [kindFilter, setKindFilter] = useState<KindFilter>('all');
   const [newFolderOpen, setNewFolderOpen] = useState(false);
   const [newFolderName, setNewFolderName] = useState('新建文件夹');
+  const [renamingFolder, setRenamingFolder] = useState<MarkdownFolderRecord | null>(null);
+  const [renameFolderName, setRenameFolderName] = useState('');
+  const [deletingFolder, setDeletingFolder] = useState<MarkdownFolderRecord | null>(null);
+  const [folderActionLoading, setFolderActionLoading] = useState(false);
   const [movingDocument, setMovingDocument] = useState<MarkdownDocumentRecord | null>(null);
   const [moveTarget, setMoveTarget] = useState<string>('root');
   const [previewDocument, setPreviewDocument] = useState<MarkdownDocumentRecord | null>(null);
   const [workspaceReady, setWorkspaceReady] = useState(false);
   const [previewLoadingId, setPreviewLoadingId] = useState<string | null>(null);
+  const [lockLoadingId, setLockLoadingId] = useState<string | null>(null);
 
   useEffect(() => {
     const reloadWorkspace = () => setWorkspace(loadMarkdownWorkspace());
@@ -241,8 +267,7 @@ export default function MyDocumentsPage({ onCreateDocument }: MyDocumentsPagePro
   const openDocumentPreview = async (document: MarkdownDocumentRecord) => {
     setPreviewLoadingId(document.id);
     try {
-      const storedDocument = await getStoredDocument(document.id);
-      setPreviewDocument(storedDocument);
+      setPreviewDocument(await getStoredDocument(document.id));
     } catch {
       messageApi.error('数据库读取失败，无法预览文件');
     } finally {
@@ -276,6 +301,69 @@ export default function MyDocumentsPage({ onCreateDocument }: MyDocumentsPagePro
     }
   };
 
+  const openRenameDialog = (folder: MarkdownFolderRecord) => {
+    setRenamingFolder(folder);
+    setRenameFolderName(folder.name);
+  };
+
+  const renameFolder = async () => {
+    if (!renamingFolder) return;
+    const name = renameFolderName.trim();
+    if (!name) return;
+    setFolderActionLoading(true);
+    try {
+      const updatedFolder = await renameStoredFolder(renamingFolder.id, name);
+      const latestWorkspace = loadMarkdownWorkspace();
+      const nextWorkspace = {
+        ...latestWorkspace,
+        folders: latestWorkspace.folders.map((folder) =>
+          folder.id === updatedFolder.id ? updatedFolder : folder,
+        ),
+      };
+      saveMarkdownWorkspace(nextWorkspace);
+      setWorkspace(nextWorkspace);
+      setRenamingFolder(null);
+      messageApi.success(`已重命名为 ${updatedFolder.name}`);
+    } catch (error) {
+      messageApi.error(error instanceof Error ? error.message : '重命名文件夹失败');
+    } finally {
+      setFolderActionLoading(false);
+    }
+  };
+
+  const deleteFolder = async () => {
+    if (!deletingFolder) return;
+    setFolderActionLoading(true);
+    try {
+      await deleteStoredFolder(deletingFolder.id);
+      const latestWorkspace = loadMarkdownWorkspace();
+      const deletedFolderIds = getFolderIdsForDeletion(deletingFolder.id, latestWorkspace.folders);
+      const nextWorkspace = {
+        folders: latestWorkspace.folders.filter((folder) => !deletedFolderIds.has(folder.id)),
+        documents: latestWorkspace.documents.map((document) =>
+          document.folderId && deletedFolderIds.has(document.folderId)
+            ? { ...document, folderId: null }
+            : document,
+        ),
+      };
+      saveMarkdownWorkspace(nextWorkspace);
+      setWorkspace(nextWorkspace);
+      if (
+        selectedLocation !== 'all' &&
+        selectedLocation !== 'root' &&
+        deletedFolderIds.has(selectedLocation)
+      ) {
+        setSelectedLocation('root');
+      }
+      setDeletingFolder(null);
+      messageApi.success(`已删除文件夹 ${deletingFolder.name}`);
+    } catch (error) {
+      messageApi.error(error instanceof Error ? error.message : '删除文件夹失败');
+    } finally {
+      setFolderActionLoading(false);
+    }
+  };
+
   const moveDocument = async () => {
     if (!movingDocument) return;
     const latestWorkspace = loadMarkdownWorkspace();
@@ -295,8 +383,37 @@ export default function MyDocumentsPage({ onCreateDocument }: MyDocumentsPagePro
   };
 
   const openMoveDialog = (document: MarkdownDocumentRecord) => {
+    if (document.locked) {
+      messageApi.warning('文件已锁定，请先解锁');
+      return;
+    }
     setMovingDocument(document);
     setMoveTarget(document.folderId || 'root');
+  };
+
+  const toggleDocumentLock = async (document: MarkdownDocumentRecord) => {
+    const locked = !document.locked;
+    setLockLoadingId(document.id);
+    try {
+      const updated = await setStoredDocumentLocked(document.id, locked);
+      const latestWorkspace = loadMarkdownWorkspace();
+      const nextWorkspace = {
+        ...latestWorkspace,
+        documents: latestWorkspace.documents.map((item) =>
+          item.id === document.id ? { ...item, locked: updated.locked } : item,
+        ),
+      };
+      saveMarkdownWorkspace(nextWorkspace);
+      setWorkspace(nextWorkspace);
+      setPreviewDocument((current) =>
+        current?.id === document.id ? { ...current, locked: updated.locked } : current,
+      );
+      messageApi.success(locked ? `已锁定 ${document.name}` : `已解锁 ${document.name}`);
+    } catch (error) {
+      messageApi.error(error instanceof Error ? error.message : locked ? '锁定失败' : '解锁失败');
+    } finally {
+      setLockLoadingId(null);
+    }
   };
 
   const currentTitle =
@@ -311,9 +428,8 @@ export default function MyDocumentsPage({ onCreateDocument }: MyDocumentsPagePro
     onCreateDocument();
   };
 
-  const editPreviewDocument = () => {
-    if (!previewDocument) return;
-    requestMarkdownEdit(previewDocument.id);
+  const editPreviewDocument = (document: MarkdownDocumentRecord) => {
+    requestMarkdownEdit(document.id);
     setPreviewDocument(null);
     onCreateDocument();
   };
@@ -449,9 +565,25 @@ export default function MyDocumentsPage({ onCreateDocument }: MyDocumentsPagePro
                     <Typography.Text type="secondary">
                       {formatDateTime(folder.createdAt)}
                     </Typography.Text>
-                    <Button type="link" onClick={() => setSelectedLocation(folder.id)}>
-                      打开
-                    </Button>
+                    <span className="my-documents-actions">
+                      <Tooltip title="重命名文件夹">
+                        <Button
+                          type="text"
+                          aria-label={`重命名 ${folder.name}`}
+                          icon={<Pencil size={16} />}
+                          onClick={() => openRenameDialog(folder)}
+                        />
+                      </Tooltip>
+                      <Tooltip title="删除文件夹">
+                        <Button
+                          type="text"
+                          danger
+                          aria-label={`删除 ${folder.name}`}
+                          icon={<Trash2 size={16} />}
+                          onClick={() => setDeletingFolder(folder)}
+                        />
+                      </Tooltip>
+                    </span>
                   </div>
                 );
               })}
@@ -496,9 +628,19 @@ export default function MyDocumentsPage({ onCreateDocument }: MyDocumentsPagePro
                     {formatDateTime(document.updatedAt)}
                   </Typography.Text>
                   <span className="my-documents-actions">
+                    <Tooltip title={document.locked ? '解锁文件' : '锁定文件'}>
+                      <Button
+                        type="text"
+                        loading={lockLoadingId === document.id}
+                        aria-label={`${document.locked ? '解锁' : '锁定'} ${document.name}`}
+                        icon={document.locked ? <Lock size={17} /> : <LockOpen size={17} />}
+                        onClick={() => void toggleDocumentLock(document)}
+                      />
+                    </Tooltip>
                     <Tooltip title="移动到文件夹">
                       <Button
                         type="text"
+                        disabled={document.locked}
                         aria-label={`移动 ${document.name}`}
                         icon={<MoveRight size={17} />}
                         onClick={() => openMoveDialog(document)}
@@ -563,6 +705,42 @@ export default function MyDocumentsPage({ onCreateDocument }: MyDocumentsPagePro
       </Modal>
 
       <Modal
+        title="重命名文件夹"
+        open={Boolean(renamingFolder)}
+        okText="保存"
+        cancelText="取消"
+        confirmLoading={folderActionLoading}
+        okButtonProps={{ disabled: !renameFolderName.trim() }}
+        onOk={() => void renameFolder()}
+        onCancel={() => !folderActionLoading && setRenamingFolder(null)}
+      >
+        <Input
+          autoFocus
+          maxLength={80}
+          value={renameFolderName}
+          placeholder="请输入文件夹名称"
+          onChange={(event) => setRenameFolderName(event.target.value)}
+          onPressEnter={() => renameFolderName.trim() && void renameFolder()}
+        />
+      </Modal>
+
+      <Modal
+        title="删除文件夹"
+        open={Boolean(deletingFolder)}
+        okText="删除"
+        cancelText="取消"
+        okButtonProps={{ danger: true }}
+        confirmLoading={folderActionLoading}
+        onOk={() => void deleteFolder()}
+        onCancel={() => !folderActionLoading && setDeletingFolder(null)}
+      >
+        <Typography.Paragraph>确定删除文件夹“{deletingFolder?.name}”吗？</Typography.Paragraph>
+        <Typography.Paragraph type="secondary">
+          其中的子文件夹也会被删除，文件会移到根目录。此操作无法撤销。
+        </Typography.Paragraph>
+      </Modal>
+
+      <Modal
         title={`移动 ${movingDocument?.name || ''}`}
         open={Boolean(movingDocument)}
         okText="移动"
@@ -579,68 +757,22 @@ export default function MyDocumentsPage({ onCreateDocument }: MyDocumentsPagePro
         />
       </Modal>
 
-      <Modal
-        className={`data-management-document-preview-modal ${previewDocument?.kind === 'word' ? 'is-word' : ''}`}
-        title={previewDocument?.name}
-        open={Boolean(previewDocument)}
-        width="min(1000px, calc(100vw - 48px))"
-        footer={[
-          <Button key="close" onClick={() => setPreviewDocument(null)}>
-            关闭
-          </Button>,
-          <Button
-            key="download"
-            onClick={() =>
-              previewDocument &&
-              void downloadDocument(previewDocument).catch((error) =>
-                messageApi.error(error instanceof Error ? error.message : '文件导出失败'),
-              )
-            }
-          >
-            下载文件
-          </Button>,
-          <Button
-            key="edit"
-            type="primary"
-            icon={<Pencil size={16} />}
-            onClick={editPreviewDocument}
-          >
-            编辑
-          </Button>,
-        ]}
-        onCancel={() => setPreviewDocument(null)}
-      >
-        <div className="my-documents-preview-meta">
-          <Tag
-            color={
-              previewDocument?.kind === 'multidimensional-table'
-                ? 'cyan'
-                : previewDocument?.kind === 'spreadsheet'
-                  ? 'lime'
-                  : 'blue'
-            }
-          >
-            {previewDocument ? getMarkdownDocumentKindLabel(previewDocument.kind) : ''}
-          </Tag>
-          <Tag>
-            {previewDocument?.kind === 'spreadsheet'
-              ? 'JSON 工作簿'
-              : previewDocument?.kind === 'word'
-                ? 'Word 富文本'
-                : 'Markdown'}
-          </Tag>
-          <Typography.Text type="secondary">
-            {previewDocument
-              ? getMarkdownFolderPath(previewDocument.folderId, workspace.folders)
-              : ''}
-          </Typography.Text>
-        </div>
-        <MarkdownPreview
-          key={`${previewDocument?.id}-${previewDocument?.updatedAt}-${previewDocument?.content.length}`}
-          content={previewDocument?.content || ''}
-          kind={previewDocument?.kind || 'document'}
-        />
-      </Modal>
+      <DocumentPreviewModal
+        document={previewDocument}
+        locationLabel={
+          previewDocument
+            ? getMarkdownFolderPath(previewDocument.folderId, workspace.folders)
+            : undefined
+        }
+        onClose={() => setPreviewDocument(null)}
+        onDownload={(document) =>
+          void downloadDocument(document).catch((error) =>
+            messageApi.error(error instanceof Error ? error.message : '文件导出失败'),
+          )
+        }
+        onEdit={editPreviewDocument}
+        onToggleLock={(document) => void toggleDocumentLock(document)}
+      />
     </div>
   );
 }

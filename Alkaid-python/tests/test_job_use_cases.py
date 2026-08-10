@@ -4,9 +4,9 @@ import pytest
 from django.conf import settings
 from django.utils import timezone
 
-from apps.jobs.models import Job, JobApiCall, JobLog, JobStatus
-from apps.jobs.services import InvalidJobTransition, create_job
-from apps.jobs.use_cases import cancel_job, cleanup_expired_jobs, retry_job
+from apps.workflow.Jobs.models import Job, JobApiCall, JobLog, JobStatus
+from apps.workflow.Jobs.services import InvalidJobTransition, create_job
+from apps.workflow.Jobs.use_cases import cancel_job, cleanup_expired_jobs, retry_job
 
 
 def _job(key: str, *, kind: str = "workflow") -> Job:
@@ -77,7 +77,7 @@ def test_cleanup_expired_jobs_removes_old_records_only() -> None:
 
     counts = cleanup_expired_jobs(now=now)
 
-    assert counts["jobs"] >= 1
+    assert counts["Jobs"] >= 1
     assert counts["logs"] >= 1
     assert counts["api_calls"] >= 1
     assert not Job.objects.filter(pk=expired.pk).exists()

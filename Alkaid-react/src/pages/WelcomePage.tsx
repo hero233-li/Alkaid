@@ -4,7 +4,7 @@ import { ArrowRight, History, Rocket } from 'lucide-react';
 import { getHomeShortcutKeys, listReleaseNotes } from '../api/portal';
 import type { ReleaseNote } from '../types';
 
-export const PORTAL_CONTENT_CHANGED_EVENT = 'alioth:portal-content-changed';
+export const PORTAL_CONTENT_CHANGED_EVENT = 'alioth:System_menu-content-changed';
 
 export interface HomeShortcutOption {
   key: string;

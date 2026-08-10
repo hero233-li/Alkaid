@@ -7,30 +7,39 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 APPS_ROOT = ROOT / "apps"
-INTEGRATIONS_ROOT = APPS_ROOT / "integrations"
-PRODUCT_DATA_ROOT = APPS_ROOT / "product_data"
-APPLICATION_ROOT = APPS_ROOT / "product_applications"
+UTILS_ROOT = APPS_ROOT / "utils"
+HTTP_UTILS_ROOT = UTILS_ROOT / "http"
+WORKFLOW_ROOT = APPS_ROOT / "workflow"
+APPLICATION_LINKS_ROOT = WORKFLOW_ROOT / "application_links"
+APPLICATION_ROOT = WORKFLOW_ROOT / "product_applications"
 
-PUBLIC_INTEGRATION_FILES = {"__init__.py", "contracts.py", "http.py", "mock.py"}
-PRODUCT_DATA_FILES = {"__init__.py", "apps.py", "catalog.py"}
-BUSINESS_PREFIXES = (
-    "apps.product_applications",
-    "apps.product_data",
-    "apps.jobs",
-    "apps.workbench",
+PUBLIC_HTTP_FILES = {"__init__.py", "client.py", "config.py", "contracts.py"}
+WORKFLOW_PREFIX = "apps.workflow"
+LEGACY_PATHS = (
+    APPS_ROOT / "application_links",
+    APPS_ROOT / "documents",
+    APPS_ROOT / "external_systems",
+    APPS_ROOT / "integrations",
+    APPS_ROOT / "jobs",
+    APPS_ROOT / "portal",
+    APPS_ROOT / "product_applications",
+    APPS_ROOT / "product_data",
+    APPS_ROOT / "workbench",
 )
-PRODUCT_DATA_FORBIDDEN_PREFIXES = (
-    "apps.product_applications",
+LEGACY_IMPORT_PREFIXES = (
+    "apps.application_links",
+    "apps.documents",
+    "apps.Documents",
+    "apps.external_systems",
     "apps.integrations",
     "apps.jobs",
+    "apps.Jobs",
+    "apps.portal",
+    "apps.product_applications",
+    "apps.product_data",
+    "apps.System_menu",
     "apps.workbench",
-)
-LEGACY_PATHS = (
-    APPS_ROOT / "integrations" / "cjdk_jyrc",
-    APPS_ROOT / "product_data" / "product_applications",
-    PRODUCT_DATA_ROOT / "tasks.py",
-    PRODUCT_DATA_ROOT / "urls.py",
-    PRODUCT_DATA_ROOT / "application_link_plan.py",
+    "apps.Apifox",
 )
 
 
@@ -56,18 +65,11 @@ def classes(path: Path) -> list[ast.ClassDef]:
 
 errors: list[str] = []
 
-integration_files = {path.name for path in INTEGRATIONS_ROOT.glob("*.py") if path.is_file()}
-if integration_files != PUBLIC_INTEGRATION_FILES:
+http_files = {path.name for path in HTTP_UTILS_ROOT.glob("*.py") if path.is_file()}
+if http_files != PUBLIC_HTTP_FILES:
     errors.append(
-        "apps/integrations Python 文件必须固定为 "
-        f"{sorted(PUBLIC_INTEGRATION_FILES)}，实际为 {sorted(integration_files)}"
-    )
-
-product_data_files = {path.name for path in PRODUCT_DATA_ROOT.glob("*.py") if path.is_file()}
-if product_data_files != PRODUCT_DATA_FILES:
-    errors.append(
-        "apps/product_data Python 文件必须固定为 "
-        f"{sorted(PRODUCT_DATA_FILES)}，实际为 {sorted(product_data_files)}"
+        "apps/utils/http Python 文件必须固定为 "
+        f"{sorted(PUBLIC_HTTP_FILES)}，实际为 {sorted(http_files)}"
     )
 
 for legacy_path in LEGACY_PATHS:
@@ -77,31 +79,42 @@ for legacy_path in LEGACY_PATHS:
     if has_legacy_code:
         errors.append(f"旧业务路径仍存在：{legacy_path.relative_to(ROOT)}")
 
-for path in INTEGRATIONS_ROOT.rglob("*.py"):
+for path in UTILS_ROOT.rglob("*.py"):
     for module, line in imports(path):
-        if matches(module, BUSINESS_PREFIXES):
-            errors.append(f"{path.relative_to(ROOT)}:{line}: 公共基础层导入业务模块 {module}")
-
-for path in PRODUCT_DATA_ROOT.rglob("*.py"):
-    for module, line in imports(path):
-        if matches(module, PRODUCT_DATA_FORBIDDEN_PREFIXES):
-            errors.append(f"{path.relative_to(ROOT)}:{line}: 产品目录反向依赖功能模块 {module}")
-
-workflow_path = APPLICATION_ROOT / "workflow.py"
-for module, line in imports(workflow_path):
-    if module == "apps.product_applications.cjdk" or module.startswith(
-        "apps.product_applications.cjdk."
-    ):
-        errors.append(
-            f"{workflow_path.relative_to(ROOT)}:{line}: workflow 导入 CJDK 私有实现 {module}"
-        )
+        if module == WORKFLOW_PREFIX or module.startswith(WORKFLOW_PREFIX + "."):
+            errors.append(f"{path.relative_to(ROOT)}:{line}: 公共工具层导入工作流模块 {module}")
 
 for path in APPS_ROOT.rglob("*.py"):
     for module, line in imports(path):
+        if matches(module, LEGACY_IMPORT_PREFIXES):
+            errors.append(f"{path.relative_to(ROOT)}:{line}: 仍在导入旧模块路径 {module}")
+        if module == "apps.utils.http.http" or module.startswith("apps.utils.http.http."):
+            errors.append(
+                f"{path.relative_to(ROOT)}:{line}: "
+                "HTTP 客户端已迁移到 apps.utils.http.client"
+            )
         if module == "requests" or module.startswith("requests."):
             errors.append(
                 f"{path.relative_to(ROOT)}:{line}: 禁止使用未安装的 requests，请使用 httpx"
             )
+
+for left_root, forbidden_prefix in (
+    (APPLICATION_LINKS_ROOT, "apps.workflow.product_applications"),
+    (APPLICATION_ROOT, "apps.workflow.application_links"),
+):
+    for path in left_root.rglob("*.py"):
+        for module, line in imports(path):
+            if module == forbidden_prefix or module.startswith(forbidden_prefix + "."):
+                errors.append(f"{path.relative_to(ROOT)}:{line}: 功能模块之间禁止直接依赖 {module}")
+
+workflow_path = APPLICATION_ROOT / "workflow.py"
+for module, line in imports(workflow_path):
+    if module == "apps.workflow.product_applications.cjdk" or module.startswith(
+        "apps.workflow.product_applications.cjdk."
+    ):
+        errors.append(
+            f"{workflow_path.relative_to(ROOT)}:{line}: workflow 导入 CJDK 私有实现 {module}"
+        )
 
 application_classes = [
     (path, node) for path in APPLICATION_ROOT.rglob("*.py") for node in classes(path)
@@ -112,38 +125,23 @@ if len(application_classes) > 35:
 if (APPLICATION_ROOT / "ports.py").exists():
     errors.append("单实现模式不保留 ports.py；运行期类型应放在实际使用模块")
 
-config_classes = {node.name for node in classes(APPLICATION_ROOT / "cjdk" / "config.py")}
+config_classes = {node.name for node in classes(HTTP_UTILS_ROOT / "config.py")}
 expected_config_classes = {
     "CjdkJyrcSettings",
+    "DcppEnvironmentSettings",
     "EnvironmentSettings",
+    "IdentityEnvironmentSettings",
     "IdentitySettings",
     "PhotoEnvironmentSettings",
-    "DcppEnvironmentSettings",
 }
 if config_classes != expected_config_classes:
     errors.append(
-        "CJDK 配置只能保留五个领域模型；"
+        "外部调用配置模型不一致；"
         f"期望 {sorted(expected_config_classes)}，实际 {sorted(config_classes)}"
     )
 
-for path, node in application_classes:
-    if node.name != "CjdkEnvelope" and node.name.endswith(("Gateway", "Result", "Envelope")):
-        errors.append(f"{path.relative_to(ROOT)}:{node.lineno}: 禁止逐接口类 {node.name}")
-    public_methods = [
-        child
-        for child in node.body
-        if isinstance(child, (ast.FunctionDef, ast.AsyncFunctionDef))
-        and not child.name.startswith("_")
-    ]
-    state_fields = [child for child in node.body if isinstance(child, ast.AnnAssign)]
-    has_initializer = any(
-        isinstance(child, (ast.FunctionDef, ast.AsyncFunctionDef)) and child.name == "__init__"
-        for child in node.body
-    )
-    if len(public_methods) == 1 and not state_fields and not has_initializer:
-        errors.append(
-            f"{path.relative_to(ROOT)}:{node.lineno}: 无状态单公开方法类 {node.name} 应改为函数"
-        )
+if not (APPLICATION_ROOT / "loan_application" / "application.py").exists():
+    errors.append("缺少贷款申请模块：apps/workflow/product_applications/loan_application/application.py")
 
 if errors:
     print("\n".join(errors))

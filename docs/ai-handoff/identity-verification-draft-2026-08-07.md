@@ -19,7 +19,7 @@
 - Photo 独立 `requests.Session`，与申请流程 Session 隔离
 - DCPP 短信验证码日志查询 Gateway
 - SM2 短信验证码加密适配点
-- `identity.local.example.json`
+- `identity.example.json`
 - `loanIdentity.json` / `photo.json` 原始报文占位
 - `messages.py` 改为自动扫描 `raw_messages/*.json`
 - `.gitignore` 忽略真实 `identity.local.json`
@@ -66,7 +66,7 @@ TypeError: execute_product_application() missing 1 required keyword-only argumen
 
 1. **SC00016 协议**：当前远程 `AgreementGateway` 仍是旧签名。内网 Codex 应在不破坏 SC00015 的前提下，使协议模板查询支持显式 `scene="SC00016"`。
 2. **Runtime**：在用户当前已经修改过的 `CjdkJyrcRuntime` 中创建 `runtime.identity`，使用和申请流程相同的 `CjdkJyrcClient`；Photo/DCPP 使用 `IdentitySupportRuntime` 独立资源。
-3. **真实接口/报文**：`identity.local.example.json` 中的接口 path、UAT1/UAT2 与 UATC 两份完整人脸报文、最终身份认证完整报文仍是占位，必须在内网填写。
+3. **真实接口/报文**：`identity.example.json` 中的接口 path、UAT1/UAT2 与 UATC 两份完整人脸报文、最终身份认证完整报文仍是占位，必须在内网填写。
 
 ## 流程顺序
 

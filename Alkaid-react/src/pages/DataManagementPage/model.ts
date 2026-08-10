@@ -18,6 +18,7 @@ export interface MarkdownDocumentRecord {
   size: number;
   kind: MarkdownDocumentKind;
   source: MarkdownDocumentSource;
+  locked?: boolean;
   folderId: string | null;
   createdAt: string;
   updatedAt: string;
@@ -63,6 +64,7 @@ export interface MultidimensionalField {
   id: string;
   name: string;
   type: MultidimensionalFieldType;
+  width?: number;
   options?: string[];
 }
 
@@ -157,6 +159,7 @@ export interface SpreadsheetWorkbook {
 const MULTIDIMENSIONAL_TABLE_MARKER = 'alioth:multidimensional-table:v1:';
 
 export function requestMarkdownCreation(storage: Storage = window.sessionStorage) {
+  storage.removeItem(MARKDOWN_EDIT_REQUEST_KEY);
   storage.setItem(MARKDOWN_CREATE_REQUEST_KEY, '1');
   window.dispatchEvent(new Event(MARKDOWN_CREATE_REQUESTED_EVENT));
 }
@@ -208,6 +211,7 @@ function isMarkdownDocumentRecord(value: unknown) {
       storedKind === 'multidimensional-table' ||
       storedKind === 'spreadsheet') &&
     (item.source === 'created' || item.source === 'opened') &&
+    (item.locked === undefined || typeof item.locked === 'boolean') &&
     (item.folderId === undefined || item.folderId === null || typeof item.folderId === 'string') &&
     typeof item.createdAt === 'string' &&
     typeof item.updatedAt === 'string' &&
@@ -245,6 +249,7 @@ function normalizeWorkspace(workspace: MarkdownWorkspace): MarkdownWorkspace {
           (document as unknown as { kind?: string }).kind === 'table'
             ? 'document'
             : document.kind || inferMarkdownDocumentKind(document.content),
+        locked: Boolean(document.locked),
         folderId: document.folderId && folderIds.has(document.folderId) ? document.folderId : null,
       }))
       .sort((left, right) => right.lastOpenedAt.localeCompare(left.lastOpenedAt)),
@@ -469,6 +474,7 @@ export function serializeMultidimensionalTable(fileName: string, data: Multidime
   const normalizedFields = data.fields.map((field) => ({
     ...field,
     name: field.name.trim() || '未命名字段',
+    width: typeof field.width === 'number' ? Math.min(480, Math.max(100, field.width)) : undefined,
     options:
       field.type === 'select' || field.type === 'multiSelect'
         ? field.options?.filter(Boolean) || []
@@ -522,34 +528,40 @@ export function parseMultidimensionalTable(content: string): MultidimensionalTab
             Array.isArray((parsed as { fields?: unknown }).fields)
           ? (parsed as { fields: unknown[] }).fields
           : [];
-      fields = parsedFields.filter(
-        (field): field is MultidimensionalField =>
-          Boolean(field) &&
-          typeof field === 'object' &&
-          typeof (field as MultidimensionalField).id === 'string' &&
-          typeof (field as MultidimensionalField).name === 'string' &&
-          [
-            'text',
-            'richText',
-            'number',
-            'date',
-            'time',
-            'select',
-            'multiSelect',
-            'attachment',
-            'rating',
-            'checkbox',
-            'percentage',
-            'currency',
-            'progress',
-            'hyperlink',
-            'phone',
-            'email',
-            'idCard',
-            'address',
-            'barcode',
-          ].includes((field as MultidimensionalField).type),
-      );
+      fields = parsedFields
+        .filter(
+          (field): field is MultidimensionalField =>
+            Boolean(field) &&
+            typeof field === 'object' &&
+            typeof (field as MultidimensionalField).id === 'string' &&
+            typeof (field as MultidimensionalField).name === 'string' &&
+            [
+              'text',
+              'richText',
+              'number',
+              'date',
+              'time',
+              'select',
+              'multiSelect',
+              'attachment',
+              'rating',
+              'checkbox',
+              'percentage',
+              'currency',
+              'progress',
+              'hyperlink',
+              'phone',
+              'email',
+              'idCard',
+              'address',
+              'barcode',
+            ].includes((field as MultidimensionalField).type),
+        )
+        .map((field) => ({
+          ...field,
+          width:
+            typeof field.width === 'number' ? Math.min(480, Math.max(100, field.width)) : undefined,
+        }));
       if (parsed && !Array.isArray(parsed) && typeof parsed === 'object') {
         const configuration = parsed as {
           tableName?: unknown;
@@ -733,6 +745,7 @@ export function createMarkdownDocument(
     size: new Blob([content]).size,
     kind,
     source: 'created',
+    locked: false,
     folderId: null,
     createdAt: timestamp,
     updatedAt: timestamp,
@@ -764,6 +777,7 @@ export function createSpreadsheetDocument(
     size: new Blob([content]).size,
     kind: 'spreadsheet',
     source: 'created',
+    locked: false,
     folderId: null,
     createdAt: timestamp,
     updatedAt: timestamp,
@@ -786,6 +800,7 @@ export function createWordDocument(
     size: new Blob([content]).size,
     kind: 'word',
     source,
+    locked: false,
     folderId: null,
     createdAt: timestamp,
     updatedAt: timestamp,
@@ -822,6 +837,7 @@ export function createOpenedMarkdownDocument(
     size: file.size,
     kind: inferMarkdownDocumentKind(content),
     source: 'opened',
+    locked: false,
     folderId: null,
     createdAt: timestamp,
     updatedAt: file.lastModified ? new Date(file.lastModified).toISOString() : timestamp,

@@ -1,0 +1,22 @@
+{
+  "mode": "real",
+  "applicationLinkUrlMode": "internal",
+  "javaGateway": {
+    "sdkDir": "D:/你的申请链接JavaSDK目录",
+    "javaExecutable": "D:/你的JDK/bin/java.exe",
+    "jar": "你的申请链接Jar文件名.jar",
+    "mainClass": "实际Java主类全限定名",
+    "outputEncoding": "gbk",
+    "timeoutSeconds": 120
+  },
+  "responseLimits": {
+    "maxJsonBytes": 5242880,
+    "maxHtmlBytes": 2097152,
+    "maxRedirects": 10,
+    "maxAgreementTemplates": 50,
+    "maxPreviewDocuments": 50,
+    "maxBase64Characters": 29360128,
+    "maxDecodedDocumentBytes": 20971520,
+    "maxTotalDocumentBytes": 52428800
+  }
+}

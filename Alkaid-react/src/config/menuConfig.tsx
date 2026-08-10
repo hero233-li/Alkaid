@@ -162,9 +162,9 @@ export const appMenuTree: AppMenuNode[] = [
         render: () => <PlaceholderPage title="Workflow 管理" />,
       },
       {
-        key: 'jobs',
+        key: 'Jobs',
         label: '任务中心',
-        route: '/automation/jobs',
+        route: '/automation/Jobs',
         icon: <ClipboardList size={18} />,
         render: () => <TaskCenterPage />,
       },
@@ -197,9 +197,9 @@ export const appMenuTree: AppMenuNode[] = [
         render: () => <DataManagementPage />,
       },
       {
-        key: 'my-documents',
+        key: 'my-Documents',
         label: '我的文档',
-        route: '/data-platform/documents',
+        route: '/data-platform/Documents',
         icon: <ClipboardList size={18} />,
         render: ({ onNavigate }) => <MyDocumentsPage onCreateDocument={() => onNavigate('data')} />,
       },
@@ -211,9 +211,9 @@ export const appMenuTree: AppMenuNode[] = [
     icon: <Settings size={18} />,
     children: [
       {
-        key: 'workbench',
+        key: 'Apifox',
         label: '接口工作台',
-        route: '/system/workbench',
+        route: '/system/Apifox',
         icon: <SendHorizontal size={18} />,
         render: () => <InterfaceWorkbenchPage />,
       },

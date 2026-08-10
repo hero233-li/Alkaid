@@ -1,0 +1,17 @@
+{
+  "videoTemplates": {
+    "UAT1": "identity_ali_video_check_u12_v1",
+    "UAT2": "identity_ali_video_check_u12_v1",
+    "UATC": "identity_ali_video_check_uc_v1"
+  },
+  "photoDefaults": {
+    "timeoutSeconds": 60,
+    "headers": {}
+  },
+  "smsLookupDefaults": {
+    "headers": {"Content-Type": "application/json"},
+    "timeoutSeconds": 10,
+    "maxAttempts": 10,
+    "retryIntervalSeconds": 1
+  }
+}

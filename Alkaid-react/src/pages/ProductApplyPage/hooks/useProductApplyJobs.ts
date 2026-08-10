@@ -38,7 +38,7 @@ export function useProductApplyJobs(pageInstanceKey: string) {
     let active = true;
     void Promise.all(
       cachedResults.map((result) =>
-        getJobDetail(result.id, { includePayload: true }).catch(() => null),
+        getJobDetail(result.id, { includePayload: true, logView: 'business' }).catch(() => null),
       ),
     ).then((details) => {
       if (!active) {
@@ -73,7 +73,9 @@ export function useProductApplyJobs(pageInstanceKey: string) {
       if (document.visibilityState !== 'visible') {
         return;
       }
-      const details = await Promise.all(jobIds.map((id) => getJobDetail(id).catch(() => null)));
+      const details = await Promise.all(
+        jobIds.map((id) => getJobDetail(id, { logView: 'business' }).catch(() => null)),
+      );
       if (!active) {
         return;
       }
@@ -103,7 +105,7 @@ export function useProductApplyJobs(pageInstanceKey: string) {
       return;
     }
     let active = true;
-    void getJobDetail(selectedResultId, { includePayload: true })
+    void getJobDetail(selectedResultId, { includePayload: true, logView: 'business' })
       .then((detail) => {
         if (active) {
           updateResult(detail.id, (current) => mergeJobDetail(current, detail));
@@ -155,6 +157,7 @@ export function useProductApplyJobs(pageInstanceKey: string) {
                 })),
             },
             controller.signal,
+            { view: 'business' },
           );
           lastLogId = streamResult.lastLogId;
           if (streamResult.terminalStatusReceived || controller.signal.aborted) {

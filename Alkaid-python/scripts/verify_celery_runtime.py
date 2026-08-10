@@ -7,7 +7,7 @@ import sys
 from config.celery import app
 
 REQUIRED_TASKS = {
-    "apps.product_data.tasks.execute_product_application",
+    "apps.workflow.product_applications.tasks.execute_product_application",
 }
 
 

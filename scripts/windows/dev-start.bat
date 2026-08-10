@@ -10,6 +10,7 @@ if not defined DEV_FRONTEND_PORT set "DEV_FRONTEND_PORT=5174"
 if not defined ALKAID_RUNTIME_DIR set "ALKAID_RUNTIME_DIR=%DEFAULT_BASE%\Alkaid-runtime"
 if not defined PYTHON_BOOTSTRAP set "PYTHON_BOOTSTRAP=py -3.10"
 if not defined NPM_INSTALL_CMD set "NPM_INSTALL_CMD=npm ci --include=optional"
+if not defined NPM_OFFLINE set "NPM_OFFLINE=false"
 if not defined UPGRADE_PIP set "UPGRADE_PIP=false"
 if not defined MYSQL_HOST set "MYSQL_HOST=127.0.0.1"
 if not defined MYSQL_PORT set "MYSQL_PORT=3306"
@@ -59,13 +60,12 @@ if /I "%NEED_BACKEND_DEPS%"=="true" (
 set "NEED_FRONTEND_DEPS=false"
 if not exist "%PROJECT_ROOT%\Alkaid-react\node_modules" set "NEED_FRONTEND_DEPS=true"
 if not exist "%PROJECT_ROOT%\Alkaid-react\node_modules\.bin\vite.cmd" set "NEED_FRONTEND_DEPS=true"
+if not exist "%PROJECT_ROOT%\Alkaid-react\node_modules\mammoth\package.json" set "NEED_FRONTEND_DEPS=true"
+if not exist "%PROJECT_ROOT%\Alkaid-react\node_modules\xlsx\package.json" set "NEED_FRONTEND_DEPS=true"
 
 if /I "%NEED_FRONTEND_DEPS%"=="true" (
-  echo Preparing frontend dependencies...
-  pushd "%PROJECT_ROOT%\Alkaid-react"
-  %NPM_INSTALL_CMD%
+  call :ensure_frontend_dependencies
   if errorlevel 1 exit /b 1
-  popd
 )
 
 if not exist "%ALKAID_RUNTIME_DIR%" mkdir "%ALKAID_RUNTIME_DIR%"
@@ -133,3 +133,33 @@ if /I "%DEV_SPLIT_WINDOWS%"=="true" (
 )
 
 powershell -NoProfile -ExecutionPolicy Bypass -File "%SCRIPT_DIR%dev-runner.ps1"
+exit /b %errorlevel%
+
+:ensure_frontend_dependencies
+set "DEPENDENCY_DELTA_ARCHIVE=%PROJECT_ROOT%\Alkaid-windows-dependency-delta-20260803.zip"
+if exist "%DEPENDENCY_DELTA_ARCHIVE%" (
+  echo Installing local Windows dependency delta...
+  powershell -NoProfile -ExecutionPolicy Bypass -Command "Expand-Archive -LiteralPath '%DEPENDENCY_DELTA_ARCHIVE%' -DestinationPath '%PROJECT_ROOT%' -Force"
+  if errorlevel 1 exit /b 1
+)
+
+if exist "%PROJECT_ROOT%\Alkaid-react\node_modules\mammoth\package.json" if exist "%PROJECT_ROOT%\Alkaid-react\node_modules\xlsx\package.json" (
+  echo Frontend dependency delta is available locally.
+  exit /b 0
+)
+
+if /I "%NPM_OFFLINE%"=="true" (
+  echo Missing mammoth/xlsx and no local dependency delta was found.
+  echo Copy Alkaid-windows-dependency-delta-20260803.zip to the project root and retry.
+  exit /b 1
+)
+
+echo Preparing frontend dependencies with %NPM_INSTALL_CMD%...
+pushd "%PROJECT_ROOT%\Alkaid-react"
+%NPM_INSTALL_CMD%
+if errorlevel 1 (
+  popd
+  exit /b 1
+)
+popd
+exit /b 0
